@@ -76,8 +76,17 @@ opt-level = 2
 opt-level = 1
 # Line tables keep file:line in panic backtraces but drop variable info, which roughly halves link
 # time and PDB size for the ~260 test binaries (#2204). CI sets the same through
-# CARGO_PROFILE_DEV_DEBUG. To inspect locals in a debugger, build with CARGO_PROFILE_DEV_DEBUG=true.
+# CARGO_PROFILE_DEV_DEBUG (and no debuginfo at all for the Windows tests). To inspect locals in a
+# debugger, build with CARGO_PROFILE_DEV_DEBUG=true.
 debug = "line-tables-only"
+
+# Test builds compile ui-egui without optimization: its library and unit tests were the biggest
+# test-build units after engine's (12.6 of ~63 compile minutes on the Windows CI runner), and its
+# tests run no heavier pixel code of their own (that lives in the crates that stay optimized).
+# Measured on CI: Windows build 18.9 -> 15.4 min, test run 10.0 -> 10.5. `cargo run` and
+# `cargo build` use the dev profile and are unaffected.
+[profile.test.package.photocraft-ui-egui]
+opt-level = 0
 
 [profile.release]
 lto = "thin"
