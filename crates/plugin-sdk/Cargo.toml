@@ -1,0 +1,18 @@
+[package]
+name = "photocraft-plugin-sdk"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "Standalone safe guest SDK for PhotoCraft panel plugins"
+
+[features]
+default = []
+authoring = []
+
+[dependencies]
+photocraft-plugin-api = { version = "0.1.0", path = "../plugin-api" }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

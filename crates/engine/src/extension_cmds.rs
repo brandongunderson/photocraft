@@ -154,6 +154,7 @@ impl ExtensionHost {
             ensure_idle(installed)?;
         }
         let folder = crate::extension_package::root(&folder)?;
+        let _store = crate::extension_package::StoreGuard::read(&folder)?;
         self.folder = Some(folder.clone());
         self.load_errors.clear();
         self.previews.clear();
@@ -355,14 +356,6 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let enabled = s.extensions.installed.get(&id).is_none_or(|i| i.enabled);
     #[cfg(not(target_arch = "wasm32"))]
-    let enabled = if !replacing && let Some(folder) = &s.extensions.folder {
-        // A damaged installation may be absent from the loaded map. Preserve its disabled
-        // marker through failed installs and successful repairs; only explicit enable clears it.
-        !crate::extension_package::checked_path(folder, &format!("{id}.disabled"))?.exists()
-    } else {
-        enabled
-    };
-    #[cfg(not(target_arch = "wasm32"))]
     if let Some(installed) = s.extensions.installed.get(&id) {
         ensure_idle(installed)?;
     }
@@ -376,7 +369,7 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     #[cfg(not(target_arch = "wasm32"))]
-    let native = if let Some(folder) = &s.extensions.folder {
+    let (native, enabled) = if let Some(folder) = &s.extensions.folder {
         let replace = p.get("replace").and_then(Value::as_bool) == Some(true);
         let installed = crate::extension_package::install(folder, &id, bytes, input.package.as_ref(), replace)?;
         // A repaired installation is usable now; keep other startup failures and any new warning.
@@ -385,9 +378,9 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
         if let Some(warning) = installed.warning {
             s.extensions.load_errors.push(warning);
         }
-        installed.native
+        (installed.native, installed.enabled)
     } else {
-        None
+        (None, enabled)
     };
     let result = json!({"manifest": extension.manifest, "enabled": enabled, "replaced": replacing, "storage": storage});
     s.forget_plugin_preview(&id);
@@ -430,16 +423,26 @@ fn enable(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(error("extension is not installed"));
     }
     #[cfg(not(target_arch = "wasm32"))]
-    if let Some(folder) = &s.extensions.folder {
+    let _store = s.extensions.folder.as_ref().map(|folder| crate::extension_package::StoreGuard::write(folder)).transpose()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let activation = if let Some(folder) = &s.extensions.folder {
         let marker = crate::extension_package::checked_path(folder, &format!("{id}.disabled"))?;
+        let activation = crate::extension_package::revoke_activation(folder, id)?;
         if enabled {
             remove_if_exists(&marker)?;
         } else {
             photocraft_format::atomic_write(&marker, b"").map_err(error)?;
         }
-    }
+        Some(activation)
+    } else {
+        None
+    };
     if let Some(installed) = s.extensions.installed.get_mut(id) {
         installed.enabled = enabled;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let (Some(activation), Some(native)) = (activation, &installed.native) {
+            installed.native = Some(Arc::new(native.reactivated(activation)));
+        }
     }
     if !enabled {
         crate::plugin_host::revoke(s, id);
@@ -462,7 +465,7 @@ fn ensure_idle(installed: &Installed) -> Result<()> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn remove_if_exists(path: &std::path::Path) -> Result<()> {
+pub(crate) fn remove_if_exists(path: &std::path::Path) -> Result<()> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -480,14 +483,10 @@ fn remove(s: &mut Session, p: &Value) -> Result<Value> {
         ensure_idle(installed)?;
     }
     #[cfg(not(target_arch = "wasm32"))]
-    if let Some(folder) = &s.extensions.folder {
-        let marker = crate::extension_package::checked_path(folder, &format!("{id}.disabled"))?;
-        if let Some(warning) = crate::extension_package::remove(folder, id)? {
-            s.extensions.load_errors.push(warning);
-        }
-        if let Err(error) = remove_if_exists(&marker) {
-            s.extensions.load_errors.push(format!("Extension removed, but its disabled marker could not be cleaned up: {error}"));
-        }
+    if let Some(folder) = &s.extensions.folder
+        && let Some(warning) = crate::extension_package::remove(folder, id)?
+    {
+        s.extensions.load_errors.push(warning);
     }
     s.extensions.installed.remove(id);
     crate::plugin_host::revoke(s, id);

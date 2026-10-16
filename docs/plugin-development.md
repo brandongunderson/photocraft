@@ -15,6 +15,7 @@ versions and your plugin's release version are different numbers.
 
 ## Contents
 
+- [Standalone API-2 SDK](plugin-sdk.md)
 - [Development with agents](#development-with-agents)
 - [Choose a plugin type](#choose-a-plugin-type)
 - [Prepare your tools](#prepare-your-tools)
@@ -33,6 +34,7 @@ versions and your plugin's release version are different numbers.
 - [Package native code](#package-native-code)
 - [Compatibility and current limits](#compatibility-and-current-limits)
 - [Host architecture and new capabilities](#host-architecture-and-new-capabilities)
+- [Companion applications](#companion-applications)
 - [Troubleshooting](#troubleshooting)
 - [Reference documents](#reference-documents)
 
@@ -49,10 +51,31 @@ contract, files, commands, and verification rules. Copy that file with the entir
 It remains useful after extraction without linking to editor-internal source files.
 The editor's root `AGENTS.md` continues to describe core development; it is not a plugin SDK.
 
+The [standalone API-2 SDK](plugin-sdk.md) provides typed messages and safe ABI exports. Its
+`new` command creates a project with private SDK sources, one authoring manifest and generated
+bindings. SDK use is optional; existing independent starters and binaries remain supported.
+
 MCP can discover commands and inspect/test allowed behavior, while filesystem and build
 tools create the plugin. Current restricted automation denies managed panel/package installation and
 processing/task execution; these instructions do not expand that authority. Distinguish
 package/handler validation from real-host acceptance, and report unavailable checks.
+
+## Companion applications
+
+A separate application can use the existing [authenticated local control protocol](control-protocol.md)
+or its MCP bridge to discover commands, inspect documents and invoke permitted editor or plugin
+contributions. Start PhotoCraft with control enabled and authenticate each connection with its
+token. A companion can be written in any language that supports the documented JSON transport.
+
+The guest SDK and its scoped handles belong to an installed plugin invocation; they are not an
+external RPC endpoint. A companion uses the control command surface, or supplies an optional
+standalone plugin adapter with its own packaged implementation. Keep every plugin usable without
+the companion. Do not make an editor change for a particular companion application.
+
+Automation policies still apply to command execution and file access. The current local bearer
+token does not provide separate per-companion capability grants, and the control server is
+loopback-only. Remote companion access, independent client consent/revocation, and forwarding
+plugin-scoped subscriptions require additional public contracts; they are not SDK features.
 
 ## Choose a plugin type
 

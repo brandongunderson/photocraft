@@ -59,3 +59,19 @@ and document switching; closing/disabling/replacing the plugin must stop stale u
 Guest tests and screenshots alone do not establish subscription cleanup or host isolation.
 Restricted MCP denies installation; use an authorized local test route or report it
 untested. Deliver source/package paths, API-2 requirements, checks, and limitations.
+
+## Optional typed SDK authoring
+
+This existing project keeps its supported wire versions and needs no SDK migration.
+For a new API-2 project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
+private API/SDK 0.1 sources, locks, licenses and a local guide. Edit `authoring.json`
+and the handler; generated manifests/bindings belong in Cargo `OUT_DIR`. Keep local
+SDK dependencies inside that project and retain its release hash index. Do not link
+to engine/UI sources or introduce another plugin or companion as a runtime dependency.
+The SDK is optional author tooling; availability/discovery never grants authority.
+
+Current desktop hosts coordinate native work and store changes with OS locks and
+per-plugin activation epochs. Management can return busy while native work runs.
+Keep the host-owned store lock and activation tombstones intact. Completion/Apply
+reject revoked native results; native containment, quotas and worker protocol 2
+remain additional host work. Keep project docs and this guide aligned with changes.

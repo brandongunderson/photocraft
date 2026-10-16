@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LayersEdit",
+  "type": "object",
+  "properties": {
+    "document": {
+      "$ref": "#/$defs/ScopedHandle"
+    },
+    "edits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LayerEdit"
+      }
+    },
+    "expectedRevision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "document",
+    "expectedRevision",
+    "edits"
+  ],
+  "$defs": {
+    "LayerEdit": {
+      "type": "object",
+      "properties": {
+        "layer": {
+          "$ref": "#/$defs/ScopedHandle"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visible": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "layer"
+      ]
+    },
+    "ScopedHandle": {
+      "description": "A bearer reference only. Hosts must check issuer, owner, installation and invocation scope.\nDeserializing a handle grants no authority.",
+      "type": "string",
+      "maxLength": 192,
+      "minLength": 1
+    }
+  }
+}

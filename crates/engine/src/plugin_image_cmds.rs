@@ -249,6 +249,7 @@ pub(crate) fn run(s: &mut Session, p: &Value, completion: Option<Completion>) ->
             Processor::Filter(filter) => filter_image(&doc, &filter, &options, ctx),
             #[cfg(not(target_arch = "wasm32"))]
             Processor::Native(native) => {
+                let _store = native.lease()?;
                 let input = flatten_srgb(&doc, ctx)?;
                 let job = crate::plugin_runtime::ImageJob {
                     options,

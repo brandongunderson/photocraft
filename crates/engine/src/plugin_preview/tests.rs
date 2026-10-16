@@ -34,6 +34,7 @@ fn session() -> Session {
     let mut s = Session::new();
     s.execute("file.new", json!({"width":8,"height":6,"background":"white"})).unwrap();
     let native = Arc::new(InstalledNative {
+        generation: None,
         worker: "unused-fixture-worker.exe".into(),
         package: PackageInfo {
             package_version: 2,

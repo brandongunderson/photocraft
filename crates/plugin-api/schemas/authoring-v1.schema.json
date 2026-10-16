@@ -1,0 +1,522 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuthoringManifest",
+  "type": "object",
+  "properties": {
+    "descriptor": {
+      "$ref": "#/$defs/Descriptor"
+    },
+    "formatVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 1,
+      "minimum": 1
+    },
+    "package": {
+      "$ref": "#/$defs/PackageV2"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "descriptor",
+    "package"
+  ],
+  "$defs": {
+    "Button": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "Capabilities": {
+      "type": "object",
+      "properties": {
+        "optional": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          },
+          "maxItems": 32
+        },
+        "required": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          },
+          "maxItems": 32
+        }
+      },
+      "additionalProperties": false
+    },
+    "CapabilityId": {
+      "description": "Extensible capability identifier. Unknown optional IDs survive parsing and negotiate absent.",
+      "type": "string",
+      "maxLength": 96,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "CapabilityRequirement": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/CapabilityId"
+        },
+        "maxVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 1024,
+          "minimum": 1
+        },
+        "minVersion": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1024,
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "minVersion"
+      ]
+    },
+    "CommandContribution": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_]*$"
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "needsDocument": {
+          "type": "boolean",
+          "default": false
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "event"
+      ]
+    },
+    "Contributions": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CommandContribution"
+          },
+          "maxItems": 32
+        },
+        "inspectors": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InspectorContribution"
+          },
+          "maxItems": 8
+        },
+        "subscriptions": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EventSubscription"
+          },
+          "maxItems": 16
+        }
+      },
+      "additionalProperties": false
+    },
+    "Descriptor": {
+      "description": "Complete independent panel-2 descriptor. Legacy manifests retain their original reader.",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 2,
+          "minimum": 2
+        },
+        "author": {
+          "type": "string",
+          "default": "",
+          "maxLength": 128
+        },
+        "capabilities": {
+          "$ref": "#/$defs/Capabilities"
+        },
+        "contributes": {
+          "$ref": "#/$defs/Contributions"
+        },
+        "description": {
+          "type": "string",
+          "default": "",
+          "maxLength": 1024
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1
+        },
+        "panel": {
+          "$ref": "#/$defs/Panel"
+        },
+        "permissions": {
+          "$ref": "#/$defs/Permissions"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 32
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "apiVersion",
+        "id",
+        "name",
+        "version",
+        "permissions",
+        "panel"
+      ]
+    },
+    "EventKind": {
+      "type": "string",
+      "enum": [
+        "document.changed"
+      ]
+    },
+    "EventSubscription": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/EventKind"
+        },
+        "handler": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_]*$"
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "event",
+        "handler"
+      ]
+    },
+    "Field": {
+      "description": "Same declarative controls as panel-1; no host UI implementation is imported.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "number",
+              "format": "double"
+            },
+            "max": {
+              "type": "number",
+              "format": "double"
+            },
+            "min": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "number"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max",
+            "default"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "integer",
+              "format": "int64",
+              "default": 0
+            },
+            "max": {
+              "type": "integer",
+              "format": "int64",
+              "default": 1000000
+            },
+            "min": {
+              "type": "integer",
+              "format": "int64",
+              "default": -1000000
+            },
+            "type": {
+              "type": "string",
+              "const": "int"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 64,
+              "minItems": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "choice"
+            }
+          },
+          "required": [
+            "type",
+            "options"
+          ]
+        }
+      ],
+      "required": [
+        "id",
+        "label"
+      ],
+      "unevaluatedProperties": false
+    },
+    "FilterPayload": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "module"
+      ]
+    },
+    "InspectorContribution": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_]*$"
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "event"
+      ]
+    },
+    "NativePayload": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "platform",
+        "entry"
+      ]
+    },
+    "PackageV2": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterPayload"
+          },
+          "maxItems": 16
+        },
+        "module": {
+          "type": "string"
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativePayload"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packageVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 2,
+          "minimum": 2
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "packageVersion",
+        "module"
+      ]
+    },
+    "Panel": {
+      "type": "object",
+      "properties": {
+        "buttons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Button"
+          },
+          "maxItems": 16
+        },
+        "fields": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Field"
+          },
+          "maxItems": 32
+        },
+        "preview": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "buttons"
+      ]
+    },
+    "Permissions": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128
+        },
+        "documentRead": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

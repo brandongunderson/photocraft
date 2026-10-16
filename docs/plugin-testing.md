@@ -5,6 +5,18 @@ Use this with the [developer handbook](plugin-development.md), [panel API](exten
 [Image Gain](../examples/extensions/image-plugin-starter/README.md) starters. Their scripts are
 optional developer tools, not a runtime dependency of your plugin.
 
+For the [guest SDK](plugin-sdk.md), `scripts/plugins/test-platform-examples.py` generates a
+neutral project outside the editor, audits its private dependencies, builds release WASM,
+packages it, then invokes a real broker edit and Undo. It also retains the existing API-2
+starter checks. Use `--sdk-only` for the generated guest and `--export-parent` outside the
+checkout when your normal temporary directory is inside it. No generated project is committed.
+
+The existing engine package suite covers separate-process reader/writer contention, crash
+release, failed-update preservation and native stale-generation/preview rejection. These
+are platform contract regressions; algorithm tests for independently released plugins stay
+in their own repositories. OS-specific checks require the relevant OS; a passing Windows
+run alone does not certify macOS/Linux, filesystem locking or hardware drivers there.
+
 ## What each test level proves
 
 | Level | Proves | Does not prove |

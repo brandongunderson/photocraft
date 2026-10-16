@@ -59,3 +59,19 @@ authorized install/test route. Restricted MCP denies filesystem-path installatio
 standalone `plugin.install` from base64 `data` can be permitted. Check the actual
 host policy and tool response. This is distinct from managed panel/package installation.
 Report exact artifact/source paths, tested host/platform, checks, and limitations.
+
+## Optional typed SDK authoring
+
+This existing project keeps its supported wire versions and needs no SDK migration.
+For a new API-2 project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
+private API/SDK 0.1 sources, locks, licenses and a local guide. Edit `authoring.json`
+and the handler; generated manifests/bindings belong in Cargo `OUT_DIR`. Keep local
+SDK dependencies inside that project and retain its release hash index. Do not link
+to engine/UI sources or introduce another plugin or companion as a runtime dependency.
+The SDK is optional author tooling; availability/discovery never grants authority.
+
+Current desktop hosts coordinate native work and store changes with OS locks and
+per-plugin activation epochs. Management can return busy while native work runs.
+Keep the host-owned store lock and activation tombstones intact. Completion/Apply
+reject revoked native results; native containment, quotas and worker protocol 2
+remain additional host work. Keep project docs and this guide aligned with changes.

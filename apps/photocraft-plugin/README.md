@@ -11,9 +11,21 @@ photocraft-plugin build-export SOURCE FRESH_DESTINATION
 photocraft-plugin pack STAGED_DIRECTORY FRESH_PACKAGE
 photocraft-plugin hash FILE
 photocraft-plugin probe PANEL REQUEST_JSON
+photocraft-plugin sdk FRESH_DIRECTORY
+photocraft-plugin generate AUTHORING_JSON FRESH_DIRECTORY
+photocraft-plugin new AUTHORING_JSON FRESH_PROJECT
 ```
 
 Every command emits a versioned JSON report and returns a nonzero exit status on failure.
+The [SDK guide](../../docs/plugin-sdk.md) explains SDK export, a complete authoring manifest,
+typed handlers, the compatibility policy and independent-build acceptance.
+
+`sdk` exports privately usable public API/SDK sources, licenses and a SHA-256 release index.
+`generate` derives package metadata, an embedded descriptor and Rust bindings from one source.
+`new` creates an independent WASM project with those SDK sources, a Cargo build-time generator,
+local agent instructions and an offline-resolved lockfile. It does not build or certify that
+plugin. Existing destinations are never overwritten. Native/filter layouts use `generate`
+with their own sources. For SDK projects, `build-export` packages from `authoring.json`.
 `check` uses the real host validators: archive limits and safe paths, required files and CRCs,
 platform, panel/filter manifests and actual WASM exports, and command grants. It also checks
 the PE, ELF or Mach-O worker header against the declared operating system and architecture. It loads bounded

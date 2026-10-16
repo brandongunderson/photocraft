@@ -5,14 +5,20 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod authoring;
 mod capabilities;
 mod contributions;
 mod descriptor;
+mod documents;
+mod events;
 mod protocol;
 
+pub use authoring::*;
 pub use capabilities::*;
 pub use contributions::*;
 pub use descriptor::*;
+pub use documents::*;
+pub use events::*;
 pub use protocol::*;
 
 #[cfg(feature = "schema")]

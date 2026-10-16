@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LayersRead",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScopedHandle"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "document": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScopedHandle"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "limit": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ScopedHandle": {
+      "description": "A bearer reference only. Hosts must check issuer, owner, installation and invocation scope.\nDeserializing a handle grants no authority.",
+      "type": "string",
+      "maxLength": 192,
+      "minLength": 1
+    }
+  }
+}

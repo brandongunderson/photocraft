@@ -605,6 +605,7 @@ fn contributed_native_tasks_use_background_job_dispatch_and_preserve_state_on_wo
                 filters: std::collections::BTreeMap::new(),
                 package: None,
                 native: Some(Arc::new(InstalledNative {
+                    generation: None,
                     worker: "missing-photocraft-dynamic-task-fixture.exe".into(),
                     package: PackageInfo {
                         package_version: 2,

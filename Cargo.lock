@@ -4919,6 +4919,7 @@ dependencies = [
  "blake3",
  "photocraft-engine",
  "photocraft-format",
+ "photocraft-plugin-sdk",
  "photocraft-plugins",
  "serde_json",
  "sha2",
@@ -4933,6 +4934,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "photocraft-plugin-sdk"
+version = "0.1.0"
+dependencies = [
+ "photocraft-plugin-api",
+ "serde_json",
 ]
 
 [[package]]

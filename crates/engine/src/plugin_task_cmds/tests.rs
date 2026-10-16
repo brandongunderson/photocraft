@@ -60,6 +60,7 @@ mod desktop {
                 filters: BTreeMap::new(),
                 package: None,
                 native: Some(Arc::new(InstalledNative {
+                    generation: None,
                     worker: "missing-task-fixture.exe".into(),
                     package: PackageInfo {
                         package_version: 2,

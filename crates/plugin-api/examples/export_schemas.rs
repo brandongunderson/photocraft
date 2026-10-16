@@ -9,11 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     for output in outputs {
         std::fs::create_dir_all(&output)?;
-        for (name, schema) in [
-            ("panel-v2.schema.json", photocraft_plugin_api::schema::descriptor()),
-            ("panel-v2-response.schema.json", photocraft_plugin_api::schema::panel_response()),
-            ("host-api-v1.schema.json", photocraft_plugin_api::schema::host_api()),
-        ] {
+        for (name, schema) in photocraft_plugin_api::schema::all() {
             let bytes = serde_json::to_vec_pretty(&schema)?;
             std::fs::write(output.join(name), bytes)?;
         }

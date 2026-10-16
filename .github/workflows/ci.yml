@@ -199,7 +199,7 @@ jobs:
 
       - name: Plugin API schema contracts
         if: matrix.part == 'all' || matrix.part == 'integration'
-        run: cargo test -p photocraft-plugin-api --locked --features schema
+        run: cargo test -p photocraft-plugin-api -p photocraft-plugin-sdk --locked --features photocraft-plugin-api/schema,photocraft-plugin-sdk/authoring
 
       - uses: actions/setup-python@v6
         if: matrix.part == 'all' || matrix.part == 'integration'

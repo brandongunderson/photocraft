@@ -1,8 +1,8 @@
 # PhotoCraft Universal Plugin Platform Plan
 
-**Status:** P01–P05 implemented. Later phases remain proposed.
+**Status:** P01–P05 and the current-contract API/SDK implementation are complete. Phase 2 has begun with cooperative store locks and native result admission checks; its remaining lifecycle work is proposed.
 
-**Date:** 2026-10-15
+**Date:** 2026-10-16
 **Scope:** Evolve the installed plugin system into a broad editor extension platform while preserving independent plugin projects, packages, releases and runtime dependencies.
 
 PhotoCraft should expose stable, versioned capabilities for extending its editor. Each plugin should own its feature implementation and communicate through those public capabilities. The editor should never need an adapter, model list, executable name or special case for an individual plugin.
@@ -123,6 +123,11 @@ A request's identity comes from the host invocation context, never a guest-suppl
 ## 5. Compatibility and protocol design
 
 ### 5.1 Support policy
+
+The current 0.1 foundation preview implements the evolution rules in the [SDK guide](plugin-sdk.md#compatibility-and-evolution-policy).
+The calendar support commitment below is a proposed stable-release policy, not an active
+24-month guarantee for the preview. SDK sources are distributed through the developer tool;
+public registry publication and ecosystem-wide release certification have not been performed.
 
 Adopt the following policy before inviting external developers:
 
@@ -328,9 +333,37 @@ larger than its first 128-layer snapshot rather than applying a partial rename. 
 shows its bounded first page and the total count.
 
 General docking/widgets, file/network services, persistent guest workers, pixel/tile APIs,
-effect recipes, tools/brushes, formats, cross-process store locking, native process containment,
+effect recipes, tools/brushes, formats, finer store scheduling, native process containment,
 signing and large-ecosystem qualification still belong to later phases. These limits must
 remain visible when describing current extensibility or scale readiness.
+
+### API/SDK completion and first Phase 2 slice (2026-10-16)
+
+The current-contract SDK work adds an independent L1 `photocraft-plugin-sdk`, typed event/reply
+and document contracts, bounded guest-owned ABI buffers, and optional authoring generation.
+One `authoring.json` generates the embedded descriptor, package-2 metadata and Rust bindings.
+The developer tool exports API/SDK sources or a complete private SDK project from its embedded
+bundle; no editor checkout, sibling plugin or shared installed runtime is required. Existing
+starters and binaries keep their wire versions and need no SDK migration. Ten generated schemas
+describe these contracts. See [SDK usage and evolution policy](plugin-sdk.md).
+
+The generated guest acceptance path builds outside the editor with locked dependencies,
+loads its actual release WASM, invokes a contributed command and typed layer broker, commits
+an atomic edit, and verifies Undo. Temporary projects/packages are removed after the run.
+SDK/API 0.1 are a source-distributed foundation preview; registry publication and full stable
+ecosystem certification remain release work, not claims made by these changes.
+
+Phase 2 starts with a cooperative OS reader/writer store lock, shared leases through native
+execution and result admission, and persisted per-plugin activation epochs. Native completion
+and Apply reject another current host's update/remove/disable, including disable/re-enable and
+identical reinstall cycles. Separate-process tests cover contention, crash release and preservation
+of active files. The lock is initially store-wide: native work temporarily blocks management
+operations, while readers may run concurrently. See [store safety](plugin-safety.md#cooperative-store-locking).
+
+Phase 2 remains incomplete. Lazy descriptors, per-generation scheduling/leases, persistent
+worker protocol 2, aggregate quotas, migrations/rollback, crash quarantine and native process
+containment are still proposed. The installed-plugin limit remains 128; no thousand-plugin or
+cross-platform performance certification is implied.
 
 ## 10. Performance and scale qualification
 

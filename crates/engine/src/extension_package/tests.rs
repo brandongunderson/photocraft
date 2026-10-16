@@ -4,8 +4,223 @@ use crate::Session;
 use photocraft_format::zip::ZipWriter;
 use serde_json::json;
 
+#[test]
+fn store_readers_prevent_mutation_without_changing_the_active_record() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.store";
+    let bytes = guest(id, false);
+    install(&root, id, &bytes, None, false).unwrap();
+    let original = std::fs::read(record_path(&root, id).unwrap()).unwrap();
+    let reader = StoreGuard::read(&root).unwrap();
+    assert!(StoreGuard::read(&root).is_ok());
+    assert!(StoreGuard::write(&root).is_err());
+    assert!(install(&root, id, &bytes, None, true).is_err());
+    assert!(remove(&root, id).is_err());
+    assert_eq!(load(&root, id).unwrap().module, bytes);
+    assert_eq!(std::fs::read(record_path(&root, id).unwrap()).unwrap(), original);
+    drop(reader);
+    assert!(install(&root, id, &bytes, None, false).err().unwrap().to_string().contains("replace:true"));
+    install(&root, id, &bytes, None, true).unwrap();
+    remove(&root, id).unwrap();
+    assert!(root.join(".photocraft-store.lock").is_file());
+}
+
+#[test]
+#[ignore = "helper launched by the cross-process store regression"]
+fn store_lock_process_helper() {
+    let root = PathBuf::from(std::env::var_os("PHOTOCRAFT_STORE_LOCK_TEST_ROOT").unwrap());
+    let exclusive = std::env::var_os("PHOTOCRAFT_STORE_LOCK_TEST_EXCLUSIVE").is_some();
+    let _guard = if exclusive { StoreGuard::write(&root) } else { StoreGuard::read(&root) }.unwrap();
+    std::fs::write(root.join("ready"), b"ready").unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !root.join("stop").exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(root.join("stop").is_file(), "parent did not release helper before deadline");
+}
+
+struct LockChild(std::process::Child);
+
+impl Drop for LockChild {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn lock_child(root: &Path, exclusive: bool) -> LockChild {
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--ignored", "--exact", "extension_package::tests::store_lock_process_helper"])
+        .env("PHOTOCRAFT_STORE_LOCK_TEST_ROOT", root)
+        .stdout(std::process::Stdio::null());
+    if exclusive {
+        command.env("PHOTOCRAFT_STORE_LOCK_TEST_EXCLUSIVE", "1");
+    } else {
+        command.env_remove("PHOTOCRAFT_STORE_LOCK_TEST_EXCLUSIVE");
+    }
+    let mut child = LockChild(command.spawn().unwrap());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !root.join("ready").exists() {
+        assert!(child.0.try_wait().unwrap().is_none(), "store lock helper exited early");
+        assert!(std::time::Instant::now() < deadline, "store lock helper did not start");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    child
+}
+
+#[test]
+fn store_locks_coordinate_separate_processes_and_release_after_process_exit() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.process-lock";
+    let bytes = guest(id, false);
+    install(&root, id, &bytes, None, false).unwrap();
+    let original = std::fs::read(record_path(&root, id).unwrap()).unwrap();
+    let child = lock_child(&root, false);
+    assert!(StoreGuard::read(&root).is_ok());
+    assert!(install(&root, id, &bytes, None, true).is_err());
+    assert!(remove(&root, id).is_err());
+    assert_eq!(std::fs::read(record_path(&root, id).unwrap()).unwrap(), original);
+    drop(child); // Abrupt process termination must release the OS lease.
+    assert!(StoreGuard::write(&root).is_ok());
+    std::fs::remove_file(root.join("ready")).unwrap();
+    let mut child = lock_child(&root, true);
+    assert!(StoreGuard::read(&root).is_err());
+    assert!(StoreGuard::write(&root).is_err());
+    assert!(load(&root, id).is_err());
+    std::fs::write(root.join("stop"), b"stop").unwrap();
+    assert!(child.0.wait().unwrap().success());
+    assert_eq!(load(&root, id).unwrap().module, bytes);
+    install(&root, id, &bytes, None, true).unwrap();
+}
+
+#[test]
+fn store_lock_rejects_non_regular_paths() {
+    let temporary = tempfile::tempdir().unwrap();
+    std::fs::create_dir(temporary.path().join(".photocraft-store.lock")).unwrap();
+    assert!(StoreGuard::read(temporary.path()).is_err());
+    assert!(StoreGuard::write(temporary.path()).is_err());
+}
+
+#[test]
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn managed_native_leases_reject_changed_removed_or_disabled_installations() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.generation";
+    let first = package(id, true, b"first", &[]);
+    let inspected = inspect(&first).unwrap();
+    let native = install(&root, id, &first, Some(&inspected), false).unwrap().native.unwrap();
+    let lease = native.lease().unwrap();
+    assert!(remove(&root, id).is_err());
+    drop(lease);
+    let second = package(id, true, b"second", &[]);
+    let inspected = inspect(&second).unwrap();
+    let current = install(&root, id, &second, Some(&inspected), true).unwrap().native.unwrap();
+    assert!(native.lease().is_err());
+    assert!(current.lease().is_ok());
+    {
+        let _store = StoreGuard::write(&root).unwrap();
+        std::fs::write(root.join(format!("{id}.disabled")), b"").unwrap();
+    }
+    assert!(current.lease().is_err());
+    let installed = install(&root, id, &second, Some(&inspected), true).unwrap();
+    assert!(!installed.enabled);
+    remove(&root, id).unwrap();
+    assert!(!root.join(format!("{id}.disabled")).exists());
+    assert!(current.lease().is_err());
+}
+
+#[test]
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn native_preview_apply_rejects_store_changes_from_another_session() {
+    for action in ["disable", "disable-enable", "remove", "replace", "reinstall"] {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = root(temporary.path()).unwrap();
+        let id = "org.example.preview-store";
+        let input = temporary.path().join("input.pcplugin");
+        std::fs::write(&input, package(id, true, b"first", &[])).unwrap();
+        let mut first = Session::new();
+        first.extensions.attach_folder(root.clone()).unwrap();
+        first.execute("extension.install", json!({"path":input,"allowNative":true})).unwrap();
+        first.execute("file.new", json!({"width":8,"height":6})).unwrap();
+        let source = Arc::clone(&first.active().unwrap().doc);
+        let revision = first.active().unwrap().revision;
+        let native = Arc::clone(first.extensions.installed[id].native.as_ref().unwrap());
+        let binding = crate::plugin_preview::PreviewBinding::for_native(&first, &native, None).unwrap();
+        let token = crate::plugin_preview::reserve(&mut first, source.id, &binding).unwrap();
+        crate::plugin_preview::stage(&mut first, token, Arc::clone(&source), revision, (*source).clone(), binding).unwrap();
+        let mut other = Session::new();
+        other.extensions.attach_folder(root.clone()).unwrap();
+        match action {
+            "disable" => {
+                other.execute("extension.enable", json!({"id":id,"enabled":false})).unwrap();
+            }
+            "disable-enable" => {
+                other.execute("extension.enable", json!({"id":id,"enabled":false})).unwrap();
+                other.execute("extension.enable", json!({"id":id,"enabled":true})).unwrap();
+                assert!(other.extensions.installed[id].native.as_ref().unwrap().lease().is_ok());
+            }
+            "remove" => {
+                other.execute("extension.remove", json!({"id":id})).unwrap();
+            }
+            "replace" => {
+                std::fs::write(&input, package(id, true, b"second", &[])).unwrap();
+                other.execute("extension.install", json!({"path":input,"allowNative":true,"replace":true})).unwrap();
+            }
+            "reinstall" => {
+                other.execute("extension.remove", json!({"id":id})).unwrap();
+                other.execute("extension.install", json!({"path":input,"allowNative":true})).unwrap();
+                assert!(other.extensions.installed[id].native.as_ref().unwrap().lease().is_ok());
+            }
+            _ => panic!("unknown management action: {action}"),
+        }
+        assert!(first.execute("image.pluginPreview.apply", json!({"preview":token})).is_err(), "{action}");
+        assert_eq!(first.documents().len(), 1);
+        assert!(Arc::ptr_eq(&source, &first.active().unwrap().doc));
+        assert!(first.plugin_preview(token).is_none());
+    }
+}
+
+#[test]
+fn activation_metadata_is_bounded_and_cannot_wrap_or_be_silently_reset() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.activation";
+    let _store = StoreGuard::write(&root).unwrap();
+    assert_eq!(activation(&root, id).unwrap(), 0);
+    assert_eq!(revoke_activation(&root, id).unwrap(), 1);
+    let path = root.join(format!("{id}.activation.json"));
+    for invalid in ["x".repeat(33), "null".into(), "-1".into(), u64::MAX.to_string()] {
+        std::fs::write(&path, &invalid).unwrap();
+        assert!(revoke_activation(&root, id).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
+    }
+}
+
 fn guest(id: &str, native: bool) -> Vec<u8> {
     guest_for(id, if native { "plugin.processImage" } else { "" })
+}
+
+#[test]
+fn corrupt_activation_metadata_never_triggers_owned_payload_repair() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.activation-repair";
+    let bytes = guest(id, false);
+    install(&root, id, &bytes, None, false).unwrap();
+    let record = read_record(&root, id).unwrap().unwrap();
+    let payload = generation(&root, &record).unwrap().join("plugin.pcext");
+    {
+        let _store = StoreGuard::write(&root).unwrap();
+        std::fs::write(root.join(format!("{id}.activation.json")), b"!").unwrap();
+    }
+    assert!(install(&root, id, &bytes, None, true).is_err());
+    assert!(remove(&root, id).is_err());
+    assert_eq!(read_record(&root, id).unwrap().unwrap(), record);
+    assert_eq!(std::fs::read(payload).unwrap(), bytes);
 }
 
 fn guest_for(id: &str, service: &str) -> Vec<u8> {
@@ -221,7 +436,10 @@ fn native_grant_hash_persistence_updates_and_uninstall_are_one_installation() {
     assert_eq!(review["package"]["native"]["service"], "plugin.processImage");
     assert!(s.execute("extension.install", json!({"path":path})).is_err());
     assert!(s.extensions.installed.is_empty());
-    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 0);
+    assert_eq!(
+        std::fs::read_dir(&folder).unwrap().map(|entry| entry.unwrap().file_name()).collect::<Vec<_>>(),
+        vec![std::ffi::OsString::from(".photocraft-store.lock")]
+    );
     s.execute("extension.install", json!({"path":path,"allowNative":true,"expectedHash":review["hash"]})).unwrap();
     let old_worker = s.extensions.installed[id].native.as_ref().unwrap().worker.clone();
     assert_eq!(std::fs::read(&old_worker).unwrap(), b"first");

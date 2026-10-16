@@ -36,6 +36,9 @@ the current source examples' recorded native-package acceptance.
 These are command shapes; resolve the actual paths in the current environment:
 
 ```text
+photocraft-plugin sdk FRESH_SDK_DIRECTORY
+photocraft-plugin new AUTHORING_JSON FRESH_PROJECT
+photocraft-plugin generate AUTHORING_JSON FRESH_OUTPUT
 photocraft-plugin project SOURCE
 photocraft-plugin check PACKAGE
 photocraft-plugin build-export SOURCE FRESH_DESTINATION

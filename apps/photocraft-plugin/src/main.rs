@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod authoring;
 mod native;
 mod project;
 
@@ -16,7 +17,7 @@ use sha2::{Digest, Sha256};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-const USAGE: &str = "photocraft-plugin check PACKAGE | hash FILE | probe PANEL REQUEST_JSON | project SOURCE | build-export SOURCE FRESH_DESTINATION | pack STAGED_DIRECTORY FRESH_PACKAGE";
+const USAGE: &str = "photocraft-plugin check PACKAGE | hash FILE | probe PANEL REQUEST_JSON | project SOURCE | build-export SOURCE FRESH_DESTINATION | pack STAGED_DIRECTORY FRESH_PACKAGE | sdk FRESH_DIRECTORY | generate AUTHORING_JSON FRESH_DIRECTORY | new AUTHORING_JSON FRESH_PROJECT";
 
 fn fail(message: impl Into<String>) -> Box<dyn std::error::Error> {
     std::io::Error::other(message.into()).into()
@@ -122,6 +123,9 @@ fn run(args: &[String]) -> Result<Value> {
             Ok(serde_json::to_value(extension.handle(&request)?)?)
         }
         [command, path] if command == "project" => project::audit(Path::new(path)),
+        [command, path] if command == "sdk" => authoring::export(Path::new(path)),
+        [command, input, output] if command == "generate" => authoring::manifests(Path::new(input), Path::new(output)),
+        [command, input, output] if command == "new" => authoring::new_project(Path::new(input), Path::new(output)),
         [command, source, destination] if command == "build-export" => project::build_export(Path::new(source), Path::new(destination)),
         [command, source, destination] if command == "pack" => pack(Path::new(source), Path::new(destination)),
         _ => Err(fail(format!("usage: {USAGE}"))),
@@ -178,5 +182,25 @@ mod tests {
         std::fs::write(&out, b"original").unwrap();
         assert!(pack(dir.path(), &out).is_err());
         assert_eq!(std::fs::read(out).unwrap(), b"original");
+    }
+
+    #[test]
+    #[ignore = "requires an actual independently built SDK package; see docs/plugin-sdk.md"]
+    fn independently_built_sdk_guest_edits_through_the_real_broker_and_undoes_atomically() {
+        let package =
+            std::path::PathBuf::from(std::env::var_os("PHOTOCRAFT_PLUGIN_SDK_PACKAGE").expect("provide the generated neutral SDK validation package"));
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::new();
+        session.extensions.attach_folder(dir.path().join("Extensions")).unwrap();
+        let installed = session.execute("extension.install", json!({"path":package})).unwrap();
+        let id = installed["manifest"]["id"].as_str().unwrap().to_owned();
+        session.execute("file.new", json!({"width":8,"height":6,"background":"transparent"})).unwrap();
+        let original = session.active().unwrap().doc.clone();
+        let command = format!("{id}.inspect");
+        session.execute(&command, json!({})).unwrap();
+        assert_eq!(session.extensions.installed[&id].state["checked"], true);
+        assert_eq!(session.active().unwrap().doc.layers[0].name, "SDK checked");
+        assert!(session.undo());
+        assert_eq!(session.active().unwrap().doc, original);
     }
 }

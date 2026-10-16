@@ -278,6 +278,14 @@ they do not authorize deleting unrelated data.
 
 ## Installation leases and result lifetime
 
+Current desktop hosts also coordinate through a shared OS store lock during native work,
+with exclusive locking for installation/repair, enable/disable and removal. A busy operation
+fails without changing the selected installation. The initial lock covers the whole store,
+so wait for native work to finish before managing any plugin there. Completion and Apply
+recheck the stored hash/package, activation epoch and disabled marker. Completed comparisons release the OS
+lease. See [store safety and remaining limits](plugin-safety.md#cooperative-store-locking),
+including older hosts, instance reloads and retained activation tombstones.
+
 The registered package and jobs hold shared `Arc<InstalledNative>` handles. Replacement,
 removal and reattaching the plugin folder require the registry to be the only remaining strong
 owner. A running job keeps the installation leased through processing and its completion
@@ -356,7 +364,7 @@ The host waits for worker termination and diagnostics before admitting a result 
 the job error.
 
 See [safety and recovery](plugin-safety.md) for the recovery launch option, damaged-record repair,
-native trust boundaries and the absence of cross-process installation locking.
+native trust boundaries and the current coarse cross-process store locking limits.
 
 A successful exit is necessary but insufficient. The host requires a regular output file
 within the shared byte limit, then checks the PNG header, exact expected dimensions,

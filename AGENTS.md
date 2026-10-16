@@ -28,6 +28,8 @@ crates/
   geom cms color raster      L0 foundation (geometry, ICC colour management, pixel formats + blend math, COW tiles)
   psd codecs                 L0 standalone format crates (no workspace deps; publishable)
   tablet                     L0 standalone pen tablet input (macOS AppKit, X11 XInput2); the one isolated unsafe crate
+  plugin-api                 L0 independent serialized plugin contracts, validation and generated schemas
+  plugin-sdk                 L1 independent guest ABI buffers, typed messages and optional authoring generator
   doc                        L1 document model (layers, masks, adjustments, effects, smart objects: pure data)
   ops paint algo text vector L2 history, brush engine, imaging algorithms, type engine, paths/shapes
   compose gpu format         L3 CPU compositor (the oracle), wgpu compositor, .pcraft native format
@@ -38,6 +40,7 @@ crates/
 apps/
   photocraft                 desktop app (eframe/wgpu), TCP control server
   photocraft-cli             headless CLI (convert/info/run/batch/commands/mcp)
+  photocraft-plugin          optional standalone plugin developer tooling and private SDK source export
   photocraft-web             the same app in the browser (trunk + wasm-bindgen)
   photocraft-web-boot        starts the packaged browser app from compressed parts of its wasm (no file over a host's size cap)
 xtask/                       cargo xtask layers | wasm | ci | stats | corpus | test-corpus | parity | perf | scorecard
@@ -52,7 +55,7 @@ xtask/                       cargo xtask layers | wasm | ci | stats | corpus | t
 People trust PhotoCraft with their work, and a crash loses it. A malformed file, a bad command or MCP param, a corrupt settings file, an odd keystroke or a full disk must produce an error the user or agent can act on, never a panic. Don't ship a feature by adding a panic path; fix a crash before building on top of it. The shared standard is `../craftrules/standards/never-crash.md`.
 
 - **Non-test code never panics.** No `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!` or `unimplemented!`. Return the crate's error type and propagate with `?`; use `ok_or(..)?`, `let .. else { return Err(..) }`, `if let`, or `unwrap_or*` where a fallback is truly correct (never one that silently corrupts a document). Unfinished features return an "unsupported" error. The only exception is a provably infallible literal: `#[allow(clippy::expect_used)]` plus `.expect("why it can't fail")`.
-- **No `unsafe`.** The workspace sets `unsafe_code = "forbid"`. The one exception is the isolated helper crate `photocraft-tablet` (`crates/tablet`): winit drops pen tablet data, and reading it on macOS needs an AppKit event monitor (Objective-C interop). Only its `src/macos.rs` allows `unsafe` (`unsafe_code = "deny"` crate-wide, every block has a `SAFETY:` comment, tested against real `NSEvent`s); its X11 path and all mapping code are safe. Don't add `unsafe` anywhere else.
+- **No unsafe operations.** The workspace sets `unsafe_code = "forbid"`. The one exception is the isolated helper crate `photocraft-tablet` (`crates/tablet`): winit drops pen tablet data, and reading it on macOS needs an AppKit event monitor (Objective-C interop). Only its `src/macos.rs` allows `unsafe` (`unsafe_code = "deny"` crate-wide, every block has a `SAFETY:` comment, tested against real `NSEvent`s); its X11 path and all mapping code are safe. Don't add unsafe operations anywhere else. The guest SDK export macro narrowly allows Rust 2024 `#[unsafe(export_name)]` attributes to name the four existing ABI symbols in a guest crate using `deny(unsafe_code)`. Those functions contain no unsafe operations. This exception does not permit raw pointer dereferencing, unsafe blocks or editor-core FFI.
 - **Input-derived numbers are hostile.** Use `get()` rather than `[i]`/`[a..b]` for indices from files, params, selections or arithmetic on them; slice strings only at char boundaries; use `checked_*`/`saturating_*` for lengths, offsets and counts; guard division by zero and NaN/inf casts; cap allocations sized by input.
 - **Bound recursion** with depth limits or seen-sets (documents can be deep or cyclic).
 - **Don't cascade.** Handle lock poisoning (`lock().unwrap_or_else(PoisonError::into_inner)`) and treat thread joins as `Result`s.
@@ -132,6 +135,26 @@ Then append a terse entry to `log/devlog.md` (what landed, numbers, what's still
 - `../craftrules/release/playbook.md`: how every storytold app builds signed release binaries (the canonical recipe; `docs/release-playbook.md` just points there); `docs/releasing.md` is PhotoCraft's specifics.
 - `plan/` (local, gitignored): research, parity plan, execution plan, estimates.
 - `log/` (local, gitignored): the dev log.
+
+## Plugin platform ownership and contracts
+
+Read `docs/plugin-development.md`, `docs/plugin-sdk.md`, `docs/plugin-api-v2.md` and
+`docs/plugin-platform-plan.md` before changing the platform. Public SDK/API crates must
+build independently of engine/UI sources. New guests can use `photocraft-plugin new`
+with one `authoring.json`; generated manifests and bindings belong in Cargo `OUT_DIR`.
+Never require an existing plugin to adopt the SDK or rebuild to keep its supported ABI.
+
+Feature algorithms, model catalogs, binaries, licenses and acceptance suites for separately
+released plugins belong in those plugins' repositories. Keep core regressions neutral and
+extend existing suites; generated SDK acceptance projects and packages stay temporary.
+Regenerate all public JSON Schema snapshots when their Rust contracts change.
+
+Managed native jobs hold a shared OS store lock through worker execution, and check the
+selected generation and persistent activation epoch again at completion/Apply. Store mutation uses an exclusive lock.
+Never replace/delete `.photocraft-store.lock` or bypass these guards. The current coarse
+lock covers the whole store; per-generation scheduling, persistent workers and aggregate
+quotas remain Phase 2 work. Update developer docs, this guide and the plugin developer
+skill with completed features and their actual limits before publishing changes.
 
 ## 8. Keeping the native format complete
 

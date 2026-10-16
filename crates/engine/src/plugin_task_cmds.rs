@@ -104,7 +104,10 @@ pub(crate) fn run(s: &mut Session, value: &Value, completion: Option<Completion>
             s,
             "Run plugin task",
             false,
-            move |ctx| crate::plugin_runtime::task(&native.worker, &params.options, ctx),
+            move |ctx| {
+                let _store = native.lease()?;
+                crate::plugin_runtime::task(&native.worker, &params.options, ctx)
+            },
             move |s, result| binding.complete(s, result),
         )
     }
@@ -124,6 +127,7 @@ struct Binding {
 impl Binding {
     fn complete(self, s: &mut Session, result: crate::plugin_runtime::TaskResult) -> Result<Value> {
         use std::sync::Arc;
+        let _store = self.native.lease()?;
         let installed = s
             .extensions
             .installed

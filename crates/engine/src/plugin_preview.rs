@@ -78,6 +78,11 @@ pub(crate) struct PreviewBinding {
 
 impl PreviewBinding {
     #[cfg(not(target_arch = "wasm32"))]
+    fn lease(&self) -> Result<Option<crate::extension_package::StoreGuard>> {
+        self.native.as_ref().map_or(Ok(None), |native| native.upgrade().ok_or_else(|| error("The processing plugin is no longer installed"))?.lease())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn for_native(s: &Session, native: &Arc<crate::extension_package::InstalledNative>, completion: Option<Completion>) -> Result<Self> {
         let (id, extension, state) = match completion {
             Some((id, extension, state)) => (id, extension, Some(state)),
@@ -118,6 +123,8 @@ impl PreviewBinding {
     }
 
     pub(crate) fn validate(&self, s: &Session) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let _store = self.lease()?;
         let installed = s
             .extensions
             .installed
@@ -200,6 +207,8 @@ pub(crate) fn reserve(s: &mut Session, source: DocId, binding: &PreviewBinding) 
 }
 
 pub(crate) fn stage(s: &mut Session, id: u64, source: Arc<Document>, source_revision: u64, result: Document, binding: PreviewBinding) -> Result<Value> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let _store = binding.lease()?;
     if !s.extensions.previews.pending.as_ref().is_some_and(|pending| pending.id == id && pending.source == source.id && pending.plugin_id == binding.id) {
         return Err(error("This preview was discarded or replaced before processing finished"));
     }
@@ -250,6 +259,8 @@ pub(crate) fn apply(s: &mut Session, p: &Value) -> Result<Value> {
         }
         return Err(e);
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _store = s.plugin_preview(params.preview).map_or(Ok(None), |preview| preview.binding.lease())?;
     match params.target {
         Target::Document => {
             let preview = s.extensions.previews.preview.take().ok_or_else(|| error("The image preview is no longer available"))?;

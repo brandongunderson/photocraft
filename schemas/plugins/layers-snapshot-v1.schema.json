@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LayersSnapshot",
+  "type": "object",
+  "properties": {
+    "depth": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "default": null,
+      "minimum": 0
+    },
+    "document": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScopedHandle"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "height": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "default": null,
+      "minimum": 0
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LayerSnapshot"
+      }
+    },
+    "mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "name": {
+      "type": "string"
+    },
+    "nextCursor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScopedHandle"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "totalLayers": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "width": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "default": null,
+      "minimum": 0
+    }
+  },
+  "required": [
+    "name",
+    "layers",
+    "totalLayers"
+  ],
+  "$defs": {
+    "LayerSnapshot": {
+      "type": "object",
+      "properties": {
+        "depth": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "handle": {
+          "$ref": "#/$defs/ScopedHandle"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "handle",
+        "name",
+        "visible",
+        "selected",
+        "kind",
+        "depth",
+        "locked"
+      ]
+    },
+    "ScopedHandle": {
+      "description": "A bearer reference only. Hosts must check issuer, owner, installation and invocation scope.\nDeserializing a handle grants no authority.",
+      "type": "string",
+      "maxLength": 192,
+      "minLength": 1
+    }
+  }
+}

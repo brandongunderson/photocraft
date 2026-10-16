@@ -19,6 +19,13 @@ excluding generated `target/`, `dist/`, and Git metadata; preserve locks and lic
 If no starter is available, obtain the matching source/kit before depending on its
 scaffold. Do not substitute upstream-only WASM filter documentation for these APIs.
 
+For new API-2 guests, the optional `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT`
+command exports a complete project with private API/SDK 0.1 sources, licenses and locks.
+The executable embeds these public sources; no editor checkout is needed to export or
+build the project. Read its generated README and `AGENTS.md`. Edit `authoring.json` and
+the handler; Cargo generates manifests/bindings in `OUT_DIR`. Existing plugins need no
+SDK migration, synchronized SDK release or rebuild of their supported wire ABI.
+
 Current authoring contracts are panel API 1, experimental panel API 2, filter ABI 1,
 package format 2, and native worker protocol 1. Package format 3 and worker protocol 2
 are proposals. The application release number alone does not establish API support.
@@ -32,12 +39,15 @@ Read [API contracts](references/api-contracts.md) for version boundaries, payloa
 ownership, and current limits. In a PhotoCraft source/kit, consult `docs/plugin-development.md`
 and the relevant `docs/extensions.md`, `docs/plugins.md`, `docs/plugin-api-v2.md`,
 `docs/plugin-image-processing.md`, or `docs/plugin-native-tasks.md` for full details.
+The matching `docs/plugin-sdk.md` covers typed events/replies, document builders,
+single-manifest authoring, source exports and the preview compatibility policy.
 Those documents are authoring references, not runtime source dependencies.
 
 ## Choose the smallest suitable starting point
 
 | Feature | Starter path in a source checkout or developer kit | Result |
 |---|---|---|
+| Typed new panel/command guest with single source metadata | `photocraft-plugin new` from a reviewed authoring input | API-2 project with privately included SDK/API sources |
 | Panel combining permitted editor commands | `examples/extensions/plugin-starter` | Panel API 1 `.pcext` |
 | Pixel algorithm using the filter target's depth and channels | `examples/plugins/filter-starter` | Filter ABI 1 `.wasm` |
 | Panel with its own executable and/or bundled WASM algorithm | `examples/extensions/image-plugin-starter` | Package 2 `.pcplugin` |
@@ -63,6 +73,9 @@ adding a plugin-specific adapter to the editor.
 - Change manifest fields and matching handler logic together. New identities require
   updating API-2 contribution namespaces and bundled processor references as well.
   Rebuild embedded manifests; editing a loose installed JSON file does not update WASM.
+- In SDK projects, change the source `authoring.json`, not generated files. Preserve
+  private SDK licenses and `SDK-RELEASE.json`; audit hashes and lock resolution when
+  updating it. Typed requests and generated bindings never grant host authority.
 - Preserve the starter's bounded ABI helpers and error handling. Core WASM has no
   imports or WASI. Required Rust export attributes do not justify unsafe buffer access.
 - Declare only used command grants and capabilities. Resolve native workers and
@@ -77,6 +90,14 @@ Follow the copied project's actual commands; starter scripts have different flag
 Run meaningful handler/algorithm tests, formatting, Clippy, release WASM/native builds,
 and packaging for each component changed. Native-only unit tests do not verify WASM
 exports or installed behavior. Keep source instructions and README usage in sync.
+
+Current desktop hosts protect native work with cooperative OS store locks and activation
+epochs. Store management can return busy until native work finishes. Completed results
+are rechecked; old generations, disable/re-enable and identical reinstall cannot revive
+an obsolete native result. Keep the store lock and activation tombstones intact. This
+does not sandbox native processes, impose aggregate quotas or implement worker protocol 2.
+Companion apps use the authenticated local control API/MCP rather than guest handles;
+plugins remain usable without a companion and automation restrictions still apply.
 
 When supplied, use the `photocraft-plugin` tool for project ownership checks,
 package validation, exported builds, and handler probes. It is optional author tooling;

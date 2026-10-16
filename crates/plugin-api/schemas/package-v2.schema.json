@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PackageV2",
+  "type": "object",
+  "properties": {
+    "filters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FilterPayload"
+      },
+      "maxItems": 16
+    },
+    "module": {
+      "type": "string"
+    },
+    "native": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NativePayload"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "packageVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 2,
+      "minimum": 2
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "packageVersion",
+    "module"
+  ],
+  "$defs": {
+    "FilterPayload": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "module"
+      ]
+    },
+    "NativePayload": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "platform",
+        "entry"
+      ]
+    }
+  }
+}

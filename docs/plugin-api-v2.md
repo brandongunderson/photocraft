@@ -5,6 +5,11 @@
 protocol 1 remain supported without rebuilding plugins. Package format 3 is a separate
 [proposal](plugin-package-v3.md).
 
+The [guest SDK](plugin-sdk.md) now provides the typed event envelope, broker replies, layer
+requests/snapshots, bounded ABI exports and single-manifest authoring. These describe the
+existing implemented capability-v1 wire messages. Package 3 and worker 2 are still proposals;
+SDK completion does not imply completion of later host capabilities.
+
 ## Version boundaries
 
 The plugin's release version, contract crate version, package version, panel ABI, host metadata

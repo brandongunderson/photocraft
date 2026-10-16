@@ -61,7 +61,7 @@ fn cargo() -> PathBuf {
     std::env::var_os("PHOTOCRAFT_PLUGIN_CARGO").map(PathBuf::from).unwrap_or_else(|| "cargo".into())
 }
 
-fn cargo_command() -> Command {
+pub(crate) fn cargo_command() -> Command {
     let mut command = Command::new(cargo());
     if let Some(path) = std::env::var_os("PHOTOCRAFT_PLUGIN_BUILD_PATH") {
         command.env("PATH", path);
@@ -247,7 +247,11 @@ pub(crate) fn build_export(source: &Path, destination: &Path) -> Result<Value> {
     let _ = audit(&destination)?;
     let stage = destination.join("dist/package");
     std::fs::create_dir_all(stage.join("filters"))?;
-    let mut package: Value = serde_json::from_slice(&std::fs::read(destination.join("package.json"))?)?;
+    let mut package: Value = if destination.join("authoring.json").is_file() {
+        serde_json::to_value(crate::authoring::source(&destination.join("authoring.json"))?.package)?
+    } else {
+        serde_json::from_slice(&std::fs::read(destination.join("package.json"))?)?
+    };
     let target = destination.join("target");
     let panel_meta = build(&destination, &target, true)?;
     let panel = artifact_target(&panel_meta, &destination.join("Cargo.toml"), "cdylib")?;
@@ -276,10 +280,23 @@ pub(crate) fn build_export(source: &Path, destination: &Path) -> Result<Value> {
         let meta = build(&native, &target, false)?;
         let name = artifact_target(&meta, &native.join("Cargo.toml"), "bin")?;
         let suffix = std::env::consts::EXE_SUFFIX;
-        let entry = format!("{name}{suffix}");
-        std::fs::copy(target.join("release").join(&entry), stage.join(&entry))?;
-        package["native"]["entry"] = json!(entry);
-        package["native"]["platform"] = json!(format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH));
+        let binary = format!("{name}{suffix}");
+        let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+        let entry = if destination.join("authoring.json").is_file() {
+            if string(&package["native"], "platform")? != platform {
+                return Err(fail(
+                    "build-export builds native code for the current host; use a target-specific authoring input or your own cross-platform builder",
+                ));
+            }
+            string(&package["native"], "entry")?.to_owned()
+        } else {
+            package["native"]["entry"] = json!(binary);
+            package["native"]["platform"] = json!(platform);
+            binary.clone()
+        };
+        let output = stage.join(entry);
+        std::fs::create_dir_all(output.parent().ok_or_else(|| fail("invalid native entry path"))?)?;
+        std::fs::copy(target.join("release").join(binary), output)?;
         license_files(&meta, &stage, &mut license_ids)?;
     }
     for name in ["LICENSE", "LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-NOTICES.md"] {

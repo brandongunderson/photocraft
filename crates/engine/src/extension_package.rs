@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{EngineError, Result};
 
+mod store;
+pub(crate) use store::StoreGuard;
+
 pub const MAX_PACKAGE_BYTES: usize = 512 << 20;
 const MAX_EXPANDED: usize = 1024 << 20;
 const MAX_FILE: usize = 256 << 20;
@@ -17,35 +20,49 @@ const MAX_FILES: usize = 512;
 const MAX_RECORD: usize = 512 << 10;
 const RECORD_SUFFIX: &str = ".installation.json";
 const OWNERSHIP: &str = ".photocraft-install.json";
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PackageInfo {
-    pub package_version: u32,
-    pub module: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<NativeInfo>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub filters: Vec<FilterInfo>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FilterInfo {
-    pub module: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct NativeInfo {
-    pub service: String,
-    pub platform: String,
-    pub entry: String,
-}
+pub use photocraft_plugin_api::{FilterPayload as FilterInfo, NativePayload as NativeInfo, PackageV2 as PackageInfo};
 
 /// Held by the installation and every job using it. Updates/uninstall require the last lease.
+#[derive(Clone)]
 pub struct InstalledNative {
     pub worker: PathBuf,
     pub package: PackageInfo,
+    pub(crate) generation: Option<ManagedGeneration>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ManagedGeneration {
+    root: PathBuf,
+    id: String,
+    hash: String,
+    activation: u64,
+}
+
+impl InstalledNative {
+    /// Keep the selected payload alive through execution or a result's commit. Memory-only
+    /// fixtures have no managed store; installed native workers always carry this identity.
+    pub(crate) fn lease(&self) -> Result<Option<StoreGuard>> {
+        let Some(generation) = &self.generation else { return Ok(None) };
+        let guard = StoreGuard::read(&generation.root)?;
+        let record = read_record(&generation.root, &generation.id)?;
+        if !record.is_some_and(|record| record.hash == generation.hash && record.package.as_ref() == Some(&self.package))
+            || activation(&generation.root, &generation.id)? != generation.activation
+            || checked_path(&generation.root, &format!("{}.disabled", generation.id))?.exists()
+        {
+            return Err(error(
+                "This native plugin was disabled, removed or updated in another PhotoCraft instance. Restart this PhotoCraft instance to reload plugins, then run the action again.",
+            ));
+        }
+        Ok(Some(guard))
+    }
+
+    pub(crate) fn reactivated(&self, activation: u64) -> Self {
+        let mut native = self.clone();
+        if let Some(generation) = &mut native.generation {
+            generation.activation = activation;
+        }
+        native
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +101,7 @@ pub(crate) struct Loaded {
 
 pub(crate) struct InstalledPayload {
     pub native: Option<Arc<InstalledNative>>,
+    pub enabled: bool,
     pub warning: Option<String>,
 }
 
@@ -382,6 +400,26 @@ fn read_record(root: &Path, id: &str) -> Result<Option<Record>> {
     Ok(Some(record))
 }
 
+fn activation(root: &Path, id: &str) -> Result<u64> {
+    if !valid_id(id) {
+        return Err(error("invalid activation id"));
+    }
+    let path = checked_path(root, &format!("{id}.activation.json"))?;
+    if !path.exists() {
+        return Ok(0); // Existing stores acquire an epoch on their first management operation.
+    }
+    serde_json::from_slice(&read_bounded(&path, 32)?).map_err(error)
+}
+
+/// Caller holds the exclusive store guard. Retain the small tombstone after removal so
+/// reinstalling identical bytes cannot resurrect another process's obsolete result.
+pub(crate) fn revoke_activation(root: &Path, id: &str) -> Result<u64> {
+    let next = activation(root, id)?.checked_add(1).ok_or_else(|| error("plugin activation limit reached"))?;
+    let path = checked_path(root, &format!("{id}.activation.json"))?;
+    photocraft_format::atomic_write(&path, &serde_json::to_vec(&next).map_err(error)?).map_err(error)?;
+    Ok(next)
+}
+
 /// Explicit replacement may repair malformed metadata, but cannot turn filesystem errors,
 /// oversized records or linked paths into permission to overwrite an installation.
 fn previous_record(root: &Path, id: &str, replace: bool) -> Result<(Option<Record>, Option<Vec<u8>>)> {
@@ -430,6 +468,7 @@ fn preserve_corrupt_record(root: &Path, id: &str, bytes: &[u8]) -> Result<PathBu
 }
 
 pub(crate) fn record_ids(root: &Path) -> Result<Vec<String>> {
+    let _store = StoreGuard::read(root)?;
     let mut ids = Vec::new();
     for entry in std::fs::read_dir(root).map_err(error)? {
         let entry = entry.map_err(error)?;
@@ -450,6 +489,7 @@ fn generation(root: &Path, record: &Record) -> Result<PathBuf> {
 }
 
 fn load_generation(root: &Path, record: &Record) -> Result<Loaded> {
+    let activation = activation(root, &record.id)?;
     let dir = generation(root, record)?;
     let marker = dir.join(OWNERSHIP);
     let stored: Record = serde_json::from_slice(&read_bounded(&marker, MAX_RECORD)?).map_err(error)?;
@@ -469,14 +509,20 @@ fn load_generation(root: &Path, record: &Record) -> Result<Loaded> {
             module = data;
         }
     }
-    let native = record
-        .package
-        .as_ref()
-        .and_then(|package| package.native.as_ref().map(|native| Arc::new(InstalledNative { worker: dir.join(&native.entry), package: package.clone() })));
+    let native = record.package.as_ref().and_then(|package| {
+        package.native.as_ref().map(|native| {
+            Arc::new(InstalledNative {
+                worker: dir.join(&native.entry),
+                package: package.clone(),
+                generation: Some(ManagedGeneration { root: root.into(), id: record.id.clone(), hash: record.hash.clone(), activation }),
+            })
+        })
+    });
     Ok(Loaded { module, native, package: record.package.clone(), filters, storage: storage_size(&record.files)? })
 }
 
 pub(crate) fn load(root: &Path, id: &str) -> Result<Loaded> {
+    let _store = StoreGuard::read(root)?;
     let record = read_record(root, id)?.ok_or_else(|| error("installation record is missing"))?;
     load_generation(root, &record)
 }
@@ -521,7 +567,13 @@ fn cleanup(root: &Path, record: &Record) -> Result<()> {
 }
 
 pub(crate) fn install(root: &Path, id: &str, bytes: &[u8], package: Option<&Package>, replace: bool) -> Result<InstalledPayload> {
+    let _store = StoreGuard::write(root)?;
+    activation(root, id)?.checked_add(1).ok_or_else(|| error("plugin activation limit reached"))?;
     let (previous, corrupt) = previous_record(root, id, replace)?;
+    if !replace && previous.as_ref().is_some_and(|record| load_generation(root, record).is_ok()) {
+        return Err(error("extension already installed; use replace:true to update it"));
+    }
+    let enabled = !checked_path(root, &format!("{id}.disabled"))?.exists();
     let record = Record {
         format_version: 1,
         id: id.into(),
@@ -587,21 +639,29 @@ pub(crate) fn install(root: &Path, id: &str, bytes: &[u8], package: Option<&Pack
         }
     };
     // Publish last. Any validation or extraction failure leaves the previous active record intact.
-    let published = record_path(root, id).and_then(|path| photocraft_format::atomic_write(&path, &record_bytes).map_err(error));
-    if let Err(e) = published {
-        if created && let Err(cleanup_error) = cleanup(root, &record) {
-            return Err(error(format!("{e}; staged payload cleanup failed: {cleanup_error}")));
+    let published = revoke_activation(root, id).and_then(|activation| {
+        record_path(root, id).and_then(|path| photocraft_format::atomic_write(&path, &record_bytes).map_err(error))?;
+        Ok(activation)
+    });
+    let activation = match published {
+        Ok(activation) => activation,
+        Err(e) => {
+            if created && let Err(cleanup_error) = cleanup(root, &record) {
+                return Err(error(format!("{e}; staged payload cleanup failed: {cleanup_error}")));
+            }
+            return Err(e);
         }
-        return Err(e);
-    }
+    };
     let warning = previous.filter(|old| old.hash != record.hash).and_then(|old| cleanup(root, &old).err()).map(|e| e.to_string()).or_else(|| {
         repaired.map(|path| format!("Repaired damaged plugin metadata; preserved the original at {} and retained any previous payload folders", path.display()))
     });
-    Ok(InstalledPayload { native: loaded.native, warning })
+    Ok(InstalledPayload { native: loaded.native.map(|native| Arc::new(native.reactivated(activation))), enabled, warning })
 }
 
 pub(crate) fn remove(root: &Path, id: &str) -> Result<Option<String>> {
+    let _store = StoreGuard::write(root)?;
     let record = read_record(root, id)?;
+    revoke_activation(root, id)?;
     // Remove a legacy fallback before the authoritative record, so it cannot reappear at restart.
     let legacy = checked_path(root, &format!("{id}.pcext"))?;
     if legacy.exists() {
@@ -609,8 +669,13 @@ pub(crate) fn remove(root: &Path, id: &str) -> Result<Option<String>> {
     }
     if let Some(record) = record {
         std::fs::remove_file(record_path(root, id)?).map_err(error)?;
-        return Ok(cleanup(root, &record).err().map(|e| e.to_string()));
+        let mut warnings = cleanup(root, &record).err().map(|e| e.to_string()).into_iter().collect::<Vec<_>>();
+        if let Err(cause) = crate::extension_cmds::remove_if_exists(&checked_path(root, &format!("{id}.disabled"))?) {
+            warnings.push(format!("Disabled marker could not be cleaned up: {cause}"));
+        }
+        return Ok((!warnings.is_empty()).then(|| warnings.join("; ")));
     }
+    crate::extension_cmds::remove_if_exists(&checked_path(root, &format!("{id}.disabled"))?)?;
     Ok(None)
 }
 

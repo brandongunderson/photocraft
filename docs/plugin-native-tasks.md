@@ -31,6 +31,10 @@ No open document is required. The host runs work asynchronously when the UI star
 progress and cancellation, and exposes the normal `jobs.list`/`jobs.cancel` APIs. A native
 installation cannot start another task or native image operation until its current work and
 cancel drain finish. Updating/removing the installation also waits for its native leases.
+Current desktop instances hold a shared OS store lock while executing the worker and
+recheck its stored generation before committing task state. Management operations on the
+same store return busy during native work. See [store locking](plugin-safety.md#cooperative-store-locking)
+for the first Phase 2 slice's coarse scope and remaining lifecycle limits.
 
 ## Worker protocol
 

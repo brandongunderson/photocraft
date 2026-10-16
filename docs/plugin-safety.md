@@ -149,14 +149,42 @@ a reviewed repair. If loading itself prevents normal startup, keep the recovery 
 documents and investigate the indicated settings folder with the app closed. Back up files before
 moving a suspect installation aside; do not delete the entire settings or recovery directory.
 
+## Cooperative store locking
+
+Desktop instances using this implementation share `.photocraft-store.lock` in the managed
+plugin folder. Startup/loads and executing native jobs acquire shared OS locks; installation,
+repair, enable/disable and removal require an exclusive lock. Contention returns a busy error
+before changing files. Locks release when their owning file closes or the process exits. Never
+replace/delete this file to clear a busy error. An existing store needs one writable initialization
+to create it; filesystems without working locks fail closed.
+
+Native image/task workers hold a read lease through execution. Completion and preview Apply
+recheck the selected installation record's hash, package, activation epoch and disabled marker, holding
+a read lease through result/state admission. An update/remove/disable in another current host
+therefore rejects an obsolete result. Completed previews do not retain a long-running OS lease.
+Each management operation advances a bounded per-plugin epoch in `<id>.activation.json`.
+Retain this small host-owned tombstone after removal: disable/re-enable or reinstalling identical
+bytes must not revive an old result in another process. Missing epochs in existing stores start
+at zero. Malformed, oversized or exhausted epochs fail closed; do not delete them to reset a plugin.
+If publication fails after revocation, the previous active record remains selected but other
+sessions may need to reload its native identity before retrying work.
+
+This first Phase 2 slice uses one lock for the entire store. Native work temporarily blocks
+management operations for every plugin in that store; concurrent readers/jobs are allowed.
+It coordinates cooperating current hosts, not old hosts, manual file edits or malicious native
+code. It does not synchronize all running instances' in-memory registries or supervise worker
+descendants after host death. Restart other desktop instances after changing installations to
+reload their plugin registry; there is no live cross-process registry refresh yet. Per-generation
+leases, migrations, quotas and stronger native supervision remain later work.
+
 ## Remaining limits and regression evidence
 
 - No automatic plugin crash quarantine, publisher signing or malware certification.
 - Native package compatibility checks are structural; runtime/model/driver behavior is validated on use.
 - Memory and image bounds are per operation/instance, not an aggregate quota for all jobs, documents,
   filter threads, GPU allocations and other applications. Available memory can still be exhausted.
-- Native job leases protect one PhotoCraft session. Cross-process installation locking is absent;
-  close other PhotoCraft instances before updating/removing a native package.
+- Cooperative OS store locks protect current hosts; older instances must be closed before
+  changing installations. Native process trees and aggregate resources remain uncontained.
 - WASM fuel bounds guest execution, not the cost of requested editor commands. Heavy built-in
   commands have their normal engine bounds and can still take time.
 - Damaged ownership metadata may require manual investigation rather than automatic removal.

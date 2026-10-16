@@ -7,6 +7,13 @@ It depends on serialization libraries, never on the editor, document model, UI o
 panel-1. `Capabilities::validate`, `Contributions::validate`, `negotiate` and `PanelResponse::parse`
 also serve hosts which retain their original manifest/control implementations.
 
+`EventRequest`, `BrokerReply`, `LayersRead`, `LayersEdit` and the corresponding snapshot
+types describe the implemented broker wire messages. `AuthoringManifest` validates the
+single source input for package-2 authoring. These types expose no internal Rust layouts.
+The optional [guest SDK](../plugin-sdk/README.md) adds bounded ABI storage and manifest
+generation; it is not required by existing binaries. The matching developer kit includes
+the full SDK guide in `docs/plugin-sdk.md`.
+
 Capability discovery describes availability; it grants no authority. Only the host creates a
 principal and binds a `ScopedHandle` to the correct plugin, generation and invocation. A plugin
 cannot grant itself permission by manufacturing a descriptor or JSON handle.

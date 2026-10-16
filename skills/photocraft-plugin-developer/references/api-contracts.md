@@ -1,6 +1,6 @@
 # Authoring contracts
 
-Snapshot: 2026-10-15 native-extensions implementation. The supplied host's discovery
+Snapshot: 2026-10-16 plugin-platform implementation. The supplied host's discovery
 and validation remain authoritative; this is not a promise that stock upstream
 releases contain the panel/native package platform.
 
@@ -13,10 +13,29 @@ releases contain the panel/native package platform.
 | Desktop package | 2 | ZIP, panel module, optional owned native/filter backends |
 | Native image/task worker | 1 | Host-owned requests/results, `--job` or `--task` |
 | Shared contract crate | Experimental `photocraft-plugin-api` 0.1.0 | Serialized data, no editor linkage required |
+| Guest SDK | Experimental `photocraft-plugin-sdk` 0.1.0 | Typed events/replies, bounded ABI buffers, optional authoring generator |
+
+The SDK exports the same four panel-2 functions and owns its bounded buffers. The host
+only writes the exact current allocation. Erroring handlers preserve state and propose no
+effects. Descriptors/effects stay strict; event envelopes and read-only snapshots may ignore
+additional optional metadata. Breaking wire behavior requires a newly negotiated major.
+API/SDK releases and plugin/protocol versions are independent. This foundation preview
+does not establish a calendar support window or certify future capability categories.
+
+The authoring input is `{formatVersion: 1, descriptor: <panel-2>, package: <package-2>}`.
+Cargo generates the embedded descriptor and Rust constants; the package builder reads the
+same input. New projects may privately include the exported API/SDK source. Nothing links
+against engine/UI types, and no shared runtime installation is required.
 
 Package 3 and worker protocol 2 are proposals. API-2 panels still use package 2.
 Retired package-1 fixed AI services are not an authoring route. Photoshop UXP, CEP,
 and `.8BF` files require porting. Renaming files does not convert their ABI.
+
+Current desktop store mutations use an exclusive OS lock; native jobs use shared leases.
+Completion and Apply verify the selected payload, enabled state and persistent activation
+epoch. Store-wide locking can temporarily block management of any plugin during native
+work. Other instances reload changed installations. Older hosts/manual file edits do not
+participate; native containment, lazy activation and aggregate quotas remain future work.
 
 ## Panels
 

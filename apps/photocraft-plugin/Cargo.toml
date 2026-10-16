@@ -12,6 +12,7 @@ workspace = true
 photocraft-engine.workspace = true
 photocraft-format.workspace = true
 photocraft-plugins.workspace = true
+photocraft-plugin-sdk = { workspace = true, features = ["authoring"] }
 serde_json.workspace = true
 blake3 = { version = "1.8", default-features = false, features = ["pure"] }
 sha2 = "0.10"

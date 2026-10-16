@@ -109,11 +109,7 @@ fn metadata_versions_and_error_codes_round_trip_independently() {
 #[test]
 fn checked_in_json_schemas_match_rust_contract_generation() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("schemas");
-    for (name, generated) in [
-        ("panel-v2.schema.json", schema::descriptor()),
-        ("panel-v2-response.schema.json", schema::panel_response()),
-        ("host-api-v1.schema.json", schema::host_api()),
-    ] {
+    for (name, generated) in schema::all() {
         let saved: Value = serde_json::from_slice(&std::fs::read(root.join(name)).unwrap()).unwrap();
         assert_eq!(saved, serde_json::to_value(generated).unwrap(), "regenerate {name} using export_schemas");
         assert_eq!(saved["$schema"], "https://json-schema.org/draft/2020-12/schema");
@@ -123,4 +119,81 @@ fn checked_in_json_schemas_match_rust_contract_generation() {
             assert_eq!(saved, exported, "public schema {name} differs from independent crate snapshot");
         }
     }
+}
+
+#[test]
+fn actual_host_envelope_and_nullable_replies_decode_with_future_event_fields() {
+    let mut request = json!({"apiVersion":2,"host":{"version":1,"capabilities":[]},
+        "compatibility":{"panelApi":2,"hostApi":1,"negotiated":{"available":[],"unavailableOptional":[]}},
+        "event":"host_response","values":{},"state":{"saved":7},"document":null,
+        "responses":[{"id":"read","result":null}],"futureOptionalField":{"version":1}});
+    let event = EventRequest::parse(&serde_json::to_vec(&request).unwrap()).unwrap();
+    assert_eq!(event.reply("read").unwrap().decode::<Value>().unwrap(), Value::Null);
+    request["responses"][0]["error"] = json!({"code":"conflict","message":"no","details":{}});
+    assert!(EventRequest::parse(&serde_json::to_vec(&request).unwrap()).is_err());
+    request["responses"] = json!([{"id":"read","error":{"code":"staleRevision","message":"changed","details":{}}}]);
+    let event = EventRequest::parse(&serde_json::to_vec(&request).unwrap()).unwrap();
+    assert_eq!(event.reply("read").unwrap().decode::<Value>().unwrap_err().code, ErrorCode::StaleRevision);
+}
+
+#[test]
+fn invalid_versions_duplicate_replies_and_oversized_state_fail_before_a_handler() {
+    let event = json!({"apiVersion":2,"host":{"version":1,"capabilities":[]},"event":"info","state":null});
+    for change in [
+        json!({"apiVersion":1}),
+        json!({"event":"_reserved"}),
+        json!({"responses":[{"id":"r","result":{}},{"id":"r","result":{}}]}),
+        json!({"state":"x".repeat(129*1024)}),
+    ] {
+        let mut request = event.clone();
+        request.as_object_mut().unwrap().extend(change.as_object().unwrap().clone());
+        assert!(EventRequest::parse(&serde_json::to_vec(&request).unwrap()).is_err());
+    }
+}
+
+#[test]
+fn typed_broker_requests_match_existing_json_and_reject_partial_or_duplicate_edits() {
+    let read = LayersRead { limit: Some(128), ..Default::default() }.request("layers").unwrap();
+    assert_eq!(serde_json::to_value(read).unwrap(), json!({"id":"layers","method":"documents.layers.read","params":{"limit":128}}));
+    let op = LayerEdit { layer: ScopedHandle("opaque-layer".into()), name: Some("Review".into()), visible: None };
+    let mut edit = LayersEdit { document: ScopedHandle("opaque-document".into()), expected_revision: 9, edits: vec![op.clone()] };
+    assert_eq!(edit.request("edit").unwrap().params["expectedRevision"], 9);
+    edit.edits.push(op);
+    assert_eq!(edit.request("edit").unwrap_err().code, ErrorCode::InvalidHandle);
+    edit.edits.clear();
+    assert!(edit.request("edit").is_err());
+    assert!(LayersRead { limit: Some(129), ..Default::default() }.request("layers").is_err());
+}
+
+#[test]
+fn no_document_snapshot_and_future_layer_metadata_remain_readable() {
+    let snapshot: LayersSnapshot =
+        serde_json::from_value(json!({"document":null,"revision":null,"name":"","layers":[],"totalLayers":0,"nextCursor":null})).unwrap();
+    assert!(snapshot.document.is_none());
+    assert!(snapshot.width.is_none());
+    let layer: LayerSnapshot =
+        serde_json::from_value(json!({"handle":"opaque","name":"A","visible":true,"selected":false,"kind":"pixel","depth":0,"locked":false,"future":true}))
+            .unwrap();
+    assert_eq!(layer.handle.0, "opaque");
+}
+
+#[test]
+fn authoring_rejects_unsafe_paths_versions_and_inconsistent_payload_grants() {
+    let mut value = json!({"formatVersion":1,"descriptor":descriptor(),"package":{"packageVersion":2,"module":"plugin.pcext"}});
+    assert!(AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).is_ok());
+    value["descriptor"]["permissions"]["commands"] = json!(["plugin.processImage"]);
+    for name in ["../filter.wasm", "CON/filter.wasm", "filters/NUL.wasm", "plugin.pcext/filter.wasm", "LICENSE/filter.wasm", "filters\\gain.wasm"] {
+        value["package"]["filters"] = json!([{"module":name}]);
+        assert!(AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).is_err(), "{name}");
+    }
+    value["package"]["filters"] = json!([{"module":"filters/gain.wasm"}]);
+    assert!(AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).is_ok());
+    value["descriptor"]["permissions"]["commands"] = json!([]);
+    assert!(AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+    value["package"]["filters"] = json!([]);
+    value["formatVersion"] = json!(2);
+    assert_eq!(AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).unwrap_err().code, ErrorCode::UnsupportedVersion);
+    value["formatVersion"] = json!(1);
+    value["package"]["packageVersion"] = json!(3);
+    assert!(AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).is_err());
 }

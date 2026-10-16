@@ -19,3 +19,22 @@ pub fn panel_response() -> Schema {
 pub fn host_api() -> Schema {
     schema_for!(crate::HostApi)
 }
+
+pub fn all() -> Vec<(&'static str, Schema)> {
+    let mut authoring = schema_for!(crate::AuthoringManifest);
+    if let Some(field) = authoring.get_mut("$defs").and_then(|defs| defs.get_mut("Field")).and_then(serde_json::Value::as_object_mut) {
+        field.insert("unevaluatedProperties".into(), serde_json::Value::Bool(false));
+    }
+    vec![
+        ("panel-v2.schema.json", descriptor()),
+        ("panel-v2-response.schema.json", panel_response()),
+        ("host-api-v1.schema.json", host_api()),
+        ("panel-v2-event.schema.json", schema_for!(crate::EventRequest)),
+        ("authoring-v1.schema.json", authoring),
+        ("package-v2.schema.json", schema_for!(crate::PackageV2)),
+        ("layers-read-v1.schema.json", schema_for!(crate::LayersRead)),
+        ("layers-edit-v1.schema.json", schema_for!(crate::LayersEdit)),
+        ("layers-snapshot-v1.schema.json", schema_for!(crate::LayersSnapshot)),
+        ("layers-edited-v1.schema.json", schema_for!(crate::LayersEdited)),
+    ]
+}

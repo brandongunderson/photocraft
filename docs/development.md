@@ -2,6 +2,11 @@
 
 For independent plugins, start with the [plugin developer handbook](plugin-development.md).
 It covers separate panel/filter projects, neutral starters, API contracts, testing and releases.
+
+The optional [guest SDK](plugin-sdk.md) provides typed contracts and standalone project
+generation from one authoring manifest. Existing plugins retain their supported wire versions.
+See [store safety](plugin-safety.md#cooperative-store-locking) for native job leases,
+cross-process management contention and the remaining lifecycle work.
 This page covers development of the PhotoCraft host application.
 
 For plugin recovery, the desktop accepts `--disable-plugins` to skip plugin loading and block

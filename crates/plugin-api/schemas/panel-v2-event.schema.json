@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EventRequest",
+  "description": "Additional event-envelope fields may be ignored by old guests. Descriptors and effects\nremain strict. Unknown events must be handled without inventing new host authority.",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "compatibility": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Compatibility"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "document": {
+      "default": null
+    },
+    "event": {
+      "type": "string"
+    },
+    "host": {
+      "$ref": "#/$defs/HostApi"
+    },
+    "responses": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BrokerReply"
+      }
+    },
+    "state": {
+      "default": null
+    },
+    "values": {
+      "default": null
+    }
+  },
+  "required": [
+    "apiVersion",
+    "host",
+    "event"
+  ],
+  "$defs": {
+    "ApiError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "details": {
+          "default": null
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "BrokerReply": {
+      "description": "Exactly one result or error, preserving a successful JSON null if a later method uses it.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "result": true
+          },
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "result"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ApiError"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "error"
+          ]
+        }
+      ]
+    },
+    "CapabilityId": {
+      "description": "Extensible capability identifier. Unknown optional IDs survive parsing and negotiate absent.",
+      "type": "string",
+      "maxLength": 96,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "CapabilitySupport": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/CapabilityId"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1024,
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "Compatibility": {
+      "type": "object",
+      "properties": {
+        "hostApi": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "negotiated": {
+          "$ref": "#/$defs/NegotiatedCapabilities"
+        },
+        "panelApi": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "panelApi",
+        "hostApi",
+        "negotiated"
+      ]
+    },
+    "ErrorCode": {
+      "description": "Stable machine-readable failures. Callers should match codes, not prose.",
+      "type": "string",
+      "enum": [
+        "invalidJson",
+        "invalidDescriptor",
+        "limitExceeded",
+        "incompatibleApi",
+        "missingCapability",
+        "unsupportedVersion",
+        "permissionDenied",
+        "invalidHandle",
+        "staleRevision",
+        "notFound",
+        "conflict",
+        "unsupportedOperation"
+      ]
+    },
+    "HostApi": {
+      "description": "Public discovery metadata, containing no authority or credentials.",
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilitySupport"
+          },
+          "maxItems": 32
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1,
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "capabilities"
+      ]
+    },
+    "NegotiatedCapabilities": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilitySupport"
+          }
+        },
+        "unavailableOptional": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityId"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "unavailableOptional"
+      ]
+    }
+  }
+}
