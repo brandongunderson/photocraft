@@ -91,10 +91,19 @@ fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
     h.state_mut().ui.extensions.panels.get_mut(PLUGIN).unwrap().values["engine"] = json!("Conventional resize (Lanczos)");
     h.state_mut().ui.extensions.panels.get_mut(PLUGIN).unwrap().values["scale"] = json!("2×");
     h.run_steps(3);
+    // Resizing can put this action below the settings scroll area; querying it
+    // still succeeds, but a pointer click needs the control to be visible.
+    h.get_by_label("Generate preview").scroll_to_me();
+    h.run_steps(3);
+    let generate = h.get_by_label("Generate preview").rect();
+    assert!(window(&h).contains_rect(generate), "Generate preview must be visible before clicking");
+    assert!(generate.bottom() < h.get_by_label("Apply").rect().top(), "Generate preview must be above the footer");
     h.get_by_label("Generate preview").click();
     h.run_steps(3);
-    let job = h.state().ui.extensions.panels[PLUGIN].job.expect("Generate preview starts the packaged worker");
-    h.state_mut().session.wait_job(photocraft_engine::jobs::JobId(job)).unwrap();
+    // A small conventional resize may have completed during those frames.
+    if let Some(job) = h.state().ui.extensions.panels[PLUGIN].job {
+        h.state_mut().session.wait_job(photocraft_engine::jobs::JobId(job)).unwrap();
+    }
     h.run_steps(20);
     assert!(h.state().ui.extensions.panels[PLUGIN].preview.is_some(), "{}", h.state().ui.extensions.panels[PLUGIN].message);
     let completed = window(&h);
