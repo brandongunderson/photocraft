@@ -13,6 +13,7 @@ const STARTUP_DELAY: f64 = 30.0;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Runtime {
+    #[cfg(any(test, not(target_arch = "wasm32")))]
     schedule: Schedule,
     job: Option<JobId>,
     job_revision: Option<u64>,
@@ -39,6 +40,7 @@ impl Source {
     }
 }
 
+#[cfg(any(test, not(target_arch = "wasm32")))]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct Schedule {
     opened_at: Option<f64>,
