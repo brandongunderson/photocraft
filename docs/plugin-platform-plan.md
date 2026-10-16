@@ -259,7 +259,7 @@ Sign a canonical integrity index covering package metadata and every executable,
 A directory/marketplace lists compatible targets, declared capabilities, execution profile, dependencies bundled, storage needs, licensing and conformance results. Install/update always use the same package store APIs. Hosting infrastructure is optional for manual/offline installation and is not part of a plugin's runtime dependency chain.
 
 [Optional GitHub release updates](plugin-updates.md) are implemented through each plugin's
-own canonical public repository and exact asset template. Explicit background checks compare
+own canonical public repository and exact asset template. Manual and optional automatic desktop checks compare
 stable semantic release versions, and preparation verifies the asset digest, identity,
 version and host compatibility before reviewed store publication. Local installation remains
 available. No source checkout, build-on-install, shared updater runtime or sibling plugin is

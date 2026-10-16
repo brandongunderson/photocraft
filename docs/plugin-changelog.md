@@ -25,6 +25,9 @@ plugin keeps its release history in its own repository.
 - Explicit GitHub release checks and verified update downloads for plugins that declare a
   repository and exact release asset. The manager shows available versions and reviews
   permissions before installation.
+- Optional automatic desktop release checks after startup and daily, with a persisted opt-out
+  and attempt timestamp, quiet background failures, and an available-update count in the Plugins
+  menu. Explicit installation review remains required; Update refreshes expired discovery authority.
 - A [marketplace delivery plan](plugin-marketplace.md) covering discovery, publisher trust,
   signatures, revocation and reuse of the existing installer.
 

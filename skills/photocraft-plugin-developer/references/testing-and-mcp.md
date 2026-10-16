@@ -133,9 +133,18 @@ paired data rollback. Treat network/rate-limit failures and missing assets/diges
 or unsupported updates rather than claiming the plugin is current. Local installation must
 remain usable without the release service.
 
+For authorized desktop acceptance, verify the default-on discovery preference, 30-second
+startup delay, idle deferral and 24-hour cooldown across restarts, including failed attempts.
+Use controlled clocks for timing cases. Check opt-out, immediate manual retry, the manager/menu
+availability count and silent error reporting. Discovery must not download packages, launch
+workers, open review or change grants. Browser, CLI/headless, inline-job, plugin-recovery and
+restricted automation sessions must not schedule discovery. Keep desktop scheduling evidence
+separate from explicit command/CLI checks.
+
 Exercise ID/version mismatch, incompatible packages, changed reviewed bytes and a competing
 installation between review and install. Added permissions require review; a same-version
 reinstall or intentional downgrade belongs to explicit maintenance. A successful HTTP response
 does not establish installed behavior, native target compatibility or publisher signing trust.
-Release checks/downloads are trusted host commands outside panel grants; current restricted
-automation must not bypass its network/install restrictions through them.
+Release checks/downloads are trusted host commands outside panel grants. Desktop background
+discovery does not authorize tool calls, downloads or installation; current restricted
+automation must not bypass its network/install restrictions through these commands.

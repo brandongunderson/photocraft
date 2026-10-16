@@ -56,9 +56,26 @@ without this metadata remain installable; they show no automatic release source.
 
 ## Checking and preparing an update
 
-The manager's update action checks opted-in installed plugins and marks newer available
-versions. Checks are explicit and run as background work. They do not install code, start a
-plugin worker or grant additional permissions.
+The desktop checks opted-in installed plugins automatically after a 30-second startup delay,
+then at most once every 24 hours while PhotoCraft is running. The last attempt, including a
+network failure, is saved with preferences so restarting does not repeatedly contact GitHub.
+Checks wait while user jobs, file dialogs or an installation review are active. They are skipped
+in browser, inline-job, plugin-recovery and restricted automation sessions. A changed system
+clock cannot cause repeated checks or a permanently deferred future timestamp.
+
+**Automatically check for plugin updates** in the manager (also **Preferences → Plug-ins**)
+can be turned off. Agents can set `plugIns.automaticUpdateChecks` through `prefs.set`.
+**Check for updates** remains available immediately, including after an offline or rate-limited
+attempt. Automatic results appear in the installed list and the Plugins menu's manager entry
+shows the available-update count. Errors remain distinct from an up-to-date result; automatic
+checks do not open windows, beep or interrupt editing. Results are held for the current session;
+after restart, a manual check can refresh them before the next daily attempt.
+
+Checks only discover releases. They do not download or install code, start a plugin worker or
+grant permissions. **Update…** refreshes the short-lived candidate, downloads the exact package
+and opens the existing permission review. The user still confirms installation. Existing copies
+without update metadata require one manual installation of a package that declares its release
+source before either automatic or manual release discovery can find their updates.
 
 The engine exposes the same operations to authorized command clients:
 
@@ -105,7 +122,9 @@ a download. A large batch may require checking an individual plugin again to obt
 preparation candidate.
 Repository API redirects are rejected. Binary redirects are bounded to three hops and
 restricted to supported GitHub HTTPS asset hosts on port 443, without credentials or
-fragments. Network checks never occur during drawing or on an automatic periodic timer.
+fragments. The desktop timer only schedules the existing bounded background command; network
+checks never run on the drawing thread. Disabling automatic checks cancels its active job;
+an in-flight request may retain its worker until the existing deadline described above.
 
 GitHub metadata and a matching digest establish the bytes downloaded from that release;
 they do not establish a publisher signing identity or confine trusted native code. Added

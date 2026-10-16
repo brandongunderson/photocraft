@@ -56,7 +56,7 @@ optional capability requirements, contributions and plugin-owned release metadat
 ```
 
 `repository` may identify the plugin's canonical public GitHub repository. Optional
-`updates: {"provider":"github","asset":"Plugin-{platform}.pcplugin"}` opts into explicit
+`updates: {"provider":"github","asset":"Plugin-{platform}.pcplugin"}` opts into host
 release checks. Updates require a repository; only one `{platform}` token is supported and
 the asset is an exact safe `.pcplugin` or `.pcext` filename. These additive fields do not
 change the API major or grant network access to a WASM guest. See [updates](plugin-updates.md)

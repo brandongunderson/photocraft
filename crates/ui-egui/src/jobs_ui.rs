@@ -400,7 +400,7 @@ pub fn job_in_view(app: &PhotocraftApp) -> Option<JobInfo> {
     if let Some(j) = app.jobs.focus.and_then(|j| app.session.job(j)) {
         return Some(j);
     }
-    app.session.active_job().or_else(|| app.session.jobs().pop())
+    app.session.active_job().or_else(|| app.session.jobs().into_iter().rev().find(|job| Some(job.id) != crate::extension_ui::automatic_job(app)))
 }
 
 /// Cancel job `id` (the status bar's ×, the dialog's Cancel, Esc, closing an opening tab).
@@ -427,9 +427,11 @@ pub fn cancel(app: &mut PhotocraftApp, id: JobId) -> bool {
 }
 
 fn on_event(app: &mut PhotocraftApp, ctx: &egui::Context, e: JobEvent) {
+    let automatic_update = crate::extension_ui::automatic_job_finished(app, &e);
     // Preferences ▸ General ▸ Beep When Done (off by default): a finished operation beeps, like
     // Photoshop's cue. Cancelling is the user's own action and stays silent.
-    if matches!(e.outcome, JobOutcome::Done(_))
+    if !automatic_update
+        && matches!(e.outcome, JobOutcome::Done(_))
         && app.session.prefs().general.beep_when_done
         && let Some(beep) = app.services.beep
     {
@@ -449,6 +451,9 @@ fn on_event(app: &mut PhotocraftApp, ctx: &egui::Context, e: JobEvent) {
             true
         }
     });
+    if automatic_update {
+        return;
+    }
     // A Free Transform commit's session ends with its job (then reported like any job).
     crate::transform_tool::on_job_event(app, &e);
     if crate::prefs_ui::on_recovery_event(app, &e) {

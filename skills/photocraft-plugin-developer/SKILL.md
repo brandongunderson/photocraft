@@ -105,6 +105,9 @@ Read docs/plugin-lifecycle.md, docs/plugin-worker-v2.md and docs/plugin-managed-
 matching source/kit before adopting these optional facilities. Preserve existing external caches.
 For release updates, optionally declare the plugin's own public GitHub repository and exact
 release asset in its embedded descriptor; never hard-code a sibling or editor repository.
+Desktop hosts discover these releases in the background by default, with a preference to opt
+out. Download, permission review and installation remain explicit. CLI/headless sessions do
+not schedule checks, and desktop discovery supplies no additional automation authority.
 Read the release-update section of [API contracts](references/api-contracts.md) before adding
 this metadata and [update acceptance](references/testing-and-mcp.md#release-update-acceptance)
 before claiming it works. Marketplace discovery remains planned and cannot be a runtime requirement.

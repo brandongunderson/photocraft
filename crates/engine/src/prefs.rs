@@ -776,6 +776,10 @@ pub struct PlugIns {
     /// Load the WebAssembly plug-ins (`*.wasm`) in `additional_plugins_folder` (native only).
     pub use_additional_plugins_folder: bool,
     pub additional_plugins_folder: String,
+    /// Desktop release discovery only; packages still require explicit download and review.
+    pub automatic_update_checks: bool,
+    /// Last discovery attempt, including failures, to avoid repeated requests after restart.
+    pub last_update_check_unix_secs: u64,
     pub show_extension_panels: bool,
     pub allow_scripts_to_connect: bool,
     pub generator_enabled: bool,
@@ -786,6 +790,8 @@ impl Default for PlugIns {
         Self {
             use_additional_plugins_folder: false,
             additional_plugins_folder: String::new(),
+            automatic_update_checks: true,
+            last_update_check_unix_secs: 0,
             show_extension_panels: true,
             allow_scripts_to_connect: false,
             generator_enabled: false,

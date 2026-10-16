@@ -155,6 +155,9 @@ Optional GitHub release metadata belongs to each plugin's embedded descriptor. K
 checks/downloads off the UI thread; bind candidates to the installed identity/source/hash,
 verify digest/version/compatibility and use the existing reviewed store transaction. Never
 silently expand grants, downgrade a release or derive update repositories from plugin IDs.
+Desktop automatic discovery waits until startup settles and the app is idle, respects the
+persisted daily attempt cooldown and opt-out, and stays quiet on failure. Recovery, restricted
+automation, browser and headless sessions do not schedule it. Downloads and installation need review.
 Read docs/plugin-updates.md before changing this path. docs/plugin-marketplace.md is a future
 design only; do not add a placeholder marketplace or a second installation/runtime path.
 

@@ -1561,6 +1561,9 @@ fn field_visible(section: &str, obj: &Map<String, Value>, k: &str, query: &str) 
     let drawn_elsewhere = (section == "interface" && matches!(k, "theme" | "appearanceMode" | "darkTheme" | "lightTheme" | "favoriteThemes"))
         // View › Rulers (⌘R) sets it, as in Photoshop.
         || path == "unitsAndRulers.showRulers"
+        // Scheduling bookkeeping is persisted but isn't a user-editable numeric control.
+        || path == "plugIns.lastUpdateCheckUnixSecs"
+        || (cfg!(target_arch = "wasm32") && path == "plugIns.automaticUpdateChecks")
         || (section == "performance" && matches!(k, "useGpu" | "gpuBackend" | "renderingMode"))
         // The browser presents frames itself: Low-Latency Drawing does nothing there.
         || (cfg!(target_arch = "wasm32") && path == "performance.lowLatencyDrawing")

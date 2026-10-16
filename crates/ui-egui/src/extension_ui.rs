@@ -19,6 +19,9 @@ mod installer;
 mod platform;
 mod preview;
 mod storage;
+mod updates;
+
+pub(crate) use updates::{automatic_job, automatic_job_finished, tick_updates};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExtensionUi {
@@ -34,6 +37,8 @@ pub struct ExtensionUi {
     manager_job: Option<ManagerJob>,
     #[serde(skip)]
     updates: BTreeMap<String, Value>,
+    #[serde(skip)]
+    update_runtime: updates::Runtime,
     #[serde(skip)]
     filter_review: Option<String>,
     #[serde(skip)]
@@ -132,7 +137,11 @@ pub struct PanelState {
 pub fn insert_menu_items(app: &PhotocraftApp, items: &mut Vec<MenuItem>) {
     let Some(manager) = items.iter().position(|i| i.id == MANAGER) else { return };
     // The manager remains the final entry after dynamically inserted filter plugins too.
-    let manager = items.remove(manager);
+    let mut manager = items.remove(manager);
+    let available = updates::available_count(app);
+    if available > 0 {
+        manager.label = format!("Manage Plugins… ({available} {})", if available == 1 { "update" } else { "updates" });
+    }
     let at = items.iter().rposition(|i| i.path.first().is_some_and(|top| top == "Plugins")).map_or(items.len(), |at| at + 1);
     items.insert(at, manager);
     for (offset, (id, extension)) in app.session.extensions.installed.iter().enumerate() {
@@ -248,6 +257,10 @@ fn start_manager_work(app: &mut PhotocraftApp, command: &str, params: Value, wor
     if app.ui.extensions.manager_job.is_some() {
         return;
     }
+    updates::cancel_automatic(app);
+    if command == "extension.updates.check" && params.get("id").is_none() {
+        updates::remember_attempt(app);
+    }
     let result = app.run(command, params);
     if let Ok(value) = &result
         && let Some(id) = value.get("job").and_then(Value::as_u64)
@@ -277,14 +290,7 @@ fn finish_manager_work(app: &mut PhotocraftApp, work: ManagerWork, result: &Valu
             app.ui.extensions.path = input.get("path").and_then(Value::as_str).unwrap_or_default().into();
         }
         ManagerWork::Check => {
-            let updates = result.get("updates").and_then(Value::as_array).ok_or("The update check returned no results. Try again.")?;
-            for update in updates {
-                if let Some(id) = update.get("id").and_then(Value::as_str)
-                    && app.session.extensions.installed.contains_key(id)
-                {
-                    app.ui.extensions.updates.insert(id.into(), update.clone());
-                }
-            }
+            updates::accept_results(app, result)?;
             app.ui.extensions.status = "Update check complete.".into();
         }
         ManagerWork::CheckAndPrepare(id) => {
@@ -752,6 +758,21 @@ fn manager(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 }
                 ui.separator();
                 ui.strong("Installed plugins");
+                if !cfg!(target_arch = "wasm32") {
+                    let mut automatic = app.session.prefs().plug_ins.automatic_update_checks;
+                    if ui
+                        .checkbox(&mut automatic, "Automatically check for plugin updates")
+                        .on_hover_text("Checks GitHub after startup and once a day. Downloads and installation always require your approval.")
+                        .changed()
+                    {
+                        change = Some(("prefs.set", json!({"path":"plugIns.automaticUpdateChecks","value":automatic})));
+                    }
+                    if automatic_job(app).is_some() {
+                        ui.weak("Checking GitHub for plugin updates…");
+                    } else if !app.ui.extensions.update_runtime.error.is_empty() {
+                        ui.weak(&app.ui.extensions.update_runtime.error);
+                    }
+                }
                 if ui.add_enabled(!busy && !extensions.is_empty(), egui::Button::new("Check for updates")).clicked() {
                     check_updates = Some(json!({}));
                 }
@@ -855,9 +876,9 @@ fn manager(app: &mut PhotocraftApp, ctx: &egui::Context) {
         start_manager_work(app, "extension.updates.check", params, ManagerWork::Check);
         None
     } else if let Some(params) = prepare_update {
-        if params.get("candidate").and_then(Value::as_str).is_some() {
-            start_manager_work(app, "extension.updates.prepare", params, ManagerWork::Prepare);
-        } else if let Some(id) = params.get("id").and_then(Value::as_str).map(str::to_owned) {
+        // Automatic discovery can be older than the short-lived download authority.
+        // Always refresh the candidate before asking to download and review it.
+        if let Some(id) = params.get("id").and_then(Value::as_str).map(str::to_owned) {
             start_manager_work(app, "extension.updates.check", json!({"id":id}), ManagerWork::CheckAndPrepare(id));
         }
         None

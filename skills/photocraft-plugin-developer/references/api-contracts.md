@@ -54,13 +54,27 @@ only one `{platform}` token is allowed. It expands to the host's Windows/Linux/m
 or ARM64 package target. A fixed `.pcext` filename can serve portable panels. Rebuild embedded
 metadata and publish matching semantic release/tag versions under the same plugin ID.
 
-Checks/preparation are explicit host background commands (`extension.updates.check` and
-`extension.updates.prepare`), not guest network imports or runtime services. Public stable
-releases only; draft/prerelease/private repositories and credentials are unsupported. Assets
+Desktop release discovery is enabled by default for opted-in installed plugins. It waits at
+least 30 seconds after startup and until user jobs, file dialogs and installation review are
+idle, then observes a 24-hour cooldown. The last attempt, including failures, persists with
+preferences across restarts. **Automatically check for plugin updates** in the manager or
+**Preferences → Plug-ins** controls `plugIns.automaticUpdateChecks`. Manual **Check for updates**
+can run immediately. Automatic checks are silent; results appear in the manager and the Plugins
+menu's available-update count. They do not download code, launch workers or grant permissions.
+
+Scheduling belongs to the desktop shell; browser, CLI/headless, inline-job, plugin-recovery
+and restricted automation sessions do not schedule checks. Authorized command clients still
+explicitly invoke `extension.updates.check` and `extension.updates.prepare`; guests gain no
+network imports or updater runtime. Public stable releases only; draft/prerelease/private
+repositories and credentials are unsupported. Assets
 require a usable SHA-256 digest. The host verifies downloaded bytes, identity, version and
 compatibility, then presents normal permission/native-code review. Installation rechecks the
 reviewed package hash and installed revision. No automatic grant expansion or unattended
 installation is implied. GitHub metadata/digests are not publisher signatures.
+
+Download and installation remain explicit: **Update…** refreshes the short-lived candidate,
+prepares the package and opens permission review; the user then confirms installation.
+`extension.updates.prepare` returns inspection and reviewed input, never an installation.
 
 Local/offline installation remains available. Newer same-ID packages offer Update; same-version
 reinstall/repair and older-version installation are deliberate secondary maintenance actions.

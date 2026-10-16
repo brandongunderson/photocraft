@@ -1857,6 +1857,7 @@ impl eframe::App for PhotocraftApp {
         // shortcuts see Esc).
         if !screen_picker::tick(self, ctx) {
             jobs_ui::tick(self, ctx);
+            extension_ui::tick_updates(self, ctx);
             #[cfg(not(target_arch = "wasm32"))]
             filter_preview_worker::discard_closed(self);
             shortcuts::handle(self, ctx);
