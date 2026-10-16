@@ -1,0 +1,126 @@
+# Plugin installation and updates
+
+Each plugin owns its source, release versions, downloadable packages and optional update
+repository. PhotoCraft uses the same managed installation transaction for local files and
+downloaded updates. Plugins do not share an updater process or require a marketplace account.
+
+## Install, update and repair
+
+Open **Plugins → Manage Plugins…** and choose a plugin file. Choosing a file inspects its
+embedded identity, permissions, capabilities and native payload before installation. Files
+can also be dropped anywhere in the manager; a separate drop area is unnecessary.
+
+A new identity offers **Install**. A newer version of an installed identity offers **Update**;
+no replacement checkbox is needed. Review the proposed access before confirming. Updating
+replaces that identity's managed installation and preserves its enable state. The selected
+filename clears after success, and the manager reports the completed action.
+
+Installing the same version again is a maintenance action. **Reinstall / Repair** is kept
+with secondary actions so normal installation does not require understanding repair options.
+An older version requires a deliberate maintenance action rather than appearing as an update.
+The preserved previous code/data pair can also be selected through `extension.rollback`.
+See [managed storage](plugin-managed-storage.md) for migration and rollback behavior.
+
+## Opt into GitHub Releases
+
+Add an optional `repository` and `updates` object to the plugin's embedded descriptor, or to
+`descriptor` in an SDK project's `authoring.json`:
+
+```json
+{
+  "repository": "https://github.com/example-org/independent-plugin",
+  "updates": {
+    "provider": "github",
+    "asset": "Independent-{platform}.pcplugin"
+  }
+}
+```
+
+This fragment is additional metadata, not a complete descriptor. Rebuild the module after
+changing it. `repository` must be a canonical public GitHub repository URL with an owner and
+repository name. It cannot contain credentials, query strings, fragments, a `.git` suffix or
+additional path segments. A repository may be supplied without opting into updates.
+
+`updates.asset` selects one exact release filename. It accepts ASCII letters, digits, dots,
+underscores and hyphens and must end with `.pcplugin` or `.pcext`. It may contain one
+`{platform}` token, replaced with `windows-x86_64`, `windows-aarch64`, `linux-x86_64`,
+`linux-aarch64`, `macos-x86_64` or `macos-aarch64`. Paths, wildcards and other substitutions
+are rejected. Use a fixed `.pcext` filename for a portable panel or a fixed `.pcplugin`
+filename when the same package applies to every supported target. Neither the example
+repository nor filename is hard-coded into PhotoCraft.
+
+Publish release versions using semantic versioning, with a matching version in the embedded
+descriptor. Keep the plugin ID stable. A new package must continue to declare its own
+permissions, capabilities, native target, dependencies and licenses. Existing local plugins
+without this metadata remain installable; they show no automatic release source.
+
+## Checking and preparing an update
+
+The manager's update action checks opted-in installed plugins and marks newer available
+versions. Checks are explicit and run as background work. They do not install code, start a
+plugin worker or grant additional permissions.
+
+The engine exposes the same operations to authorized command clients:
+
+```text
+extension.updates.check {"id":"org.example.plugin"}
+extension.updates.check {}
+extension.updates.prepare {"id":"org.example.plugin","candidate":<checked candidate>}
+```
+
+`check` reports an `updates` array with each plugin's `id`, `installedVersion` and `status`:
+`available`, `upToDate`, `unsupported` or `error`. An available entry includes the release
+`version` and a candidate bound to that installed plugin. An unsupported source or a network
+failure is distinct from an up-to-date result. `prepare` downloads and verifies the chosen
+candidate and returns the ordinary installation inspection plus the local input needed for
+the confirmation step. It does not publish an installation.
+
+The final apply reuses the existing synchronous installation transaction, including archive
+extraction and managed-data preparation under the store lock. Large packages can still
+pause the interface during that step; background staging and a shorter publication section
+remain performance work before marketplace-scale distribution.
+
+The current updater queries each repository's latest published stable GitHub Release. Drafts
+and prereleases are excluded; it does not search older releases for a missing asset. Release
+versions use semantic ordering, with an optional leading `v` on the tag. GitHub's latest-release
+selection or a branch head is not installation authority. The selected asset must have the declared exact name and a usable SHA-256
+digest. Size and response limits, request deadlines and bounded release discovery prevent
+unbounded downloads or parsing. Preparation verifies the downloaded digest, plugin ID,
+embedded release version, current API and host compatibility before presenting the package.
+Installation rechecks the reviewed package hash, store identity and installed revision so a
+changed package, different store or competing replacement requires a fresh review.
+
+The initial limits are a 2 MiB metadata response, 256 assets per release, an 8 MiB raw-panel
+download or a 512 MiB package download. Actual length must match the asset metadata and the
+selected extension must match its file format. Connections have a 10-second timeout;
+metadata requests allow 20 seconds and downloads 300 seconds. A batch check has a two-minute
+budget between requests; its final metadata request can add up to 20 seconds. It captures at
+most 64 configured plugins, permits at most 64 distinct sources and coalesces plugins using
+the same repository.
+At most 16 checked candidates and 16 prepared downloads are retained for 15 minutes, with
+expiration collected by the normal job pump and subsequent update work. Four process-wide updater workers bound
+concurrent network jobs. Cancellation discards results immediately, but an in-flight blocking
+network request can retain its worker slot until its request deadline, up to 300 seconds for
+a download. A large batch may require checking an individual plugin again to obtain a fresh
+preparation candidate.
+Repository API redirects are rejected. Binary redirects are bounded to three hops and
+restricted to supported GitHub HTTPS asset hosts on port 443, without credentials or
+fragments. Network checks never occur during drawing or on an automatic periodic timer.
+
+GitHub metadata and a matching digest establish the bytes downloaded from that release;
+they do not establish a publisher signing identity or confine trusted native code. Added
+permissions and native execution still require review. Repository or update-source changes
+belong in an explicitly reviewed package. Private repositories, credentials, unattended
+installation, prerelease-channel selection and publisher signatures are not implemented.
+Manual/offline installation remains available when GitHub is unavailable or rate-limited.
+
+## Release checklist
+
+1. Keep the plugin's independent source, dependency locks and notices complete.
+2. Bump the embedded release version, build and test each claimed target.
+3. Publish the matching GitHub Release and exact asset name with its SHA-256 digest.
+4. Check discovery and preparation against an older installation in a disposable store.
+5. Verify access review, cancellation/failure recovery, managed-data migration and rollback.
+
+The [marketplace plan](plugin-marketplace.md) describes future discovery and publisher trust.
+It does not add another packaging format, API major or plugin runtime dependency.

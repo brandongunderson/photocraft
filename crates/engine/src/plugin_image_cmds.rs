@@ -107,10 +107,16 @@ fn dimensions(source: (u32, u32), requested: (Option<u32>, Option<u32>)) -> Resu
     Ok(target)
 }
 
+#[derive(Clone)]
 enum Processor {
     #[cfg(not(target_arch = "wasm32"))]
     Native(Arc<crate::extension_package::InstalledNative>),
     Filter(Arc<Plugin>),
+    #[cfg(not(target_arch = "wasm32"))]
+    DeferredFilter {
+        payload: Arc<crate::extension_package::DeferredPayload>,
+        name: Option<String>,
+    },
 }
 
 /// Resolve exclusively within the invoking installation. Registry filters and other packages
@@ -126,26 +132,41 @@ fn processor(s: &Session, id: &str, extension: &Arc<photocraft_plugins::extensio
     let native = installed.native.as_ref().filter(|native| native.package.native.as_ref().is_some_and(|n| n.service == "plugin.processImage"));
     #[cfg(target_arch = "wasm32")]
     let native: Option<()> = None;
+    #[cfg(not(target_arch = "wasm32"))]
+    let deferred = installed.deferred.as_ref().filter(|_| installed.package.as_ref().is_some_and(|package| !package.filters.is_empty()));
     let name = match requested {
         Some(name) => name,
         None if native.is_some() => "native",
         None if installed.filters.len() == 1 => {
             installed.filters.keys().next().map(String::as_str).ok_or_else(|| error("The plugin has no image processor"))?
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        None if installed.package.as_ref().is_some_and(|package| package.filters.len() == 1) && deferred.is_some() => {
+            return deferred
+                .cloned()
+                .map(|payload| Processor::DeferredFilter { payload, name: None })
+                .ok_or_else(|| error("The packaged image filter is unavailable"));
+        }
         None => return Err(error("Choose one of this plugin's packaged image processors")),
     };
     if name == "native" {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if native.is_some_and(|native| Arc::strong_count(native) > 1) {
-                return Err(error("Wait for this plugin's current processing or task to finish or cancel it first"));
-            }
             return native.cloned().map(Processor::Native).ok_or_else(|| error("This plugin does not contain a compatible native image processor"));
         }
         #[cfg(target_arch = "wasm32")]
         return Err(error("Native image processors require the desktop application"));
     }
-    installed.filters.get(name).cloned().map(Processor::Filter).ok_or_else(|| error("The requested image processor does not belong to this installed plugin"))
+    if let Some(filter) = installed.filters.get(name) {
+        return Ok(Processor::Filter(Arc::clone(filter)));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(payload) = deferred {
+        // Package-v2 metadata records module paths, not their embedded processor IDs.
+        // Verify that ID against this payload's filters on the job thread before pixels.
+        return Ok(Processor::DeferredFilter { payload: Arc::clone(payload), name: Some(name.into()) });
+    }
+    Err(error("The requested image processor does not belong to this installed plugin"))
 }
 
 /// One flattened RGBA8 document in sRGB, rendered in bounded bands and colour-converted before
@@ -197,11 +218,13 @@ pub(crate) fn run(s: &mut Session, p: &Value, completion: Option<Completion>) ->
         }
         None => {
             let id = params.id.as_ref().ok_or_else(|| error("Choose an installed plugin with `id`"))?;
+            crate::extension_cmds::activate(s, id)?;
             let installed =
                 s.extensions.installed.get(id).filter(|p| p.enabled).ok_or_else(|| error("The requested processing plugin is not installed or enabled"))?;
             (id.clone(), Arc::clone(&installed.extension))
         }
     };
+    crate::extension_cmds::activate(s, &id)?;
     let processor = processor(s, &id, &extension, params.processor.as_deref())?;
     let active = s.active().ok_or(EngineError::NoDocument)?;
     let source_revision = active.revision;
@@ -222,6 +245,13 @@ pub(crate) fn run(s: &mut Session, p: &Value, completion: Option<Completion>) ->
         }
         #[cfg(not(target_arch = "wasm32"))]
         Processor::Native(_) => params.options,
+        #[cfg(not(target_arch = "wasm32"))]
+        Processor::DeferredFilter { .. } => {
+            if expected != (doc.size.width, doc.size.height) {
+                return Err(error("Sandboxed pixel filters keep the source image's dimensions"));
+            }
+            params.options
+        }
     };
     let binding = match (&processor, completion) {
         #[cfg(not(target_arch = "wasm32"))]
@@ -231,43 +261,113 @@ pub(crate) fn run(s: &mut Session, p: &Value, completion: Option<Completion>) ->
     };
     // Even immediate results need a revocable token: disabling and re-enabling a plugin
     // during processing must never admit an operation from before that revocation.
-    let token = crate::plugin_preview::reserve(s, doc.id, &binding)?;
+    let source_pixels = u64::from(doc.size.width).saturating_mul(u64::from(doc.size.height));
+    let output_pixels = u64::from(expected.0).saturating_mul(u64::from(expected.1));
+    let memory =
+        source_pixels.saturating_add(output_pixels).saturating_mul(32).saturating_add(128 << 20).max(crate::plugin_preview::retained_document_bytes(&doc));
+    let temporary = source_pixels.saturating_add(output_pixels).saturating_mul(8).saturating_add(16 << 20);
+    let mut resources = crate::plugin_scheduler::Resources { cpu_units: 1, memory_bytes: memory, ..Default::default() };
+    #[allow(unused_mut)]
+    let mut resident = crate::plugin_scheduler::Resources::default();
+    let filter = match &processor {
+        Processor::Filter(_) => true,
+        #[cfg(not(target_arch = "wasm32"))]
+        Processor::DeferredFilter { .. } => true,
+        #[cfg(not(target_arch = "wasm32"))]
+        Processor::Native(_) => false,
+    };
+    if filter {
+        resources.memory_bytes = resources.memory_bytes.saturating_add(photocraft_plugins::Limits::default().max_memory_bytes as u64);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Processor::Native(native) = &processor {
+        resources.temp_bytes = temporary;
+        if let Some(worker) = &native.worker_v2 {
+            let declared = worker.resources();
+            resources.cpu_units = declared.cpu_units;
+            resources.temp_bytes = resources.temp_bytes.saturating_add(declared.temp_bytes);
+            resident = crate::plugin_scheduler::Resources {
+                memory_bytes: declared.memory_bytes,
+                gpu_bytes: declared.gpu_bytes,
+                cache_bytes: declared.cache_bytes,
+                ..Default::default()
+            };
+            s.plugin_scheduler.validate(resources.plus(resident))?;
+        } else {
+            // Legacy workers did not declare usage. This is an admission estimate, not a
+            // claim that their OS allocations, threads or private GPU use are contained.
+            resources.gpu_bytes = 512 << 20;
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = temporary;
+    let priority = if params.preview { crate::plugin_scheduler::Priority::Interactive } else { crate::plugin_scheduler::Priority::Background };
+    let owner = crate::extension_cmds::scheduler_owner(s, &id);
+    let ticket = if resident == crate::plugin_scheduler::Resources::default() {
+        s.plugin_scheduler.enqueue(&owner, priority, resources)?
+    } else {
+        s.plugin_scheduler.enqueue_worker(&owner, priority, resources, resident)?
+    };
+    let retained = crate::plugin_preview::retained_document_bytes(&doc)
+        .saturating_add(crate::plugin_preview::result_bytes(expected.0, expected.1))
+        .saturating_add(64 << 10);
+    let token = crate::plugin_preview::reserve_with_budget(s, doc.id, &binding, retained)?;
+    let lifetime = crate::plugin_preview::lifetime(s, token)?;
     let preview = params.preview;
     let source = Arc::clone(&doc);
-    // Both closures hold a processor lease: cancellation may finish before the worker exits,
-    // and updates must not replace its files or code while either side is still using them.
-    let apply_processor = match &processor {
-        #[cfg(not(target_arch = "wasm32"))]
-        Processor::Native(native) => Processor::Native(Arc::clone(native)),
-        Processor::Filter(filter) => Processor::Filter(Arc::clone(filter)),
-    };
+    // Retain the selected processor through completion. Execution holds OS generation
+    // leases; result admission independently rechecks the installation's authority.
+    let apply_processor = processor.clone();
     crate::jobs::run(
         s,
         "Process plugin image",
         true,
-        move |ctx| match processor {
-            Processor::Filter(filter) => filter_image(&doc, &filter, &options, ctx),
-            #[cfg(not(target_arch = "wasm32"))]
-            Processor::Native(native) => {
-                let _store = native.lease()?;
-                let input = flatten_srgb(&doc, ctx)?;
-                let job = crate::plugin_runtime::ImageJob {
-                    options,
-                    expected,
-                    result_name: format!("{} — Processed", doc.name),
-                    label: "Image processing",
-                    opening: "Preparing processed image",
-                };
-                let mut result = crate::plugin_runtime::process(&input, &native.worker, &job, ctx)?;
-                if result.mode != ColorMode::Rgb || result.depth != SampleType::U8 {
-                    return Err(error("The plugin must return an 8-bit RGB or RGBA PNG"));
+        move |ctx| {
+            let _permit = ticket.wait(ctx)?;
+            let document = match processor {
+                Processor::Filter(filter) => filter_image(&doc, &filter, &options, ctx)?,
+                #[cfg(not(target_arch = "wasm32"))]
+                Processor::DeferredFilter { payload, name } => {
+                    let _watch = payload.watch(ctx)?;
+                    ctx.check()?;
+                    ctx.progress(0.0, "Verifying packaged image filter");
+                    let loaded = payload.activate(ctx)?;
+                    let filter = if let Some(name) = name {
+                        loaded.filters.get(&name).ok_or_else(|| error("The requested image processor does not belong to this installed plugin"))?
+                    } else {
+                        if loaded.filters.len() != 1 {
+                            return Err(error("Choose one of this plugin's packaged image processors"));
+                        }
+                        loaded.filters.values().next().ok_or_else(|| error("The plugin has no image processor"))?
+                    };
+                    let options = Value::Object(filter.manifest().resolve_params(&options).map_err(error)?);
+                    ctx.check()?;
+                    filter_image(&doc, filter, &options, ctx)?
                 }
-                crate::color_cmds::convert_document(&mut result, Builtin::Srgb.profile(), Intent::RelativeColorimetric, true)?;
-                ctx.check()?;
-                Ok(result)
-            }
+                #[cfg(not(target_arch = "wasm32"))]
+                Processor::Native(native) => {
+                    let _store = native.lease()?;
+                    let input = flatten_srgb(&doc, ctx)?;
+                    let job = crate::plugin_runtime::ImageJob {
+                        options,
+                        expected,
+                        result_name: format!("{} — Processed", doc.name),
+                        label: "Image processing",
+                        opening: "Preparing processed image",
+                    };
+                    let mut result = crate::plugin_runtime::process_native(&input, &native, &job, ctx)?;
+                    if result.mode != ColorMode::Rgb || result.depth != SampleType::U8 {
+                        return Err(error("The plugin must return an 8-bit RGB or RGBA PNG"));
+                    }
+                    crate::color_cmds::convert_document(&mut result, Builtin::Srgb.profile(), Intent::RelativeColorimetric, true)?;
+                    ctx.check()?;
+                    result
+                }
+            };
+            ctx.check()?;
+            Ok((document, lifetime))
         },
-        move |s, document| {
+        move |s, (document, _lifetime)| {
             let _processor = apply_processor;
             let staged = crate::plugin_preview::stage(s, token, source, source_revision, document, binding)?;
             if preview { Ok(staged) } else { crate::plugin_preview::apply(s, &json!({"preview":token,"target":"document"})) }

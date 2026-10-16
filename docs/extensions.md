@@ -1,4 +1,4 @@
-# PhotoCraft plugins (panel API 1 reference)
+# PhotoCraft plugin panels
 
 PhotoCraft extensions are installable tools with native panels and sandboxed WebAssembly logic.
 They appear in the top-level **Plugins** menu and their panels execute inside PhotoCraft.
@@ -9,19 +9,19 @@ Start with the [plugin development guide](plugin-development.md) for the archite
 integration map, independent neutral starters, testing, releases and capability limits.
 This page is the API reference.
 
-This page documents the preserved API-1 contract. The additive, experimental
-[panel API 2](plugin-api-v2.md) adds namespaced commands, bounded layer queries/atomic edits
-and native read-only inspectors. See the independent [Layer Organizer](../examples/extensions/layer-organizer/)
-and [Document Inspector](../examples/extensions/document-inspector/) examples. Existing API-1
-plugins do not need rebuilding or conversion.
+This page documents panels using the [PhotoCraft Plugin API](plugin-api.md), the single
+supported public authoring API. It includes namespaced commands, bounded layer queries,
+atomic edits and native read-only inspectors. Old panels with internal version 1 are rejected;
+rebuild them for the current API. See the independent [Layer Organizer](../examples/extensions/layer-organizer/)
+and [Document Inspector](../examples/extensions/document-inspector/) examples.
 
 ## Install and use an extension
 
 1. Open **Plugins › Manage Plugins…** or **Plugins › Install Plug-in…**. Both open the same installer.
 2. Click **Browse…** beside the path field, drop one plugin file into the window, or enter a
-   path and click **Review plugin**. Choose a `.pcplugin` package or a `.pcext`/`.wasm` panel, review its author and requested
-   access, and click **Install plugin**. Updates and damaged-record repair require
-   **Replace or repair an existing installation**.
+   path and inspect the file. Choose a `.pcplugin` package or a `.pcext`/`.wasm` panel, review its author and requested
+   access, and click **Install**. A newer version of the same plugin offers **Update**.
+   Same-version reinstall/repair and older-version installation are secondary maintenance actions.
    A desktop `.pcplugin` package includes its processing engine and assets; installation manages
    them automatically. No separate companion application or worker connection is needed.
 3. Open the installed panel from **Plugins**, or click **Open** in the manager.
@@ -31,10 +31,13 @@ plugins do not need rebuilding or conversion.
    continue a supported background job after closing; use **Cancel processing** or the job's
    **Cancel** control to stop it.
 
-Browsing and dropping only review the file; installation always requires confirmation.
+Browsing and dropping inspect the file automatically; installation always requires confirmation.
+After success the selected file clears and a status message reports the result. **Check for
+updates** discovers new releases for plugins that declare an optional public GitHub release
+source; an available update is prepared for review before installation. See [updates](plugin-updates.md).
 The installer rejects multi-file drops and unsupported files. Plugin packages dropped over
 an image are routed to review without placing a layer or committing an active transform.
-Ordinary image drops outside the manager keep their normal open/place behavior. Legacy
+Ordinary image drops outside the manager keep their normal open/place behavior. Standalone
 `.wasm` pixel filters use a separate **Install Filter** confirmation after ABI validation;
 they remain per-process installations through `plugin.install`.
 
@@ -45,8 +48,8 @@ raw WASM installations in memory; this includes the headless CLI and current bro
 Native `.pcplugin` installation requires a persistent store and is unavailable in the browser.
 For recovery, the updated desktop supports `--disable-plugins`; see
 [safety and recovery](plugin-safety.md) for exactly what it skips and how to repair damaged records.
-For API 1, the action handler (`pce_handle`) does not run on installation, startup, panel opening, or every
-frame. API-2 inspectors activate on explicit opening and receive coalesced document invalidations.
+Ordinary button handlers (`pce_handle`) do not run on installation, startup or every frame.
+Inspectors activate on explicit opening and receive coalesced document invalidations.
 Validation does instantiate sandboxed code and call its version/manifest exports; any WASM
 start function runs within the same resource limits.
 
@@ -100,7 +103,7 @@ outside generic image processing require explicit host implementation and API re
 
 ```json
 {
-  "apiVersion": 1,
+  "apiVersion": 2,
   "id": "org.example.tools",
   "name": "My Tools",
   "version": "1.0.0",
@@ -121,7 +124,8 @@ outside generic image processing require explicit host implementation and API re
 
 Ids are lowercase ASCII, start with a letter/digit and use only letters, digits, dots, underscores
 and hyphens (at most 64 characters). Use a reverse-DNS id you control. A panel has at most 32
-fields and 1–16 buttons. Field and button ids are unique within their respective lists, use ASCII
+fields and at most 16 buttons; at least one button or a contributed inspector is required.
+Field and button ids are unique within their respective lists, use ASCII
 letters/digits/underscores, and may not start with an underscore. Field ids also follow the filter
 parameter rules (`id` and `layer` are reserved).
 
@@ -129,20 +133,21 @@ Exact manifest metadata bounds:
 
 | Field | Validation |
 |---|---|
-| `apiVersion` | Required unsigned integer, exactly 1 |
+| `apiVersion` | Required internal wire discriminator, currently exactly `2`; old version `1` is unsupported |
 | `id` | Required; rules above; 1–64 ASCII bytes |
 | `name` | Required; trimmed form is nonempty and at most 64 Unicode characters; rejects controls/most invisible formatting characters |
-| `version` | Required string; at most 32 UTF-8 bytes; no SemVer parsing/ordering |
+| `version` | Required string; at most 32 UTF-8 bytes. Updates use semantic ordering; incomparable local labels require deliberate replacement. |
 | `author` | Optional string, default empty; at most 128 UTF-8 bytes |
 | `description` | Optional string, default empty; at most 1,024 UTF-8 bytes |
+| `repository` | Optional canonical `https://github.com/owner/repo`; at most 160 ASCII bytes |
+| `updates` | Optional `{provider:"github",asset:"exact-{platform}.pcplugin"}`; requires repository; see [updates](plugin-updates.md) |
 | `permissions` | Required object; `documentRead` defaults false, `commands` defaults empty |
 | `permissions.commands` | At most 128 unique ids; each 1–128 ASCII bytes using letters/digits/dots/underscores/hyphens; host must allow them |
 | `panel` | Required object; `fields` defaults empty; `preview` defaults false; `buttons` required |
 | Field/button ids | 1–64 ASCII bytes; rules above; uniqueness is per list |
 | Field/button labels | Nonblank trimmed form, at most 128 Unicode characters, no controls |
 
-Unknown top-level manifest, permissions, panel and button properties are rejected. Field
-specifications flatten the parameter type; do not assume unknown field-spec keys are rejected.
+Unknown manifest, permissions, panel, button and parameter-specification properties are rejected.
 The manifest's exported UTF-8 byte length must fit 64 KiB.
 
 Supported field types are `number` (floating point slider), `int` (integer slider), `bool`
@@ -178,7 +183,7 @@ All pointers are 32-bit offsets into the exported `memory`. No WASI or host impo
 | Export | Signature | Contract |
 |---|---|---|
 | `memory` | memory | Guest linear memory |
-| `pce_api_version` | `() -> i32` | Returns `1` |
+| `pce_api_version` | `() -> i32` | Returns the current internal panel discriminator, `2` |
 | `pce_manifest` | `() -> i64` | UTF-8 manifest JSON packed as `(length << 32) \| pointer` |
 | `pce_alloc` | `(length: i32) -> i32` | Returns writable request storage; `0` means allocation failure |
 | `pce_handle` | `(pointer: i32, length: i32) -> i64` | Returns response JSON in the same packed form |
@@ -187,6 +192,8 @@ For each button click the host creates a fresh instance and calls `pce_handle` w
 
 ```json
 {
+  "apiVersion": 2,
+  "host": {"version": 1, "capabilities": []},
   "event": "apply",
   "values": {"amount": 50},
   "state": null,
@@ -195,6 +202,8 @@ For each button click the host creates a fresh instance and calls `pce_handle` w
 }
 ```
 
+The abbreviated `host.capabilities` list above is populated by the running host; the envelope
+may also include negotiated compatibility metadata and correlated broker `responses`.
 `document` is null without permission or an active document. State is null on the first event.
 Return:
 
@@ -206,6 +215,8 @@ Return:
 }
 ```
 
+Responses may alternatively carry broker `requests` and a native inspector `view`, as described
+in the [API reference](plugin-api.md). Command invocations and broker requests cannot be mixed.
 All top-level response fields are optional. Each command's `command` and `params` are required;
 `params` must be an object, including `{}` for an action without parameters. Unknown response and
 invocation keys are rejected. The host validates the complete
@@ -225,7 +236,8 @@ after the result opens, or after Apply when the command requested a preview. Dis
 a preview never commits its proposed guest state. Rust callers use `Session::start` for asynchronous dispatch;
 `Session::execute` runs these operations synchronously.
 General asynchronous callbacks, canvas overlays, custom docking, text/image controls,
-network/file capabilities, update feeds and a marketplace remain future additions.
+network/file capabilities, additional update providers and a marketplace remain future additions.
+The manager already supports [opt-in GitHub release updates](plugin-updates.md).
 Use the existing filter ABI for custom pixel filters; version-2 packages can bind their own
 filter modules to their panel through `plugin.processImage`.
 
@@ -256,7 +268,7 @@ Algorithm settings and dependencies belong to the installed plugin, including th
 | Serialized session state | 128 KiB; rejected before commands to retain request headroom |
 | Commands per response | 32 |
 | Status message | 4 KiB |
-| Installed extensions | 128 |
+| Installed extensions | 4096 |
 
 Malformed modules, unsupported versions, imports, traps, infinite loops, invalid pointers,
 oversized JSON, bad parameters and ungranted commands return errors. A runtime failure before

@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HostWorkerFrame",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "managedStorage": true,
+        "maxFrameBytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorkerOperation"
+          }
+        },
+        "pluginId": {
+          "type": "string"
+        },
+        "protocolVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "hello"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "protocolVersion",
+        "pluginId",
+        "generation",
+        "operations",
+        "maxFrameBytes"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "managedStorage": true,
+        "operation": {
+          "$ref": "#/$defs/WorkerOperation"
+        },
+        "request": true,
+        "type": {
+          "type": "string",
+          "const": "run"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "operation",
+        "request"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "cancel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "reset"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "shutdown"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    }
+  ],
+  "$defs": {
+    "WorkerOperation": {
+      "type": "string",
+      "enum": [
+        "image",
+        "task"
+      ]
+    }
+  }
+}

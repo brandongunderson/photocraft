@@ -63,7 +63,7 @@ fn busy_query_continuations_retain_prepared_replies_and_original_authority() {
     let (_sender, receiver) = mpsc::sync_channel(1);
     start_with(&mut s, id, |_, _| Ok(receiver)).unwrap();
     let work = s.extensions.platform.pending.remove(id).unwrap();
-    let response = Response::parse_for_version(br#"{"requests":[{"id":"read","method":"documents.layers.read","params":{}}]}"#, 2).unwrap();
+    let response = Response::parse(br#"{"requests":[{"id":"read","method":"documents.layers.read","params":{}}]}"#).unwrap();
     assert!(!apply_with(&mut s, id, work, response, |_, _| Err(failure(ErrorCode::Conflict, "Workers occupied"))).unwrap());
     let mut work = s.extensions.platform.pending.remove(id).unwrap();
     let prepared = work.continuation.clone().unwrap();

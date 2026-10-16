@@ -1467,6 +1467,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::variables_cmds::specs());
     v.extend(crate::plugin_cmds::specs());
     v.extend(crate::extension_cmds::specs());
+    v.extend(crate::extension_update_cmds::specs());
     v.extend(crate::plugin_host::specs());
     v.extend(crate::plugin_image_cmds::specs());
     v.extend(crate::plugin_task_cmds::specs());

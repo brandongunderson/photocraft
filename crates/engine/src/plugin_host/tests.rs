@@ -159,6 +159,19 @@ fn capability_negotiation_rejects_required_and_preserves_optional_unknown_ids() 
 }
 
 #[test]
+fn discovery_and_validation_expose_only_the_current_plugin_api() {
+    let mut session = Session::new();
+    let capabilities = session.execute("extension.capabilities", json!({})).unwrap();
+    assert_eq!(capabilities["panelApis"], json!([photocraft_plugin_api::PANEL_API_VERSION]));
+    assert_eq!(session.execute("extension.commands", json!({})).unwrap()["apiVersion"], photocraft_plugin_api::PANEL_API_VERSION);
+    let mut manifest = Manifest::parse(&serde_json::to_vec(&editor_manifest(OWNER)).unwrap()).unwrap();
+    for unsupported in [0, 1, 3, u32::MAX] {
+        manifest.api_version = unsupported;
+        assert_code(compatibility(&manifest), ErrorCode::UnsupportedVersion);
+    }
+}
+
+#[test]
 fn host_injected_principals_are_session_owned_and_revocable() {
     let mut first = installed_editor();
     let principal = principal(&mut first, OWNER).unwrap();
@@ -194,6 +207,44 @@ fn replacement_and_disable_enable_revoke_existing_handles() {
     s.execute("extension.enable", json!({"id":OWNER,"enabled":false})).unwrap();
     s.execute("extension.enable", json!({"id":OWNER,"enabled":true})).unwrap();
     assert_code(s.execute("plugin.document.read", json!({"id":OWNER,"document":old["document"]})), ErrorCode::InvalidHandle);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn plugin_document_edit_holds_store_admission_through_authorization_and_commit() {
+    thread_local! {
+        static CHECK: std::cell::RefCell<(std::path::PathBuf, usize)> = const { std::cell::RefCell::new((std::path::PathBuf::new(), 0)) };
+    }
+    fn policy(command: &str, params: &Value) -> Result<()> {
+        // The outer command includes id; the broker's final authorization uses scoped params.
+        if command == "plugin.document.edit" && params.get("id").is_none() {
+            CHECK.with(|state| {
+                let mut state = state.borrow_mut();
+                assert!(crate::extension_package::StoreGuard::write(&state.0).is_err(), "revocation must wait until the edit commits");
+                state.1 += 1;
+            });
+        }
+        Ok(())
+    }
+
+    let temporary = tempfile::tempdir().unwrap();
+    let mut s = session();
+    s.extensions.attach_folder(temporary.path().into()).unwrap();
+    install(&mut s, &editor_manifest(OWNER), &json!({}), false).unwrap();
+    let source = snapshot(&mut s, OWNER, json!({}));
+    CHECK.with(|state| *state.borrow_mut() = (s.extensions.folder.clone().unwrap(), 0));
+    s.authorize = Some(policy);
+    s.execute("plugin.document.edit", edit_params(&source, OWNER)).unwrap();
+    CHECK.with(|state| assert!(state.borrow().1 > 0));
+    assert_eq!(s.active().unwrap().doc.layers[0].name, "Organized First");
+    s.authorize = None;
+
+    let mut other = Session::new();
+    other.extensions.attach_folder(temporary.path().into()).unwrap();
+    other.execute("extension.enable", json!({"id":OWNER,"enabled":false})).unwrap();
+    let before = Arc::clone(&s.active().unwrap().doc);
+    assert!(s.execute("plugin.document.edit", edit_params(&source, OWNER)).is_err());
+    assert!(Arc::ptr_eq(&before, &s.active().unwrap().doc));
 }
 
 #[test]
@@ -578,19 +629,36 @@ fn read_views_and_failed_edits_preserve_a_floating_selection_without_anchoring_i
     s.execute("extension.view.close", json!({"id":OWNER})).unwrap();
 }
 
+#[test]
+fn lifecycle_queries_and_failed_administration_never_anchor_a_floating_selection() {
+    let mut s = session();
+    float_selection(&mut s);
+    let before = Arc::clone(&s.active().unwrap().doc);
+    let revision = s.active().unwrap().revision;
+    let history = s.active().unwrap().history.past_len();
+    for command in ["extension.capabilities", "extension.commands", "extension.list"] {
+        s.execute(command, json!({})).unwrap();
+    }
+    for command in ["extension.runtime", "extension.storage", "extension.rollback"] {
+        assert!(s.execute(command, json!({"id":"org.example.missing"})).is_err());
+    }
+    let active = s.active().unwrap();
+    assert!(Arc::ptr_eq(&before, &active.doc));
+    assert_eq!(active.revision, revision);
+    assert_eq!(active.history.past_len(), history);
+    assert_eq!(active.floating.as_ref().unwrap().offset, (1, 0));
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn contributed_native_tasks_use_background_job_dispatch_and_preserve_state_on_worker_failure() {
     use crate::extension_cmds::{Installed, StorageSize};
     use crate::extension_package::{InstalledNative, NativeInfo, PackageInfo};
 
-    for route in ["direct", "panel1", "contributed2"] {
+    for route in ["direct", "panel", "contributed"] {
         let mut value = descriptor(OWNER, &[KnownCapability::CommandsInvoke]);
         value["permissions"]["commands"] = json!(["plugin.processImage", "plugin.runTask"]);
-        if route == "panel1" {
-            value["apiVersion"] = json!(1);
-            value.as_object_mut().unwrap().remove("capabilities");
-        } else {
+        if route == "contributed" {
             value["contributes"] = json!({"commands":[{"id":"org.example.platform.task","label":"Task","event":"apply"}]});
         }
         let extension = Arc::new(Extension::load(&guest(&value, &json!({"state":{"runs":1},"commands":[{"command":"plugin.runTask","params":{}}]}))).unwrap());
@@ -598,6 +666,8 @@ fn contributed_native_tasks_use_background_job_dispatch_and_preserve_state_on_wo
         s.extensions.installed.insert(
             OWNER.into(),
             Installed {
+                #[cfg(not(target_arch = "wasm32"))]
+                deferred: None,
                 extension,
                 enabled: true,
                 state: Value::Null,
@@ -606,6 +676,7 @@ fn contributed_native_tasks_use_background_job_dispatch_and_preserve_state_on_wo
                 package: None,
                 native: Some(Arc::new(InstalledNative {
                     generation: None,
+                    worker_v2: None,
                     worker: "missing-photocraft-dynamic-task-fixture.exe".into(),
                     package: PackageInfo {
                         package_version: 2,
@@ -623,7 +694,7 @@ fn contributed_native_tasks_use_background_job_dispatch_and_preserve_state_on_wo
         let floating = s.active().unwrap().floating.as_ref().unwrap().clone();
         let started = match route {
             "direct" => s.start("plugin.runTask", json!({"id":OWNER})),
-            "panel1" => s.start("extension.invoke", json!({"id":OWNER,"event":"apply"})),
+            "panel" => s.start("extension.invoke", json!({"id":OWNER,"event":"apply"})),
             _ => s.start("org.example.platform.task", json!({})),
         };
         let crate::jobs::Started::Job(job) = started.unwrap() else { panic!("expected {route} task to start a job") };

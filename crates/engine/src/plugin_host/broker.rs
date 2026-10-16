@@ -225,6 +225,9 @@ struct LayerEdit {
 }
 
 fn edit(s: &mut Session, owner: &Principal, params: &Value) -> Result<Value> {
+    // Serialize final authority validation and the atomic edit with store revocation.
+    #[cfg(not(target_arch = "wasm32"))]
+    let _admission = s.extensions.folder.as_deref().map(crate::extension_package::AdmissionGuard::store).transpose()?;
     require(s, owner, KnownCapability::DocumentEdit)?;
     authorize(s, owner, "plugin.document.edit", params)?;
     let request = params.clone();

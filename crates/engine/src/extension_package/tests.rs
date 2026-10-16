@@ -4,6 +4,157 @@ use crate::Session;
 use photocraft_format::zip::ZipWriter;
 use serde_json::json;
 
+fn storage_variant(id: &str, name: u8) -> Vec<u8> {
+    let mut bytes = guest(id, false);
+    bytes.extend_from_slice(&[0, 2, 1, name]); // A distinct, valid empty WASM custom section.
+    bytes
+}
+
+#[test]
+fn reviewed_publication_rejects_cross_process_changes_and_identical_reinstallation() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.reviewed-update";
+    let a = storage_variant(id, b'a');
+    let b = storage_variant(id, b'b');
+    let absent = review_guard(&root, id).unwrap();
+    install_checked(&root, id, &a, None, false, Some(&absent)).unwrap();
+    let reviewed = review_guard(&root, id).unwrap();
+    install(&root, id, &a, None, true).unwrap();
+    assert!(install_checked(&root, id, &b, None, true, Some(&reviewed)).err().unwrap().to_string().contains("changed since review"));
+    assert_eq!(load(&root, id).unwrap().module, a);
+    let other = tempfile::tempdir().unwrap();
+    let other_root = super::root(other.path()).unwrap();
+    install(&other_root, id, &a, None, false).unwrap();
+    install(&other_root, id, &a, None, true).unwrap();
+    let current = review_guard(&root, id).unwrap();
+    let other_guard = review_guard(&other_root, id).unwrap();
+    assert_eq!(current.expected_installed_hash, other_guard.expected_installed_hash);
+    assert_eq!(current.expected_activation, other_guard.expected_activation);
+    assert_ne!(current.expected_store_hash, other_guard.expected_store_hash);
+    assert!(install_checked(&other_root, id, &b, None, true, Some(&current)).is_err(), "review is bound to its store");
+    let reviewed = review_guard(&root, id).unwrap();
+    install(&root, id, &b, None, true).unwrap();
+    assert!(install_checked(&root, id, &a, None, true, Some(&reviewed)).is_err());
+    let reviewed = review_guard(&root, id).unwrap();
+    remove(&root, id).unwrap();
+    assert!(install_checked(&root, id, &a, None, true, Some(&reviewed)).is_err());
+    assert!(!record_path(&root, id).unwrap().exists());
+}
+
+#[test]
+fn failed_active_publication_preserves_the_previous_rollback_and_managed_data() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.rollback-write";
+    let b = storage_variant(id, b'b');
+    let a = storage_variant(id, b'a');
+    let c = storage_variant(id, b'c');
+    install(&root, id, &b, None, false).unwrap();
+    let before_b = read_record(&root, id).unwrap().unwrap();
+    let state_b = managed::paths(&root, id, &before_b.hash).unwrap();
+    std::fs::write(state_b.data.join("durable.bin"), b"previous state").unwrap();
+    install(&root, id, &a, None, true).unwrap();
+    let before_a = read_record(&root, id).unwrap().unwrap();
+    let state_a = managed::paths(&root, id, &before_a.hash).unwrap();
+    std::fs::write(state_a.data.join("durable.bin"), b"current state").unwrap();
+    let failure = install_with_publication(&root, id, &c, None, true, |_, _| {
+        assert!(rollback_journal_path(&root, id).unwrap().is_file());
+        assert_eq!(rollback_record(&root, id, Some(&before_a.hash)).unwrap().unwrap(), before_b);
+        Err(error("injected active-record write failure"))
+    });
+    assert!(failure.err().unwrap().to_string().contains("injected active-record write failure"));
+    assert_eq!(read_record(&root, id).unwrap().unwrap(), before_a);
+    assert_eq!(rollback_record(&root, id, Some(&before_a.hash)).unwrap().unwrap(), before_b);
+    assert_eq!(std::fs::read(state_a.data.join("durable.bin")).unwrap(), b"current state");
+    assert_eq!(std::fs::read(state_b.data.join("durable.bin")).unwrap(), b"previous state");
+    // Restart resolution ignores a prepared journal whose target was never selected.
+    assert_eq!(discover(&root, id).unwrap().extension.manifest.id, id);
+    rollback(&root, id).unwrap();
+    assert_eq!(load(&root, id).unwrap().module, b);
+    assert_eq!(std::fs::read(state_b.data.join("durable.bin")).unwrap(), b"previous state");
+}
+
+#[test]
+fn committed_journal_preserves_rollback_when_final_metadata_write_fails() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.rollback-finalize";
+    let b = storage_variant(id, b'b');
+    let a = storage_variant(id, b'a');
+    let c = storage_variant(id, b'c');
+    install(&root, id, &b, None, false).unwrap();
+    install(&root, id, &a, None, true).unwrap();
+    let previous = read_record(&root, id).unwrap().unwrap();
+    let state = managed::paths(&root, id, &previous.hash).unwrap();
+    std::fs::write(state.data.join("durable.bin"), b"rollback pair").unwrap();
+    let backup = root.join(format!("{id}.rollback.json"));
+    let saved = root.join("test-saved-rollback.json");
+    let installed = install_with_publication(&root, id, &c, None, true, |path, bytes| {
+        std::fs::rename(&backup, &saved).unwrap();
+        std::fs::create_dir(&backup).unwrap(); // Deterministically fail only finalization.
+        photocraft_format::atomic_write(path, bytes).map_err(error)
+    })
+    .unwrap();
+    assert!(installed.warning.unwrap().contains("rollback metadata"));
+    let selected = read_record(&root, id).unwrap().unwrap();
+    assert_ne!(selected.hash, previous.hash);
+    assert!(rollback_journal_path(&root, id).unwrap().is_file());
+    assert_eq!(rollback_record(&root, id, Some(&selected.hash)).unwrap().unwrap(), previous);
+    assert_eq!(discover(&root, id).unwrap().extension.manifest.id, id);
+    std::fs::remove_dir(&backup).unwrap();
+    rollback(&root, id).unwrap();
+    assert_eq!(load(&root, id).unwrap().module, a);
+    assert_eq!(std::fs::read(state.data.join("durable.bin")).unwrap(), b"rollback pair");
+    assert!(!rollback_journal_path(&root, id).unwrap().exists());
+}
+
+#[test]
+fn native_admission_holds_publication_but_execution_only_leases_its_generation() {
+    if host_platform() == "unsupported" {
+        return;
+    }
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.admission";
+    let info = v2_info(true, &[]);
+    let bytes = v2_package(id, &info, &[(info.native.as_ref().unwrap().entry.as_str(), b"owned worker")]);
+    let inspected = inspect(&bytes).unwrap();
+    let native = install(&root, id, &bytes, Some(&inspected), false).unwrap().native.unwrap();
+    let execution = native.lease().unwrap();
+    assert!(StoreGuard::write(&root).is_ok(), "long jobs do not hold publication locks");
+    let admission = native.admission().unwrap();
+    assert!(StoreGuard::write(&root).is_err(), "disable cannot race a final result/state commit");
+    drop(admission);
+    let mutation = StoreGuard::write(&root).unwrap();
+    revoke_activation(&root, id).unwrap();
+    drop(mutation);
+    assert!(native.admission().is_err(), "a later admission sees the revoked epoch");
+    drop(execution);
+}
+
+#[test]
+fn deferred_filter_watch_cancels_after_an_external_epoch_change() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.filter-watch";
+    let bytes = guest(id, false);
+    install(&root, id, &bytes, None, false).unwrap();
+    let deferred = discover(&root, id).unwrap().deferred.unwrap();
+    let context = crate::jobs::JobCtx::new();
+    let _watch = deferred.watch(&context).unwrap();
+    {
+        let _mutation = StoreGuard::write(&root).unwrap();
+        revoke_activation(&root, id).unwrap();
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while !context.cancelled() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(context.cancelled(), "deferred verification/evaluation must observe external revocation");
+    assert!(deferred.activate(&context).is_err());
+}
+
 #[test]
 fn store_readers_prevent_mutation_without_changing_the_active_record() {
     let temporary = tempfile::tempdir().unwrap();
@@ -31,7 +182,11 @@ fn store_readers_prevent_mutation_without_changing_the_active_record() {
 fn store_lock_process_helper() {
     let root = PathBuf::from(std::env::var_os("PHOTOCRAFT_STORE_LOCK_TEST_ROOT").unwrap());
     let exclusive = std::env::var_os("PHOTOCRAFT_STORE_LOCK_TEST_EXCLUSIVE").is_some();
-    let _guard = if exclusive { StoreGuard::write(&root) } else { StoreGuard::read(&root) }.unwrap();
+    let _guard = if let Ok(hash) = std::env::var("PHOTOCRAFT_GENERATION_LOCK_TEST_HASH") {
+        generation_lease(&root, "org.example.process-lock", &hash, exclusive).unwrap()._guard
+    } else {
+        if exclusive { StoreGuard::write(&root) } else { StoreGuard::read(&root) }.unwrap()
+    };
     std::fs::write(root.join("ready"), b"ready").unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while !root.join("stop").exists() && std::time::Instant::now() < deadline {
@@ -114,7 +269,9 @@ fn managed_native_leases_reject_changed_removed_or_disabled_installations() {
     let inspected = inspect(&first).unwrap();
     let native = install(&root, id, &first, Some(&inspected), false).unwrap().native.unwrap();
     let lease = native.lease().unwrap();
-    assert!(remove(&root, id).is_err());
+    let warning = remove(&root, id).unwrap();
+    assert!(warning.is_some());
+    assert!(native.worker.is_file(), "a leased generation must not be deleted");
     drop(lease);
     let second = package(id, true, b"second", &[]);
     let inspected = inspect(&second).unwrap();
@@ -131,6 +288,101 @@ fn managed_native_leases_reject_changed_removed_or_disabled_installations() {
     remove(&root, id).unwrap();
     assert!(!root.join(format!("{id}.disabled")).exists());
     assert!(current.lease().is_err());
+}
+
+#[test]
+fn a_thousand_dormant_descriptors_do_not_open_payloads_or_start_workers() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.dormant";
+    let bytes = guest(id, false);
+    install(&root, id, &bytes, None, false).unwrap();
+    let template = read_record(&root, id).unwrap().unwrap();
+    remove(&root, id).unwrap();
+    for index in 0..1000 {
+        let mut record = template.clone();
+        record.id = format!("org.example.dormant-{index}");
+        record.descriptor.as_mut().unwrap().id = record.id.clone();
+        let directory = generation(&root, &record).unwrap();
+        std::fs::create_dir_all(&directory).unwrap();
+        let bytes = serde_json::to_vec(&record).unwrap();
+        std::fs::write(directory.join(OWNERSHIP), &bytes).unwrap();
+        std::fs::write(record_path(&root, &record.id).unwrap(), &bytes).unwrap();
+        // Deliberately no WASM or native payload. Discovery must not touch either.
+    }
+    let mut host = crate::extension_cmds::ExtensionHost::default();
+    host.attach_folder(root.clone()).unwrap();
+    assert!(host.load_errors.is_empty(), "{:?}", host.load_errors);
+    assert_eq!(host.installed.len(), 1000);
+    assert!(host.installed.values().all(|installed| installed.extension.lifecycle() == "idle"));
+    let extension = &host.installed["org.example.dormant-0"].extension;
+    for _ in 0..3 {
+        assert!(extension.activate().is_err());
+    }
+    assert_eq!(extension.lifecycle(), "failed");
+    extension.retry_activation();
+    assert_eq!(extension.lifecycle(), "idle");
+}
+
+#[test]
+fn independent_generation_leases_preserve_in_use_bytes_and_allow_other_updates() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.process-lock";
+    let bytes = guest(id, false);
+    install(&root, id, &bytes, None, false).unwrap();
+    let first = read_record(&root, id).unwrap().unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--ignored", "--exact", "extension_package::tests::store_lock_process_helper"])
+        .env("PHOTOCRAFT_STORE_LOCK_TEST_ROOT", &root)
+        .env("PHOTOCRAFT_GENERATION_LOCK_TEST_HASH", &first.hash)
+        .stdout(std::process::Stdio::null());
+    let mut child = LockChild(command.spawn().unwrap());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !root.join("ready").exists() {
+        assert!(child.0.try_wait().unwrap().is_none());
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let other_id = "org.example.independent";
+    install(&root, other_id, &guest(other_id, false), None, false).unwrap();
+    assert!(install(&root, id, &guest(id, true), None, true).is_err());
+    assert!(generation(&root, &first).unwrap().join("plugin.pcext").is_file());
+    assert!(cleanup(&root, &first).is_err());
+    drop(child);
+    install(&root, id, &guest(id, true), None, true).unwrap();
+    cleanup(&root, &first).unwrap();
+    assert!(!generation(&root, &first).unwrap().exists());
+}
+
+#[test]
+fn rollback_restores_code_and_managed_data_and_failed_preparation_keeps_active_pair() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = root(temporary.path()).unwrap();
+    let id = "org.example.rollback";
+    let first_bytes = guest(id, false);
+    install(&root, id, &first_bytes, None, false).unwrap();
+    let first = read_record(&root, id).unwrap().unwrap();
+    let first_state = managed::paths(&root, id, &first.hash).unwrap();
+    std::fs::write(&first_state.settings, br#"{"value":"before"}"#).unwrap();
+    let second_bytes = guest(id, true);
+    install(&root, id, &second_bytes, None, true).unwrap();
+    let second = read_record(&root, id).unwrap().unwrap();
+    let second_state = managed::paths(&root, id, &second.hash).unwrap();
+    std::fs::write(&second_state.settings, br#"{"value":"after"}"#).unwrap();
+    rollback(&root, id).unwrap();
+    assert_eq!(load(&root, id).unwrap().module, first_bytes);
+    assert_eq!(std::fs::read(&first_state.settings).unwrap(), br#"{"value":"before"}"#);
+    rollback(&root, id).unwrap();
+    assert_eq!(load(&root, id).unwrap().module, second_bytes);
+    let third_bytes = guest_for(id, "edit.undo");
+    let third_hash = blake3::hash(&third_bytes).to_hex().to_string();
+    let collision = checked_path(&root, &format!("managed/{id}/{third_hash}")).unwrap();
+    std::fs::write(&collision, b"unexpected existing file").unwrap();
+    assert!(install(&root, id, &third_bytes, None, true).is_err());
+    assert_eq!(read_record(&root, id).unwrap().unwrap(), second);
+    assert_eq!(std::fs::read(&second_state.settings).unwrap(), br#"{"value":"after"}"#);
 }
 
 #[test]
@@ -225,7 +477,8 @@ fn corrupt_activation_metadata_never_triggers_owned_payload_repair() {
 
 fn guest_for(id: &str, service: &str) -> Vec<u8> {
     let manifest = serde_json::to_string(&json!({
-        "apiVersion":1,"id":id,"name":"Package test","version":"1","permissions":{
+        "apiVersion":2,"id":id,"name":"Package test","version":"1",
+        "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},"permissions":{
             "commands":if service.is_empty() {vec![]} else {vec![service]}},
         "panel":{"buttons":[{"id":"run","label":"Run"}]}
     }))
@@ -236,7 +489,7 @@ fn guest_for(id: &str, service: &str) -> Vec<u8> {
         (memory (export "memory") 1)
         (data (i32.const 16) "{escaped}")
         (data (i32.const 2048) "{{}}")
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 2)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 4096)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
@@ -380,8 +633,14 @@ fn native_packages_coexist_and_keep_their_own_payloads() {
 fn generic_package_validates_declared_worker_and_all_recorded_assets() {
     let inspected = inspect(&package("org.example.processor", true, b"asset", &[])).unwrap();
     assert!(required_files(&inspected.info).unwrap().contains(&"bin/processor.exe"));
-    let mut record =
-        Record { format_version: 1, id: "org.example.processor".into(), hash: "a".repeat(64), package: Some(inspected.info), files: inspected.files };
+    let mut record = Record {
+        descriptor: None,
+        format_version: 1,
+        id: "org.example.processor".into(),
+        hash: "a".repeat(64),
+        package: Some(inspected.info),
+        files: inspected.files,
+    };
     assert!(validate_record(&record, &record.id).is_ok());
     record.files.iter_mut().find(|f| f.path == "runtime/models/weights.bin").unwrap().size = 176_000_000;
     assert!(validate_record(&record, &record.id).is_ok());
@@ -410,6 +669,7 @@ fn rejects_corrupt_and_oversized_archives_without_extraction() {
     let bytes = zip.finish().unwrap();
     assert!(inspect(&bytes).is_err());
     let mut record = Record {
+        descriptor: None,
         format_version: 1,
         id: "org.example.bundle".into(),
         hash: "a".repeat(64),
@@ -449,13 +709,13 @@ fn native_grant_hash_persistence_updates_and_uninstall_are_one_installation() {
     std::fs::write(&path, package(id, true, b"second", &[])).unwrap();
     assert!(next.execute("extension.install", json!({"path":path,"replace":true,"allowNative":true,"expectedHash":review["hash"]})).is_err());
     assert!(old_worker.is_file());
-    let lease = Arc::clone(next.extensions.installed[id].native.as_ref().unwrap());
+    let lease = next.extensions.installed[id].native.as_ref().unwrap().lease().unwrap();
     assert!(next.execute("extension.install", json!({"path":path,"replace":true,"allowNative":true})).is_err());
-    assert!(next.execute("extension.remove", json!({"id":id})).is_err());
+    assert!(old_worker.is_file());
     drop(lease);
     next.execute("extension.install", json!({"path":path,"replace":true,"allowNative":true})).unwrap();
     let current = next.extensions.installed[id].native.as_ref().unwrap().worker.clone();
-    assert!(!old_worker.exists());
+    assert!(old_worker.exists(), "the previous generation is retained for rollback");
     assert_eq!(std::fs::read(&current).unwrap(), b"second");
     next.execute("extension.enable", json!({"id":id,"enabled":false})).unwrap();
     let mut final_session = Session::new();
@@ -490,7 +750,7 @@ fn raw_and_native_replacements_and_bad_packages_preserve_valid_state() {
     std::fs::write(&path, guest(id, false)).unwrap();
     s.execute("extension.install", json!({"path":path,"replace":true})).unwrap();
     assert!(s.extensions.installed[id].native.is_none());
-    assert!(!worker.exists());
+    assert!(worker.exists(), "the native generation is the rollback choice");
     let mut next = Session::new();
     next.extensions.attach_folder(folder.clone()).unwrap();
     assert!(next.extensions.installed[id].native.is_none());
@@ -519,8 +779,10 @@ fn tampered_payload_and_bad_neighbor_records_are_reported_without_fallback() {
     std::fs::write(folder.join(format!("{id}.pcext")), guest(id, false)).unwrap();
     let mut broken = Session::new();
     broken.extensions.attach_folder(folder.clone()).unwrap();
-    assert!(!broken.extensions.installed.contains_key(id));
-    assert_eq!(broken.extensions.load_errors.len(), 2);
+    assert!(broken.extensions.installed.contains_key(id));
+    crate::extension_cmds::activate(&mut broken, id).unwrap();
+    assert!(broken.extensions.installed[id].native.as_ref().unwrap().verify_payload(&crate::jobs::JobCtx::new()).is_err());
+    assert_eq!(broken.extensions.load_errors.len(), 1);
     broken.execute("extension.install", json!({"path":path,"allowNative":true})).unwrap();
     assert_eq!(std::fs::read(&broken.extensions.installed[id].native.as_ref().unwrap().worker).unwrap(), b"valid");
     let mut repaired = Session::new();
@@ -544,7 +806,9 @@ fn reinstall_repairs_an_entire_missing_owned_directory() {
     std::fs::remove_dir_all(&models).unwrap();
     let mut restarted = Session::new();
     restarted.extensions.attach_folder(folder.clone()).unwrap();
-    assert!(!restarted.extensions.installed.contains_key(id));
+    assert!(restarted.extensions.installed.contains_key(id));
+    crate::extension_cmds::activate(&mut restarted, id).unwrap();
+    assert!(restarted.extensions.installed[id].native.as_ref().unwrap().verify_payload(&crate::jobs::JobCtx::new()).is_err());
     restarted.execute("extension.install", json!({"path":path,"allowNative":true})).unwrap();
     for model in ["weights", "a", "b", "c", "d", "e"] {
         assert_eq!(std::fs::read(models.join(format!("{model}.bin"))).unwrap(), b"model data");
@@ -851,7 +1115,8 @@ fn stored_filter_records_obey_module_limits_and_required_paths() {
     let info = v2_info(false, &["filters/a.wasm"]);
     let filter = filter_module("org.example.filter", "");
     let package = inspect(&v2_package("org.example.v2", &info, &[("filters/a.wasm", &filter)])).unwrap();
-    let mut record = Record { format_version: 1, id: "org.example.v2".into(), hash: "a".repeat(64), package: Some(info), files: package.files };
+    let mut record =
+        Record { descriptor: None, format_version: 1, id: "org.example.v2".into(), hash: "a".repeat(64), package: Some(info), files: package.files };
     validate_record(&record, &record.id).unwrap();
     record.files.iter_mut().find(|file| file.path == "filters/a.wasm").unwrap().size = photocraft_plugins::Limits::default().max_module_bytes as u64 + 1;
     assert!(validate_record(&record, &record.id).is_err());

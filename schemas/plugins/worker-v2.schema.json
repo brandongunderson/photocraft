@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkerV2Descriptor",
+  "type": "object",
+  "properties": {
+    "executionProfile": {
+      "$ref": "#/$defs/WorkerExecutionProfile"
+    },
+    "idleTimeoutMs": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 60000,
+      "maximum": 300000,
+      "minimum": 1000
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorkerOperation"
+      },
+      "maxItems": 2,
+      "minItems": 1
+    },
+    "protocolVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 2,
+      "minimum": 2
+    },
+    "requestTimeoutMs": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 2700000,
+      "maximum": 2700000,
+      "minimum": 100
+    },
+    "resources": {
+      "$ref": "#/$defs/WorkerResources"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "executionProfile",
+    "operations",
+    "resources"
+  ],
+  "$defs": {
+    "WorkerExecutionProfile": {
+      "type": "string",
+      "enum": [
+        "trustedNative"
+      ]
+    },
+    "WorkerOperation": {
+      "type": "string",
+      "enum": [
+        "image",
+        "task"
+      ]
+    },
+    "WorkerResources": {
+      "description": "Admission estimates, not operating-system enforcement of a trusted native process.",
+      "type": "object",
+      "properties": {
+        "cacheBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 1099511627776,
+          "minimum": 0
+        },
+        "cpuUnits": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1
+        },
+        "gpuBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 68719476736,
+          "minimum": 0
+        },
+        "memoryBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 68719476736,
+          "minimum": 1
+        },
+        "tempBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 274877906944,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cpuUnits",
+        "memoryBytes",
+        "gpuBytes",
+        "tempBytes",
+        "cacheBytes"
+      ]
+    }
+  }
+}

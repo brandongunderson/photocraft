@@ -2,7 +2,7 @@
   {
     "id": "org.example.image-gain",
     "manifest": {
-      "apiVersion": 1,
+      "apiVersion": 2,
       "author": "Example author",
       "description": "A standalone image processor with native and sandboxed backends. Preview before applying.",
       "id": "org.example.image-gain",
@@ -42,9 +42,18 @@
         ],
         "documentRead": true
       },
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "capabilities": {
+        "required": [
+          {
+            "id": "host.commands.invoke",
+            "minVersion": 1
+          }
+        ],
+        "optional": []
+      }
     },
-    "module": "frozen/image-gain-panel-v1.wasm",
+    "module": "frozen/image-gain-panel-v2.wasm",
     "request": {
       "document": {
         "activeLayer": 1,
@@ -63,7 +72,18 @@
       "values": {
         "backend": "Sandboxed filter",
         "gain": 0.5
-      }
+      },
+      "apiVersion": 2,
+      "host": {
+        "version": 1,
+        "capabilities": [
+          {
+            "id": "host.commands.invoke",
+            "version": 1
+          }
+        ]
+      },
+      "responses": []
     },
     "response": {
       "commands": [

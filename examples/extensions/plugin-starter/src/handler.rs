@@ -3,8 +3,64 @@ use serde_json::{Map, Value, json};
 
 use crate::MANIFEST;
 
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventEnvelope {
+    api_version: u32,
+    host: HostMetadata,
+    event: String,
+    values: Value,
+    #[serde(default)]
+    state: Value,
+    #[serde(default)]
+    document: Value,
+    #[serde(default)]
+    responses: Vec<Value>,
+    #[serde(default)]
+    compatibility: Option<Compatibility>,
+}
+
+#[derive(Deserialize)]
+struct HostMetadata {
+    version: u16,
+    capabilities: Vec<Capability>,
+}
+
+#[derive(Deserialize)]
+struct Capability {
+    id: String,
+    version: u16,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Compatibility {
+    panel_api: u32,
+    host_api: u16,
+}
+
+impl EventEnvelope {
+    fn parse(request: &Value) -> Result<Self, &'static str> {
+        let event: Self = serde_json::from_value(request.clone()).map_err(|_| "Invalid plugin event envelope.")?;
+        let mut capabilities = std::collections::BTreeSet::new();
+        if event.api_version != 2
+            || event.host.version != 1
+            || event.host.capabilities.len() > 32
+            || event.responses.len() > 8
+            || event.host.capabilities.iter().any(|offer| !(1..=1024).contains(&offer.version) || !capabilities.insert(&offer.id))
+            || !event.host.capabilities.iter().any(|offer| offer.id == "host.commands.invoke" && offer.version >= 1)
+            || event.compatibility.as_ref().is_some_and(|selected| selected.panel_api != 2 || selected.host_api != event.host.version)
+        {
+            return Err("The host does not support this plugin's event or command contract.");
+        }
+        Ok(event)
+    }
+}
+
 fn reply(state: &Value, message: &str) -> Value {
-    json!({"state": state, "message": message, "commands": []})
+    json!({"state": state, "message": message, "commands": [], "requests": []})
 }
 
 fn created_layers(state: &Value) -> Result<u64, &'static str> {
@@ -98,40 +154,39 @@ impl<'a> Document<'a> {
 /// A response is a proposal. PhotoCraft executes its commands and commits state only on success.
 pub(crate) fn handle(request: &Value) -> Value {
     let state = request.get("state").unwrap_or(&Value::Null);
-    let Some(request) = request.as_object() else {
-        return reply(state, "Invalid event request: expected an object.");
+    let request = match EventEnvelope::parse(request) {
+        Ok(request) => request,
+        Err(message) => return reply(state, message),
     };
-    if request.keys().any(|key| !matches!(key.as_str(), "event" | "values" | "state" | "document")) {
-        return reply(state, "Unknown event request field.");
-    }
+    let state = &request.state;
     let count = match created_layers(state) {
         Ok(count) => count,
         Err(message) => return reply(state, message),
     };
-    let event = match request.get("event").and_then(Value::as_str) {
-        Some(event @ ("info" | "create")) => event,
+    let event = match request.event.as_str() {
+        event @ ("info" | "create") => event,
         _ => return reply(state, "Unknown action. Use a declared panel button."),
     };
-    let Some(values) = request.get("values").and_then(Value::as_object) else {
+    let Some(values) = request.values.as_object() else {
         return reply(state, "Invalid panel values: expected an object.");
     };
     let name = match layer_name(values) {
         Ok(name) => name,
         Err(message) => return reply(state, message),
     };
-    let document = match request.get("document") {
-        Some(Value::Null) => return reply(state, "Open an image before using this panel."),
-        Some(value) => match Document::parse(value) {
+    let document = match &request.document {
+        Value::Null => return reply(state, "Open an image before using this panel."),
+        value => match Document::parse(value) {
             Ok(document) => document,
             Err(message) => return reply(state, message),
         },
-        None => return reply(state, "Invalid event request: document is missing."),
     };
     if event == "info" {
         return reply(state, &document.message());
     }
     json!({
         "state": {"createdLayers": count.saturating_add(1)},
+        "requests": [],
         "message": format!("Created layer “{name}”. Use Edit > Undo to reverse this edit."),
         "commands": [{"command": "layer.new.layer", "params": {"name": name}}]
     })
@@ -141,8 +196,26 @@ pub(crate) fn handle(request: &Value) -> Value {
 mod tests {
     use super::*;
 
+    #[test]
+    fn current_typed_envelope_accepts_additions_but_rejects_incompatible_versions() {
+        let mut input = request("create");
+        input["futureMetadata"] = json!({"optional":true});
+        input["compatibility"] = json!({"panelApi":2,"hostApi":1,"negotiated":{"available":[],"unavailableOptional":[]}});
+        assert!(!handle(&input)["commands"].as_array().unwrap().is_empty());
+        for version in [0, 1, 3] {
+            input["apiVersion"] = json!(version);
+            let response = handle(&input);
+            assert_eq!(response["commands"], json!([]));
+            assert_eq!(response["state"], input["state"]);
+        }
+        input["apiVersion"] = json!(2);
+        input["host"]["capabilities"] = json!([]);
+        assert_eq!(handle(&input)["commands"], json!([]), "capability discovery is explicit");
+    }
+
     fn request(event: &str) -> Value {
         json!({
+            "apiVersion": 2, "host": {"version":1,"capabilities":[{"id":"host.commands.invoke","version":1}]},
             "event": event, "values": {"layerName": "Notes"}, "state": null,
             "document": {"id": 1, "name": "Untitled", "width": 640, "height": 480,
                 "depth": 16, "mode": "Grayscale", "revision": 3, "activeLayer": 2}

@@ -22,12 +22,15 @@ try {
     foreach ($artifact in $catalog.artifacts) {
         $artifactPath = Join-Path $env:PHOTOCRAFT_PLUGIN_COMPAT_ROOT $artifact.name
         if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+            $artifactPath = Join-Path $env:PHOTOCRAFT_PLUGIN_COMPAT_ROOT $artifact.path
+        }
+        if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
             $artifactPath = Join-Path (Join-Path $env:PHOTOCRAFT_PLUGIN_COMPAT_ROOT 'upstream/photocraft') $artifact.path
         }
         if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) { throw "Missing immutable fixture: $($artifact.name)" }
         if ((Get-Item -LiteralPath $artifactPath).Length -ne $artifact.size) { throw "Fixture size changed: $($artifact.name)" }
         if ((Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $artifact.sha256) {
-            throw "Fixture SHA-256 changed: $($artifact.name). Restore the old bytes; do not rebuild the baseline."
+            throw "Native transport fixture SHA-256 changed: $($artifact.name). Restore the pinned executable bytes."
         }
     }
     & cargo test -p photocraft-engine --test plugin_compatibility --locked --offline

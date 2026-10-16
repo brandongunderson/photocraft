@@ -1,5 +1,18 @@
 use super::*;
 
+fn initialized_windows() -> impl FnMut(&mut egui::Ui, &mut PhotocraftApp) {
+    let mut ready = false;
+    move |ui, app| {
+        if ready {
+            windows(app, ui.ctx());
+        } else {
+            PhotocraftApp::setup_context(ui.ctx(), crate::theme::ThemeKind::ProMedium);
+            ready = true;
+            ui.ctx().request_repaint();
+        }
+    }
+}
+
 #[test]
 fn long_choice_explanations_fit_the_settings_column() {
     let choice = photocraft_plugins::extension::Field {
@@ -41,7 +54,7 @@ pub(super) fn module(manifest: &str) -> Vec<u8> {
     wat::parse_str(format!(
         r#"(module (memory (export "memory") 4)
         (data (i32.const 32) "{quote}") (data (i32.const 65536) "{{}}")
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 2)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
@@ -96,7 +109,7 @@ fn manager_shows_standalone_plugin_size_without_a_model_total() {
     let size = app.session.extensions.installed["org.photocraft.quick-tools"].storage;
     assert!(size.installed_bytes > 0);
     assert_eq!(size.model_bytes, 0);
-    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(initialized_windows(), app);
     PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
     h.run_steps(4);
     assert!(h.query_by_label(&storage::label(size)).is_some());
@@ -112,7 +125,7 @@ fn plugin_sizes_use_explicit_binary_units() {
 }
 
 #[test]
-fn browse_button_opens_a_picker_and_reviews_without_installing() {
+fn browse_shows_permissions_before_installing_and_clears_the_completed_selection() {
     use egui_kittest::{Harness, kittest::Queryable};
     let manifest = include_str!("../../../../examples/extensions/plugin-starter/manifest.json");
     let (dialog, requests) = crate::file_dialog::fake(vec![Some(FileDialogAnswer::Contents("Example.pcext".into(), module(manifest)))]);
@@ -140,18 +153,38 @@ fn browse_button_opens_a_picker_and_reviews_without_installing() {
     assert!(h.state().ui.extensions.pending.is_some());
     assert!(h.state().session.extensions.installed.is_empty(), "choosing a file only reviews it");
     assert!(h.query_by_label("Install plugin").is_some());
+    assert!(h.query_by_label("Review plugin").is_none());
+    assert!(h.query_by_label("Show permissions").is_none(), "Browse already shows the permissions");
+    assert!(h.query_by_label("Drop a plugin file here\nor click to browse").is_none());
+    let expected_hash = h.state().ui.extensions.pending.as_ref().unwrap().input["expectedHash"].clone();
+    h.state_mut().ui.extensions.pending.as_mut().unwrap().input["expectedHash"] = json!("a changed file must fail review binding");
+    h.get_by_label("Install plugin").click();
+    h.run_steps(3);
+    assert!(h.state().ui.extensions.pending.is_some(), "a failed install keeps the reviewed selection available");
+    assert_eq!(h.state().ui.extensions.path, "Example.pcext");
+    assert!(h.state().ui.extensions.status.contains("changed since review"));
+    assert!(h.state().session.extensions.installed.is_empty());
+    h.state_mut().ui.extensions.pending.as_mut().unwrap().input["expectedHash"] = expected_hash;
+    h.get_by_label("Install plugin").click();
+    h.run_steps(3);
+    assert!(h.state().ui.extensions.pending.is_none());
+    assert!(h.state().ui.extensions.path.is_empty());
+    assert_eq!(h.state().ui.extensions.status, "Installed Hello PhotoCraft 1.0.0.");
+    assert_eq!(h.state().session.extensions.installed.len(), 1);
+    assert!(h.query_by_label("Install plugin").is_none());
 }
 
 #[test]
 fn manager_path_row_keeps_its_width_across_frames() {
-    use egui_kittest::Harness;
+    use egui_kittest::{Harness, kittest::Queryable};
     let mut app = app();
     app.ui.extensions.manager_open = true;
     app.ui.extensions.path = "long-plugin-directory/".repeat(12) + "Example.pcplugin";
-    let mut h = Harness::builder().with_size(egui::vec2(1800.0, 900.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+    let mut h = Harness::builder().with_size(egui::vec2(1800.0, 900.0)).build_ui_state(initialized_windows(), app);
     PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
     h.run_steps(6);
     let before = h.state().ui.extensions.drop_rect.unwrap().width();
+    assert!(h.state().ui.extensions.drop_rect.unwrap().contains_rect(h.get_by_label("Done").rect()), "the whole manager remains a drop target");
     h.run_steps(20);
     let after = h.state().ui.extensions.drop_rect.unwrap().width();
     assert!((after - before).abs() < 1.0, "the path row must not grow its window each frame: {before} → {after}");
@@ -213,6 +246,62 @@ fn raw_filter_files_retain_explicit_confirmation() {
 }
 
 #[test]
+fn standalone_filter_selection_clears_only_after_its_successful_confirmation() {
+    fn filter(id: &str) -> Vec<u8> {
+        let manifest = json!({"id":id,"name":"Manager filter","version":"1.0.0","kind":"filter"}).to_string();
+        let escaped = manifest.bytes().map(|byte| format!("\\{byte:02x}")).collect::<String>();
+        wat::parse_str(format!(
+            r#"(module (memory (export "memory") 1)
+            (data (i32.const 16) "{escaped}")
+            (func (export "pc_abi_version") (result i32) i32.const 1)
+            (func (export "pc_manifest") (result i64) i64.const {})
+            (func (export "pc_alloc") (param i32) (result i32) i32.const 0)
+            (func (export "pc_filter") (param i32 i32 i32 i32 i32 i32 i32 i32) (result i32) i32.const 0))"#,
+            ((manifest.len() as u64) << 32) | 16,
+        ))
+        .unwrap()
+    }
+    for outcome in ["done", "failed", "cancelled", "unrelated"] {
+        let id = format!("test.ui.manager-filter-{outcome}");
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        installer::review_answer(&mut app, FileDialogAnswer::Contents("Manager-filter.wasm".into(), filter(&id))).unwrap();
+        assert_eq!(app.ui.extensions.filter_review.as_deref(), Some(id.as_str()));
+        let dialog = app.ui.dialogs.last().unwrap().id;
+        match outcome {
+            "done" => {
+                crate::dialogs::confirm(&mut app, dialog).unwrap();
+            }
+            "failed" => {
+                app.ui.dialog_mut(dialog).unwrap().fields.insert("data".into(), json!("invalid filter bytes"));
+                assert!(crate::dialogs::confirm(&mut app, dialog).is_err());
+            }
+            "cancelled" => {
+                crate::dialogs::cancel(&mut app, dialog).unwrap();
+            }
+            _ => {
+                crate::dialogs::cancel(&mut app, dialog).unwrap();
+                let other = "test.ui.manager-filter-unrelated-other";
+                let result =
+                    crate::plugin_ui::review_filter(&mut app, json!({"data":base64::engine::general_purpose::STANDARD.encode(filter(other))})).unwrap();
+                crate::dialogs::confirm(&mut app, result["dialog"].as_u64().unwrap()).unwrap();
+                photocraft_plugins::registry::remove(other);
+            }
+        }
+        if outcome == "done" {
+            assert!(app.ui.extensions.path.is_empty() && app.ui.extensions.filter_review.is_none());
+            assert_eq!(app.ui.extensions.status, "Installed Manager filter 1.0.0.");
+            assert!(photocraft_plugins::registry::get(&id).is_some());
+            photocraft_plugins::registry::remove(&id);
+        } else {
+            assert_eq!(app.ui.extensions.path, "Manager-filter.wasm");
+            assert_eq!(app.ui.extensions.filter_review.as_deref(), Some(id.as_str()));
+            assert!(!app.ui.extensions.status.contains("Installed"));
+            assert!(photocraft_plugins::registry::get(&id).is_none());
+        }
+    }
+}
+
+#[test]
 fn incompatible_wasm_panels_keep_their_error_and_never_open_filter_confirmation() {
     let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
     app.ui.extensions.manager_open = true;
@@ -254,7 +343,7 @@ fn done_closes_the_manager_and_plugin_panel() {
         let mut app = app();
         let id = if manager { MANAGER } else { "window.extension.org.photocraft.quick-tools" };
         menu(&mut app, id).unwrap().unwrap();
-        let mut h = Harness::builder().with_size(egui::vec2(1100.0, 480.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+        let mut h = Harness::builder().with_size(egui::vec2(1100.0, 480.0)).build_ui_state(initialized_windows(), app);
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
         h.run_steps(4);
         h.get_by_label("Done").click();
@@ -268,21 +357,180 @@ fn done_closes_the_manager_and_plugin_panel() {
 }
 
 #[test]
-fn manager_offers_explicit_repair_when_a_damaged_plugin_cannot_load() {
+fn same_version_reinstall_is_explicit_and_secondary() {
     use egui_kittest::{Harness, kittest::Queryable};
     let mut app = app();
-    app.session.extensions.installed.clear();
-    app.session.extensions.load_errors.push("Damaged installation record".into());
-    let manifest = include_str!("../../../../examples/extensions/plugin-starter/manifest.json");
+    let manifest = include_str!("../../../../examples/extensions/quick-tools/manifest.json");
     let data = base64::engine::general_purpose::STANDARD.encode(module(manifest));
     inspect(&mut app, json!({"data":data})).unwrap();
-    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(initialized_windows(), app);
     PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
     h.run_steps(4);
-    assert!(!h.state().ui.extensions.pending.as_ref().unwrap().replace);
-    h.get_by_label("Replace or repair an existing installation").click();
+    assert_eq!(h.state().ui.extensions.pending.as_ref().unwrap().action, InstallAction::Reinstall);
+    assert!(h.query_by_label("Install plugin").is_none());
+    assert!(h.query_by_label("Update plugin").is_none());
+    assert!(h.query_by_label("Replace or repair an existing installation").is_none());
+    assert!(h.query_by_label("Reinstall or repair plugin").is_none());
+    h.get_by_label("Advanced").click();
     h.run_steps(3);
-    assert!(h.state().ui.extensions.pending.as_ref().unwrap().replace);
+    h.get_by_label("Reinstall or repair plugin").click();
+    h.run_steps(3);
+    assert!(h.state().ui.extensions.pending.is_none());
+    assert_eq!(h.state().ui.extensions.status, "Reinstalled Quick Tools 1.0.0.");
+    assert_eq!(h.state().session.extensions.installed.len(), 1);
+}
+
+#[test]
+fn newer_files_update_automatically_and_older_or_ambiguous_versions_require_advanced_action() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    for (version, action, label, success) in [
+        ("2.0.0", InstallAction::Update, "Update plugin", "Updated"),
+        ("0.9.0", InstallAction::Downgrade, "Install older version", "Installed older version of"),
+        ("edition-next", InstallAction::Replace, "Replace installed plugin", "Replaced"),
+    ] {
+        let mut app = app();
+        let mut manifest: Value = serde_json::from_str(include_str!("../../../../examples/extensions/quick-tools/manifest.json")).unwrap();
+        manifest["version"] = json!(version);
+        let data = base64::engine::general_purpose::STANDARD.encode(module(&manifest.to_string()));
+        app.ui.extensions.path = format!("Quick-Tools-{version}.pcext");
+        inspect(&mut app, json!({"data":data})).unwrap();
+        let pending = app.ui.extensions.pending.as_ref().unwrap();
+        assert_eq!(pending.action, action);
+        assert!(pending.input.get("replace").is_none());
+        for guard in ["expectedHash", "expectedStoreHash", "expectedInstalledHash", "expectedActivation", "expectedSessionRevision"] {
+            assert!(pending.input.get(guard).is_some(), "the reviewed {guard} must reach the final install");
+        }
+        let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(initialized_windows(), app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
+        h.run_steps(4);
+        assert_eq!(h.state().session.extensions.installed["org.photocraft.quick-tools"].extension.manifest.version, "1.0.0");
+        assert!(h.query_by_label("Replace or repair an existing installation").is_none());
+        if action != InstallAction::Update {
+            assert!(h.query_by_label("Install plugin").is_none() && h.query_by_label("Update plugin").is_none());
+            assert!(h.query_by_label(label).is_none());
+            h.get_by_label("Advanced").click();
+            h.run_steps(3);
+        }
+        h.get_by_label(label).click();
+        h.run_steps(3);
+        assert!(h.state().ui.extensions.pending.is_none(), "{}", h.state().ui.extensions.status);
+        assert!(h.state().ui.extensions.path.is_empty());
+        assert_eq!(h.state().session.extensions.installed["org.photocraft.quick-tools"].extension.manifest.version, version);
+        assert_eq!(h.state().ui.extensions.status, format!("{success} Quick Tools {version}."));
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn background_install_completes_before_clearing_selection_and_preserves_it_on_failure_or_cancellation() {
+    use photocraft_engine::{EngineError, jobs::Started};
+    for outcome in ["done", "failed", "cancelled"] {
+        let mut app = app();
+        let mut manifest: Value = serde_json::from_str(include_str!("../../../../examples/extensions/quick-tools/manifest.json")).unwrap();
+        manifest["version"] = json!("2.0.0");
+        let bytes = module(&manifest.to_string());
+        app.ui.extensions.path = "Quick-Tools-2.0.0.pcext".into();
+        inspect(&mut app, json!({"data":base64::engine::general_purpose::STANDARD.encode(&bytes)})).unwrap();
+        let selected = app.ui.extensions.pending.clone();
+        let input = selected.as_ref().unwrap().input.clone();
+        let (release, waiting) = std::sync::mpsc::channel();
+        let started = app
+            .session
+            .start_job(
+                "test.plugin-install",
+                json!({}),
+                "Install plugin",
+                false,
+                move |ctx| {
+                    loop {
+                        ctx.check()?;
+                        match waiting.recv_timeout(std::time::Duration::from_millis(5)) {
+                            Ok(()) => break,
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                            Err(error) => return Err(EngineError::Other(error.to_string())),
+                        }
+                    }
+                    if outcome == "failed" {
+                        return Err(EngineError::Other("The selected package could not be read".into()));
+                    }
+                    Ok(input)
+                },
+                |session, input| session.execute("extension.install", input),
+            )
+            .unwrap();
+        let Started::Job(job) = started else { panic!("the manager test requires a background operation") };
+        app.ui.extensions.manager_job = Some(ManagerJob { id: job.0, work: ManagerWork::Install(InstallAction::Update) });
+        poll_manager_job(&mut app);
+        assert_eq!(app.ui.extensions.pending, selected, "starting a job must not claim installation success");
+        assert_eq!(app.ui.extensions.path, "Quick-Tools-2.0.0.pcext");
+        assert!(review_arrived(&mut app, &[("Other.pcext".into(), bytes)]));
+        assert_eq!(app.ui.extensions.pending, selected, "a new drop cannot replace an active operation's reviewed authority");
+        if outcome == "cancelled" {
+            app.session.cancel_job(job);
+            assert!(app.session.wait_job(job).is_err());
+            app.session.join_cancelled_jobs();
+        } else {
+            release.send(()).unwrap();
+            assert_eq!(app.session.wait_job(job).is_ok(), outcome == "done");
+        }
+        poll_manager_job(&mut app);
+        assert!(app.ui.extensions.manager_job.is_none());
+        if outcome == "done" {
+            assert!(app.ui.extensions.pending.is_none() && app.ui.extensions.path.is_empty());
+            assert_eq!(app.ui.extensions.status, "Updated Quick Tools 2.0.0.");
+            assert_eq!(app.session.extensions.installed["org.photocraft.quick-tools"].extension.manifest.version, "2.0.0");
+        } else {
+            assert_eq!(app.ui.extensions.pending, selected);
+            assert_eq!(app.ui.extensions.path, "Quick-Tools-2.0.0.pcext");
+            assert_eq!(app.session.extensions.installed["org.photocraft.quick-tools"].extension.manifest.version, "1.0.0");
+            assert!(app.ui.extensions.status.contains(if outcome == "failed" { "could not be read" } else { "cancelled" }));
+        }
+    }
+}
+
+#[test]
+fn update_results_offer_available_updates_without_claiming_failed_checks_are_current() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    for (status, message, available) in [
+        ("available", "", true),
+        ("error", "Could not reach the publisher. Try again.", false),
+        ("unsupported", "This plugin does not publish automatic updates.", false),
+    ] {
+        let mut app = app();
+        finish_manager_work(&mut app, ManagerWork::Check, &json!({"updates":[{
+            "id":"org.photocraft.quick-tools", "status":status, "installedVersion":"1.0.0", "version":"2.0.0", "message":message, "candidate":"opaque-publisher-candidate"
+        }]})).unwrap();
+        app.ui.extensions.manager_open = true;
+        let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(initialized_windows(), app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
+        h.run_steps(4);
+        assert!(h.query_by_label("Check for updates").is_some());
+        assert_eq!(h.query_by_label("Update…").is_some(), available);
+        assert_eq!(h.query_by_label("Update available: 2.0.0").is_some(), available);
+        assert!(h.query_by_label("Up to date.").is_none());
+        if !available {
+            assert!(h.query_by_label(message).is_some());
+        }
+        assert_eq!(h.query_by_label("Retry update check").is_some(), status == "error");
+    }
+}
+
+#[test]
+fn prepared_updates_return_to_permission_review_without_installing() {
+    let mut app = app();
+    let mut manifest: Value = serde_json::from_str(include_str!("../../../../examples/extensions/quick-tools/manifest.json")).unwrap();
+    manifest["version"] = json!("2.0.0");
+    let data = base64::engine::general_purpose::STANDARD.encode(module(&manifest.to_string()));
+    let mut inspected = app.session.execute("extension.inspect", json!({"data":data})).unwrap();
+    inspected["input"] = json!({"data":data});
+    finish_manager_work(&mut app, ManagerWork::Prepare, &inspected).unwrap();
+    let pending = app.ui.extensions.pending.as_ref().unwrap();
+    assert_eq!(pending.action, InstallAction::Update);
+    assert_eq!(pending.input["expectedHash"], inspected["hash"]);
+    assert_eq!(pending.input["expectedSessionRevision"], inspected["installation"]["expectedSessionRevision"]);
+    assert!(pending.input.get("allowNative").is_none(), "download preparation never grants native access");
+    assert!(app.ui.extensions.path.is_empty());
+    assert_eq!(app.session.extensions.installed["org.photocraft.quick-tools"].extension.manifest.version, "1.0.0");
 }
 
 #[test]
@@ -337,7 +585,7 @@ fn panels_show_success_failure_cancellation_and_stale_source_outcomes() {
         let panel = app.ui.extensions.panels.get_mut("org.photocraft.quick-tools").unwrap();
         panel.job = Some(job.0);
         panel.message = "Processing…".into();
-        let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+        let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(initialized_windows(), app);
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
         h.run_steps(3);
         assert!(h.query_by_label("Cancel processing").is_some());
@@ -390,7 +638,7 @@ fn reopened_panel_clears_an_evicted_job_without_claiming_success() {
     let panel = app.ui.extensions.panels.get_mut("org.photocraft.quick-tools").unwrap();
     panel.job = Some(original.0);
     panel.message = "Processing…".into();
-    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 800.0)).build_ui_state(initialized_windows(), app);
     PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
     h.run_steps(3);
     let panel = &h.state().ui.extensions.panels["org.photocraft.quick-tools"];
@@ -421,7 +669,7 @@ fn native_packages_are_reviewed_installed_and_opened_without_running_workers() {
     std::fs::create_dir(&dir.0).unwrap();
     let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
     app.session.extensions.attach_folder(dir.0.join("Extensions")).unwrap();
-    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 900.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+    let mut h = Harness::builder().with_size(egui::vec2(1100.0, 900.0)).build_ui_state(initialized_windows(), app);
     PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
     struct NativePackageFixture {
         id: &'static str,
@@ -509,7 +757,7 @@ fn native_packages_are_reviewed_installed_and_opened_without_running_workers() {
         assert_eq!(h.state().session.extensions.installed[*id].native.as_ref().unwrap().package.native.as_ref().unwrap().service, *service);
         assert_eq!(h.state().session.extensions.installed[*id].storage, storage);
         assert!(h.query_by_label(&storage::label(storage)).is_some());
-        assert_eq!(h.query_all_by_label("Local processing engine included and ready.").count(), installed_count + 1);
+        assert_eq!(h.query_all_by_label("Local processing engine included.").count(), installed_count + 1);
         h.get_by_label("Done").click();
         h.run_steps(3);
         assert!(!h.state().ui.extensions.manager_open);
@@ -539,6 +787,73 @@ fn native_packages_are_reviewed_installed_and_opened_without_running_workers() {
     assert_eq!(entries.iter().rfind(|item| item.path == ["Plugins"]).unwrap().id, MANAGER);
 }
 
+/// One bounded capture batch for the manager's existing native themes and compact layout.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore = "requires PHOTOCRAFT_PLUGIN_MANAGER_CAPTURES; renders the native plugin manager"]
+fn plugin_manager_visuals() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    let captures = std::path::PathBuf::from(std::env::var_os("PHOTOCRAFT_PLUGIN_MANAGER_CAPTURES").unwrap());
+    std::fs::create_dir_all(&captures).unwrap();
+    for phase in ["empty", "permissions", "installed", "updates", "update-permissions"] {
+        let mut app = if ["installed", "updates", "update-permissions"].contains(&phase) {
+            app()
+        } else {
+            PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default())
+        };
+        app.ui.extensions.manager_open = true;
+        if phase == "permissions" {
+            installer::review_answer(
+                &mut app,
+                FileDialogAnswer::Contents(
+                    "Hello-PhotoCraft.pcext".into(),
+                    module(include_str!("../../../../examples/extensions/plugin-starter/manifest.json")),
+                ),
+            )
+            .unwrap();
+        }
+        if phase == "updates" {
+            finish_manager_work(
+                &mut app,
+                ManagerWork::Check,
+                &json!({"updates":[{
+                    "id":"org.photocraft.quick-tools", "status":"available", "installedVersion":"1.0.0", "version":"2.0.0", "candidate":"test-visual-candidate"
+                }]}),
+            )
+            .unwrap();
+        }
+        if phase == "update-permissions" {
+            let mut manifest: Value = serde_json::from_str(include_str!("../../../../examples/extensions/quick-tools/manifest.json")).unwrap();
+            manifest["version"] = json!("2.0.0");
+            installer::review_answer(&mut app, FileDialogAnswer::Contents("Quick-Tools-2.0.0.pcext".into(), module(&manifest.to_string()))).unwrap();
+        }
+        let mut h = Harness::builder().with_size(egui::vec2(1152.0, 768.0)).wgpu().build_ui_state(initialized_windows(), app);
+        for theme in [crate::theme::ThemeKind::ProMedium, crate::theme::ThemeKind::ProLight, crate::theme::ThemeKind::Classic] {
+            for (width, height) in [(1152.0, 768.0), (640.0, 480.0)] {
+                h.set_size(egui::vec2(width, height));
+                h.ctx.memory_mut(|memory| {
+                    memory.reset_areas();
+                    memory.data.clear();
+                });
+                PhotocraftApp::setup_context(&h.ctx, theme);
+                h.run_steps(8);
+                let viewport = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
+                let labels = match phase {
+                    "permissions" => vec!["Browse…", "Install plugin", "Done"],
+                    "update-permissions" => vec!["Browse…", "Update plugin", "Done"],
+                    _ => vec!["Browse…", "Done"],
+                };
+                for label in labels {
+                    assert!(viewport.contains_rect(h.get_by_label(label).rect()), "{phase} {} {width}x{height}: {label} is clipped", theme.id());
+                }
+                assert!(h.query_by_label("Review plugin").is_none());
+                assert!(h.query_by_label("Drop a plugin file here\nor click to browse").is_none());
+                h.render().unwrap().save(captures.join(format!("plugin-manager-{phase}-{}-{width:.0}x{height:.0}.png", theme.id()))).unwrap();
+            }
+        }
+    }
+}
+
 /// Optional visual check using a real package; never executes its worker or changes user settings.
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 #[test]
@@ -562,7 +877,7 @@ fn installed_package_storage_visuals() {
     inspect(&mut app, json!({"path": package})).unwrap();
     let size = app.ui.extensions.pending.as_ref().unwrap().storage;
     assert!(size.installed_bytes > size.model_bytes && size.model_bytes > 0);
-    let mut h = Harness::builder().with_size(egui::vec2(1152.0, 768.0)).wgpu().build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+    let mut h = Harness::builder().with_size(egui::vec2(1152.0, 768.0)).wgpu().build_ui_state(initialized_windows(), app);
     for phase in ["review", "installed"] {
         for theme in crate::theme::ThemeKind::ALL {
             PhotocraftApp::setup_context(&h.ctx, theme);

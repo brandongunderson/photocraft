@@ -19,8 +19,12 @@ Changing embedded JSON requires rebuilding. Preserve ABI helpers and license fil
 
 ## Current API boundaries
 
-The panel uses API 1 (`pce_*`), the bundled filter ABI 1 (`pc_*`), package format 2,
-and worker protocol 1. WASM guests are import-free; no WASI, filesystem/network,
+The panel uses the PhotoCraft Plugin API (`pce_*`, discriminator 2), the bundled
+filter ABI 1 (`pc_*`), package format 2, and worker protocol 1. The handler parses
+typed host event metadata and declares `host.commands.invoke` plus its exact command
+grant. Additive envelope fields are allowed; incompatible protocol versions fail.
+See `docs/plugin-api.md` in the matching source/kit. Obsolete panel modules must
+be rebuilt; do not restore a compatibility adapter in the editor. WASM guests are import-free; no WASI, filesystem/network,
 arbitrary drawing, or persistent instance state is provided. Native controls are
 number/int/bool/choice fields and buttons. Do not infer proposed package/worker APIs.
 
@@ -78,16 +82,19 @@ requirements, verified checks, and untested behavior. Preserve existing user aut
 
 ## Optional typed SDK authoring
 
-This existing project keeps its supported wire versions and needs no SDK migration.
-For a new API-2 project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
+This project implements the current API directly; the SDK is optional.
+For a new typed project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
 private API/SDK 0.1 sources, locks, licenses and a local guide. Edit `authoring.json`
 and the handler; generated manifests/bindings belong in Cargo `OUT_DIR`. Keep local
 SDK dependencies inside that project and retain its release hash index. Do not link
 to engine/UI sources or introduce another plugin or companion as a runtime dependency.
 The SDK is optional author tooling; availability/discovery never grants authority.
 
-Current desktop hosts coordinate native work and store changes with OS locks and
-per-plugin activation epochs. Management can return busy while native work runs.
-Keep the host-owned store lock and activation tombstones intact. Completion/Apply
-reject revoked native results; native containment, quotas and worker protocol 2
-remain additional host work. Keep project docs and this guide aligned with changes.
+Current desktop hosts use lazy descriptor discovery, bounded queues and native resource
+reservations, per-generation OS leases, revocable activation epochs and bounded preview retention.
+Worker 2 is optional, selected by runtime/worker-v2.json; worker 1 keeps its exact launch contract.
+Each plugin owns its persistent process and generation-scoped managed data. Follow the matching
+source/kit lifecycle, worker-2 and managed-storage docs before adopting migrations or rollback.
+Never modify host lock files/tombstones or another plugin's runtime/data. Admission estimates
+are not OS resource containment; restricted native remains unavailable. Keep this guide and
+project docs aligned with completed features. Existing plugins require no SDK migration.

@@ -1,4 +1,4 @@
-//! The native rendering boundary for generic API-2 command and inspector contributions.
+//! The native rendering boundary for PhotoCraft Plugin API commands and inspectors.
 use serde_json::{Value, json};
 
 use super::{Manifest, MenuItem, PhotocraftApp};
@@ -65,11 +65,20 @@ fn row_value(ui: &mut egui::Ui, label: &str, value: &str) {
 }
 
 pub(super) fn capabilities(ui: &mut egui::Ui, manifest: &Manifest) {
-    for capability in &manifest.capabilities.required {
-        ui.label(format!("• {} (version {} or later)", capability.id, capability.min_version));
-    }
-    for capability in &manifest.capabilities.optional {
-        ui.label(format!("• {} (optional, version {} or later)", capability.id, capability.min_version));
+    use photocraft_plugin_api::KnownCapability;
+    for (optional, capabilities) in [(false, &manifest.capabilities.required), (true, &manifest.capabilities.optional)] {
+        for capability in capabilities {
+            let label = match capability.id.known() {
+                Some(KnownCapability::CommandsInvoke) => continue, // The exact approved actions are listed above.
+                Some(KnownCapability::DocumentRead) => "Read document and layer information",
+                Some(KnownCapability::DocumentEdit) => "Rename layers and change layer visibility",
+                Some(KnownCapability::Events) => "Receive document change notifications",
+                Some(KnownCapability::UiViews) => "Show an information panel",
+                None => "Additional editor integration",
+            };
+            ui.label(format!("• {label}{}", if optional { " (optional)" } else { "" }))
+                .on_hover_text(format!("{} (version {} or later)", capability.id, capability.min_version));
+        }
     }
 }
 

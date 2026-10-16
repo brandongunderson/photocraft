@@ -1,26 +1,13 @@
 {
   "artifacts": [
     {
-      "blake3": "222bbd68e2846f67a8d3408ade8dbfae031da904f16f8a77d2c09ee454ffab16",
-      "license": "See embedded LICENSE and THIRD-PARTY-NOTICES.md; this catalog grants no additional redistribution rights",
-      "members": [
-        {
-          "path": "plugin.pcext",
-          "sha256": "9ec081105d49c8e45d44067ddb797626ebb79d73bb34619b72d6a7d5fe72c2f8",
-          "size": 68211
-        },
-        {
-          "path": "LICENSE",
-          "sha256": "77c414bd870a0cc1a5ec06e7aeae0d379713d1d5d2d38e8d0903002e4d572537",
-          "size": 1123
-        },
-        {
-          "path": "THIRD-PARTY-NOTICES.md",
-          "sha256": "4c66d88feb52e8da7cfe86b9728761424eed7a5c015374a1e4f29264ac2c028e",
-          "size": 778
-        }
-      ],
-      "name": "Image-Gain-windows-x86_64.pcplugin",
+      "kind": "nativeWorker",
+      "name": "Image-Gain-worker-windows-x86_64.exe",
+      "path": "extension-review/plugin-current-api-fixtures/Image-Gain-worker-windows-x86_64.exe",
+      "size": 632320,
+      "sha256": "d12ca8f004bec7323ee12749f437b738bbb1a42fa1bf9524677eca2732fb0dc0",
+      "blake3": "198fda35aa76d5d270dd61ec3c50a1ba159597c97fafc1516f93d2b481843424",
+      "license": "MIT OR Apache-2.0; exact dependency notices and licenses retained under tests/plugin-compatibility/licenses",
       "package": {
         "filters": [
           {
@@ -35,9 +22,12 @@
         },
         "packageVersion": 2
       },
-      "path": "examples/extensions/image-plugin-starter/dist/Image-Gain-windows-x86_64.pcplugin",
-      "sha256": "207cbe7603dacc5acd07aa04e1f8bbf0b704aef2b61babe93b68884864e17fa2",
-      "size": 467723
+      "origin": {
+        "archiveName": "Image-Gain-windows-x86_64.pcplugin",
+        "archiveSha256": "207cbe7603dacc5acd07aa04e1f8bbf0b704aef2b61babe93b68884864e17fa2",
+        "member": "image-gain-worker.exe",
+        "note": "Provenance only; no obsolete panel module or archive is required by these tests."
+      }
     }
   ],
   "formatVersion": 1,
@@ -49,12 +39,13 @@
       "sha256": "c7997d79c49d4406f0cb78fd6918784ab7d5abc8a530f2231a3f93c0462cc8d8"
     },
     {
-      "blake3": "d695cb37194672c5484ce05afafb17826784eebc1bbced7ded612bbaf5dc68ed",
-      "path": "frozen/image-gain-panel-v1.wasm",
-      "size": 68211,
-      "sha256": "9ec081105d49c8e45d44067ddb797626ebb79d73bb34619b72d6a7d5fe72c2f8"
+      "path": "frozen/image-gain-panel-v2.wasm",
+      "size": 101126,
+      "sha256": "290c541b3741763c781c9f881203e80effc12b0da2a8afedaa632025160432d6",
+      "blake3": "af04353608cb89fecbeaa9a5af71cbce254fed3a9495832dedbb7de1cc0fa8cf",
+      "source": "examples/extensions/image-plugin-starter; current API source built independently on 2026-10-16"
     }
   ],
-  "frozenAt": "2026-10-15",
-  "policy": "Immutable artifacts: never rebuild these bytes to make a compatibility test pass."
+  "frozenAt": "2026-10-16",
+  "policy": "Current panel fixture uses discriminator 2; original filter ABI 1 and native transport 1 bytes remain fixed. Tests consume compiled fixtures and never rebuild them."
 }

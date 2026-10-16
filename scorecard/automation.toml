@@ -51,7 +51,7 @@ id = "AUTO-219-6"
 target = "Plug-in ABI v2: panel kind, progress/cancel calls, read other layers, Last Filter repeats"
 status = "partial"
 issue = 219
-note = "Panel API 1 supports installable WASM panels and explicit editing-command grants. Package-owned native/WASM image processing has progress/cancellation, comparison previews and Apply to a new document or same-size layer. Experimental panel API 2 adds contributed commands, bounded layer snapshots, atomic rename/visibility edits, document invalidations and read-only inspectors (docs/plugin-api-v2.md). Filter ABI stays v1; broader document/pixel APIs and Last Filter repeats remain open."
+note = "The PhotoCraft Plugin API supports installable WASM panels, explicit command grants, contributed commands, bounded layer snapshots, atomic rename/visibility edits, document invalidations and read-only inspectors (docs/plugin-api.md). Package-owned native/WASM processing provides progress/cancellation, retained previews, safe Apply, private workers and managed migration/rollback. Only the current panel API is accepted; broader document/pixel APIs and Last Filter repeats remain open."
 
 [[item]]
 id = "AUTO-219-7"

@@ -1,4 +1,4 @@
 interface:
   display_name: "PhotoCraft Plugin Developer"
   short_description: "Build and validate independent PhotoCraft plugins"
-  default_prompt: "Use $photocraft-plugin-developer to build or update an independent PhotoCraft plugin using the supported APIs and verify the resulting artifact."
+  default_prompt: "Use $photocraft-plugin-developer to build or update an independent PhotoCraft Plugin API project, keep release updates optional and plugin-owned, and verify the resulting artifact."

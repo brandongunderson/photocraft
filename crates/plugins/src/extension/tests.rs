@@ -2,13 +2,17 @@ use super::*;
 use serde_json::json;
 
 fn manifest() -> Value {
-    json!({"apiVersion":1, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
+    json!({"apiVersion":2, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
         "permissions":{"commands":["image.adjustments.invert"]},
         "panel":{"fields":[{"id":"amount", "label":"Amount", "type":"int", "min":1, "max":100, "default":50}],
             "buttons":[{"id":"apply", "label":"Apply"}]}})
 }
 
 fn wasm(manifest: &Value, response: &str, body: Option<&str>) -> Vec<u8> {
+    wasm_for_version(manifest, response, body, photocraft_plugin_api::PANEL_API_VERSION as i32)
+}
+
+fn wasm_for_version(manifest: &Value, response: &str, body: Option<&str>, version: i32) -> Vec<u8> {
     let manifest = manifest.to_string();
     let quote = |s: &str| s.bytes().map(|b| format!("\\{b:02x}")).collect::<String>();
     let handler = body.map(str::to_owned).unwrap_or_else(|| format!("i64.const {}", ((response.len() as u64) << 32) | 65536));
@@ -23,7 +27,7 @@ fn wasm(manifest: &Value, response: &str, body: Option<&str>) -> Vec<u8> {
     )"#,
         quote(&manifest),
         quote(response),
-        serde_json::from_str::<Value>(&manifest).unwrap()["apiVersion"].as_u64().unwrap_or(1),
+        version,
         ((manifest.len() as u64) << 32) | 32,
         handler
     ))
@@ -51,26 +55,39 @@ fn manifest_validates_schema_defaults_and_grants() {
 }
 
 #[test]
-fn legacy_descriptors_and_responses_reject_even_empty_api2_keys() {
+fn obsolete_panel_descriptors_are_rejected_with_migration_guidance() {
+    for version in [0, 1, 3, u32::MAX] {
+        let mut value = manifest();
+        value["apiVersion"] = json!(version);
+        assert!(
+            matches!(Manifest::parse(&serde_json::to_vec(&value).unwrap()), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API")),
+            "{version}"
+        );
+    }
     for key in ["capabilities", "contributes"] {
         let mut value = manifest();
+        value["apiVersion"] = json!(1);
         value[key] = json!({});
-        assert!(Manifest::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+        assert!(
+            matches!(Manifest::parse(&serde_json::to_vec(&value).unwrap()), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API"))
+        );
     }
+}
+
+#[test]
+fn current_responses_accept_optional_broker_fields_through_one_parser() {
     for response in [r#"{"requests":[]}"#, r#"{"view":null}"#] {
-        assert!(Response::parse(response.as_bytes()).is_err());
-        assert!(Response::parse_for_version(response.as_bytes(), 1).is_err());
-        assert!(Response::parse_for_version(response.as_bytes(), 2).is_ok());
+        assert!(Response::parse(response.as_bytes()).is_ok());
     }
-    let old = Manifest::parse(&serde_json::to_vec(&manifest()).unwrap()).unwrap();
-    let serialized = serde_json::to_value(&old).unwrap();
+    let current = Manifest::parse(&serde_json::to_vec(&manifest()).unwrap()).unwrap();
+    let serialized = serde_json::to_value(&current).unwrap();
+    assert_eq!(serialized["apiVersion"], 2);
     assert!(serialized.get("capabilities").is_none());
     assert!(serialized.get("contributes").is_none());
 }
 
-fn manifest_v2() -> Value {
+fn inspector_manifest() -> Value {
     let mut value = manifest();
-    value["apiVersion"] = json!(2);
     value["capabilities"] = json!({"required":[{"id":"host.document.read","minVersion":1}],"optional":[{"id":"future.optional","minVersion":1}]});
     value["contributes"] = json!({
         "inspectors":[{"id":"org.example.panel.inspector","label":"Inspector","event":"inspect"}],
@@ -81,8 +98,8 @@ fn manifest_v2() -> Value {
 }
 
 #[test]
-fn panel2_runtime_round_trips_inspector_and_broker_requests() {
-    let value = manifest_v2();
+fn panel_runtime_round_trips_inspector_and_broker_requests() {
+    let value = inspector_manifest();
     let bytes = wasm(
         &value,
         r#"{"state":{"count":1},"view":{"title":"Layers","rows":[{"label":"Layers","value":"3"}]},"requests":[{"id":"read","method":"host.document.read","params":{}}]}"#,
@@ -97,35 +114,35 @@ fn panel2_runtime_round_trips_inspector_and_broker_requests() {
 }
 
 #[test]
-fn api_export_and_manifest_must_agree() {
-    let mut value = manifest_v2();
-    value["apiVersion"] = json!(1);
-    value.as_object_mut().unwrap().remove("capabilities");
-    value.as_object_mut().unwrap().remove("contributes");
-    value["panel"]["buttons"] = json!([{"id":"apply","label":"Apply"}]);
-    let bytes = wasm(&value, "{}", None);
-    // Replace a single version constant in a WAT source to ensure the embedded descriptor
-    // and exported version are checked independently.
-    let descriptor = serde_json::to_vec(&value).unwrap();
-    let quoted = descriptor.iter().map(|b| format!("\\{b:02x}")).collect::<String>();
-    let mismatch = wat::parse_str(format!(
-        r#"(module
-        (memory (export "memory") 4)
-        (data (i32.const 32) "{quoted}")
-        (func (export "pce_api_version") (result i32) i32.const 2)
-        (func (export "pce_manifest") (result i64) i64.const {})
-        (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
-        (func (export "pce_handle") (param i32 i32) (result i64) i64.const 0))"#,
-        ((descriptor.len() as u64) << 32) | 32
-    ))
-    .unwrap();
-    assert!(Extension::load(&bytes).is_ok());
-    assert!(matches!(Extension::load(&mismatch), Err(Error::Abi(message)) if message.contains("differs")));
+fn exported_and_embedded_panel_versions_require_the_current_api() {
+    let current = manifest();
+    assert!(Extension::load(&wasm(&current, "{}", None)).is_ok());
+    for version in [-1, 0, 1, 3] {
+        assert!(
+            matches!(Extension::load(&wasm_for_version(&current, "{}", None, version)), Err(Error::Abi(message)) if message.contains("current PhotoCraft Plugin API")),
+            "{version}"
+        );
+    }
+    let mut obsolete = current;
+    obsolete["apiVersion"] = json!(1);
+    assert!(matches!(Extension::load(&wasm(&obsolete, "{}", None)), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API")));
 }
 
 #[test]
-fn panel2_descriptors_and_response_budgets_are_validated_before_execution() {
-    let mut value = manifest_v2();
+fn unsupported_panel_version_is_rejected_before_running_its_manifest_export() {
+    let obsolete = wat::parse_str(
+        r#"(module
+        (memory (export "memory") 1)
+        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_manifest") (result i64) unreachable))"#,
+    )
+    .unwrap();
+    assert!(matches!(Extension::load(&obsolete), Err(Error::Abi(message)) if message.contains("current PhotoCraft Plugin API")));
+}
+
+#[test]
+fn panel_descriptors_and_response_budgets_are_validated_before_execution() {
+    let mut value = inspector_manifest();
     value["contributes"]["inspectors"][0]["id"] = json!("another.plugin.inspector");
     assert!(Manifest::parse(&serde_json::to_vec(&value).unwrap()).is_err());
     for response in [
@@ -135,7 +152,7 @@ fn panel2_descriptors_and_response_budgets_are_validated_before_execution() {
         json!({"view":{"rows":[{"label":"Layers","value":"a".repeat(1025)}]}}),
         json!({"requests":(0..9).map(|i|json!({"id":format!("request{i}"),"method":"host.document.read","params":{}})).collect::<Vec<_>>()}),
     ] {
-        assert!(Response::parse_for_version(&serde_json::to_vec(&response).unwrap(), 2).is_err());
+        assert!(Response::parse(&serde_json::to_vec(&response).unwrap()).is_err());
     }
 }
 
@@ -209,5 +226,5 @@ fn response_state_has_headroom_for_the_next_request() {
     let oversized = json!({"state": "x".repeat(MAX_STATE_BYTES - 1)});
     let bytes = serde_json::to_vec(&oversized).unwrap();
     assert!(bytes.len() < MAX_JSON_BYTES);
-    assert!(matches!(Response::parse(&bytes), Err(Error::Limit(message)) if message.contains("state size")));
+    assert!(matches!(Response::parse(&bytes), Err(Error::Limit(message)) if message.contains("state")));
 }

@@ -107,7 +107,8 @@ and use are documented in [`tests/plugin-compatibility/README.md`](tests/plugin-
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
-| `tests/plugin-compatibility/frozen/image-gain-panel-v1.wasm`, `channel-gain-filter-v1.wasm` | Frozen neutral plugin compatibility modules | PhotoCraft contributors | Exact compiled Image Gain release package pinned in `tests/plugin-compatibility/catalog.json`; licenses under `tests/plugin-compatibility/licenses` | MIT OR Apache-2.0 |
+| `tests/plugin-compatibility/frozen/image-gain-panel-v2.wasm` | Neutral panel fixture for the current PhotoCraft Plugin API | PhotoCraft contributors | Built independently from `examples/extensions/image-plugin-starter`; hash pinned in `tests/plugin-compatibility/catalog.json`; licenses under `tests/plugin-compatibility/licenses` | MIT OR Apache-2.0 |
+| `tests/plugin-compatibility/frozen/channel-gain-filter-v1.wasm` | Frozen neutral filter ABI fixture | PhotoCraft contributors | Exact compiled Channel Gain payload pinned in `tests/plugin-compatibility/catalog.json`; licenses under `tests/plugin-compatibility/licenses` | MIT OR Apache-2.0 |
 
 ## Downloaded test corpora (not committed, not shipped)
 

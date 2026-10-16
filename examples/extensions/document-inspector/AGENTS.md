@@ -15,13 +15,13 @@ When creating a derivative, change the embedded identity/authorship/version and
 rename inspector/subscription IDs into the new plugin namespace. Keep handler event
 names and matching subscription handlers consistent. Rebuild after manifest changes.
 
-## Read-only API-2 behavior
+## Read-only current API behavior
 
-This guest uses experimental panel API 2 and existing package format 2. Its required
+This guest uses experimental the PhotoCraft Plugin API and existing package format 2. Its required
 capabilities are `host.document.read`, `host.events`, and `host.ui.views`; it needs
 no document-edit capability or legacy command grants. Core WASM remains import-free,
-with `pce_*` exports and fresh instances using host-carried JSON state. Package 3,
-custom layouts, and general asynchronous plugin instances are not current contracts.
+with `pce_*` exports and fresh instances using host-carried JSON state. Richer
+custom layouts and general asynchronous plugin instances are not current contracts.
 
 Opening the inspector activates the document-change subscription; closing/disabling/
 removing it ends that subscription. The host coalesces notifications. Render bounded
@@ -58,20 +58,23 @@ desktop host, use scratch documents to verify updates after edits, selection, Un
 and document switching; closing/disabling/replacing the plugin must stop stale updates.
 Guest tests and screenshots alone do not establish subscription cleanup or host isolation.
 Restricted MCP denies installation; use an authorized local test route or report it
-untested. Deliver source/package paths, API-2 requirements, checks, and limitations.
+untested. Deliver source/package paths, current API requirements, checks, and limitations.
 
 ## Optional typed SDK authoring
 
 This existing project keeps its supported wire versions and needs no SDK migration.
-For a new API-2 project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
+For a new current API project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
 private API/SDK 0.1 sources, locks, licenses and a local guide. Edit `authoring.json`
 and the handler; generated manifests/bindings belong in Cargo `OUT_DIR`. Keep local
 SDK dependencies inside that project and retain its release hash index. Do not link
 to engine/UI sources or introduce another plugin or companion as a runtime dependency.
 The SDK is optional author tooling; availability/discovery never grants authority.
 
-Current desktop hosts coordinate native work and store changes with OS locks and
-per-plugin activation epochs. Management can return busy while native work runs.
-Keep the host-owned store lock and activation tombstones intact. Completion/Apply
-reject revoked native results; native containment, quotas and worker protocol 2
-remain additional host work. Keep project docs and this guide aligned with changes.
+Current desktop hosts use lazy descriptor discovery, bounded queues and native resource
+reservations, per-generation OS leases, revocable activation epochs and bounded preview retention.
+Worker 2 is optional, selected by runtime/worker-v2.json; worker 1 keeps its exact launch contract.
+Each plugin owns its persistent process and generation-scoped managed data. Follow the matching
+source/kit lifecycle, worker-2 and managed-storage docs before adopting migrations or rollback.
+Never modify host lock files/tombstones or another plugin's runtime/data. Admission estimates
+are not OS resource containment; restricted native remains unavailable. Keep this guide and
+project docs aligned with completed features. Existing plugins require no SDK migration.

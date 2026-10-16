@@ -290,7 +290,7 @@ pub enum Started {
 
 /// Commands that never edit the active document, allowed while a job runs on it.
 fn independent_of_document(id: &str) -> bool {
-    const PREFIXES: &[&str] = &["jobs.", "tools.", "view.", "window.", "help.", "brush.presets.", "gradient.presets."];
+    const PREFIXES: &[&str] = &["jobs.", "tools.", "view.", "window.", "help.", "brush.presets.", "gradient.presets.", "extension.updates."];
     const IDS: &[&str] = &["file.new", "file.close", "file.closeAll", "edit.preferences", "edit.colorSettings", "edit.keyboardShortcuts", "edit.menus"];
     PREFIXES.iter().any(|p| id.starts_with(p)) || IDS.contains(&id)
 }
@@ -559,6 +559,8 @@ impl Session {
     /// Apply finished background jobs (on this thread) and return every job that ended since
     /// the last call. Cheap when nothing runs; the UI calls it every frame.
     pub fn poll_jobs(&mut self) -> Vec<JobEvent> {
+        #[cfg(not(target_arch = "wasm32"))]
+        self.extensions.updates.expire();
         let mut i = 0;
         while i < self.jobs.running.len() {
             match self.jobs.running.get(i).map(|r| r.rx.try_recv()) {

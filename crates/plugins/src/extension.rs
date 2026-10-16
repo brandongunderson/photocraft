@@ -4,7 +4,7 @@ mod runtime;
 
 use std::collections::BTreeSet;
 
-use photocraft_plugin_api::{BrokerRequest, Capabilities, Contributions, InspectorView};
+use photocraft_plugin_api::{BrokerRequest, Capabilities, Contributions, InspectorView, UpdateSource};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -30,6 +30,10 @@ pub struct Manifest {
     pub author: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates: Option<UpdateSource>,
     pub permissions: Permissions,
     pub panel: Panel,
     #[serde(default, skip_serializing_if = "Capabilities::is_empty")]
@@ -112,17 +116,14 @@ impl Manifest {
         if bytes.len() > crate::manifest::MAX_MANIFEST_BYTES {
             return Err(invalid("extension manifest exceeds 64 KiB"));
         }
-        let value: Value = serde_json::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;
         let manifest: Self = serde_json::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;
-        if !matches!(manifest.api_version, 1 | 2) {
-            return Err(invalid("unsupported extension apiVersion (expected 1 or 2)"));
+        if manifest.api_version != photocraft_plugin_api::PANEL_API_VERSION {
+            return Err(invalid(format!(
+                "unsupported panel apiVersion {}; expected 2 for the current PhotoCraft Plugin API. Rebuild or update this plugin",
+                manifest.api_version
+            )));
         }
-        if manifest.api_version == 1 && (value.get("capabilities").is_some() || value.get("contributes").is_some()) {
-            return Err(invalid("panel API 1 does not accept capabilities or contributions"));
-        }
-        if manifest.api_version == 2 {
-            photocraft_plugin_api::Descriptor::parse(bytes).map_err(|e| invalid(e.to_string()))?;
-        }
+        photocraft_plugin_api::Descriptor::parse(bytes).map_err(|e| invalid(e.to_string()))?;
         if !crate::manifest::valid_id(&manifest.id) || manifest.id != manifest.id.to_ascii_lowercase() || manifest.id.starts_with('.') {
             return Err(invalid(
                 "extension id must be lowercase ASCII, start with a letter or digit, and contain only letters, digits, dots, underscores or hyphens",
@@ -131,7 +132,7 @@ impl Manifest {
         if !manifest.id.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric) {
             return Err(invalid("extension id must start with a letter or digit"));
         }
-        let requires_button = manifest.api_version == 1 || manifest.contributes.inspectors.is_empty();
+        let requires_button = manifest.contributes.inspectors.is_empty();
         if manifest.panel.fields.len() > 32 || (requires_button && manifest.panel.buttons.is_empty()) || manifest.panel.buttons.len() > 16 {
             return Err(invalid("extension panels need 1–16 buttons and at most 32 fields"));
         }
@@ -193,44 +194,15 @@ impl Manifest {
 
 impl Response {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() > MAX_JSON_BYTES {
-            return Err(Error::Limit("extension response size".into()));
-        }
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct LegacyResponse {
-            #[serde(default)]
-            state: Value,
-            #[serde(default)]
-            message: String,
-            #[serde(default)]
-            commands: Vec<Invocation>,
-        }
-        let legacy: LegacyResponse = serde_json::from_slice(bytes).map_err(|e| Error::Abi(format!("extension response: {e}")))?;
-        let response = Self { state: legacy.state, message: legacy.message, commands: legacy.commands, requests: Vec::new(), view: None };
-        let state = serde_json::to_vec(&response.state).map_err(|e| Error::Abi(format!("extension state: {e}")))?;
-        if state.len() > MAX_STATE_BYTES {
-            return Err(Error::Limit("extension state size (limit 128 KiB)".into()));
-        }
-        if response.commands.len() > MAX_COMMANDS || response.message.len() > 4096 {
-            return Err(Error::Limit("extension response command/message budget".into()));
-        }
-        if response.commands.iter().any(|c| !c.params.is_object()) {
-            return Err(Error::Params("extension command params must be objects".into()));
-        }
-        Ok(response)
-    }
-
-    pub fn parse_for_version(bytes: &[u8], version: u32) -> Result<Self> {
-        if version == 1 {
-            return Self::parse(bytes);
-        }
-        if version != 2 {
-            return Err(Error::Abi("unsupported extension response API".into()));
-        }
-        let parsed = photocraft_plugin_api::PanelResponse::parse(bytes).map_err(|e| match e.code {
-            photocraft_plugin_api::ErrorCode::LimitExceeded => Error::Limit(e.to_string()),
-            _ => Error::Abi(format!("extension response: {e}")),
+        let parsed = photocraft_plugin_api::PanelResponse::parse(bytes).map_err(|e| {
+            let message = match e.details.get("path").and_then(Value::as_str).filter(|path| path.len() <= 256 && path.chars().all(|c| !c.is_control())) {
+                Some(path) => format!("{path}: {e}"),
+                None => e.to_string(),
+            };
+            match e.code {
+                photocraft_plugin_api::ErrorCode::LimitExceeded => Error::Limit(message),
+                _ => Error::Abi(format!("extension response: {message}")),
+            }
         })?;
         Ok(Self {
             state: parsed.state,

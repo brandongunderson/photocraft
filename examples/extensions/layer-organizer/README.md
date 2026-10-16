@@ -1,6 +1,6 @@
 # Layer Organizer
 
-An independently built API-2 WASM plugin. Its panel and contributed command number
+An independently built current API WASM plugin. Its panel and contributed command number
 and name all layers (or only selected layers), using one atomic host edit request.
 PhotoCraft validates the complete request against a scoped document handle and
 revision before applying it as one Undo step. This example handles up to 128 layers;
@@ -26,8 +26,8 @@ the plugin panel to select a prefix/scope, or run **Plugins > Layer Organizer >
 Organize layer names** with default settings. The command also appears in the
 command palette and can receive a user shortcut. Undo reverses every renamed layer.
 
-The API-2 panel is carried by the existing panel-only package format 2. Package
-format 3 is a separate future contract. Older hosts that support only panel API 1
+The current API panel is carried by the existing panel-only package format 2. Package
+format 2 remains the container. Older hosts that support only panel API 1
 reject this package without affecting existing plugins.
 
 ## Tests

@@ -8,7 +8,12 @@ use photocraft_doc::Size;
 const PLUGIN: &str = "org.example.preview";
 
 fn extension_bytes() -> Vec<u8> {
-    let manifest = json!({"apiVersion":1,"id":PLUGIN,"name":"Preview fixture","version":"1.0.0",
+    extension_bytes_for(PLUGIN)
+}
+
+fn extension_bytes_for(id: &str) -> Vec<u8> {
+    let manifest = json!({"apiVersion":2,"id":id,"name":"Preview fixture","version":"1.0.0",
+        "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
         "permissions":{"commands":["plugin.processImage"]},"panel":{"buttons":[{"id":"process","label":"Preview"}]}})
     .to_string();
     let quote = manifest.bytes().map(|b| format!("\\{b:02x}")).collect::<String>();
@@ -17,7 +22,7 @@ fn extension_bytes() -> Vec<u8> {
         r#"(module
         (memory (export "memory") 4 512)
         (data (i32.const 32) "{quote}")
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 2)
         (func (export "pce_manifest") (result i64) i64.const {packed})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const 0)
@@ -35,6 +40,7 @@ fn session() -> Session {
     s.execute("file.new", json!({"width":8,"height":6,"background":"white"})).unwrap();
     let native = Arc::new(InstalledNative {
         generation: None,
+        worker_v2: None,
         worker: "unused-fixture-worker.exe".into(),
         package: PackageInfo {
             package_version: 2,
@@ -46,6 +52,8 @@ fn session() -> Session {
     s.extensions.installed.insert(
         PLUGIN.into(),
         Installed {
+            #[cfg(not(target_arch = "wasm32"))]
+            deferred: None,
             extension: extension(),
             enabled: true,
             state: json!({"runs":0}),
@@ -296,7 +304,7 @@ fn discard_inflight_token_rejects_late_result_and_source_close_releases_it() {
     let binding = PreviewBinding::for_native(&s, &native, None).unwrap();
     let id = reserve(&mut s, source.id, &binding).unwrap();
     s.close(0);
-    assert!(s.extensions.previews.pending.is_none());
+    assert!(s.extensions.previews.pending.is_empty());
     assert!(s.plugin_preview(id).is_none());
 }
 
@@ -313,9 +321,9 @@ fn disabling_and_reenabling_before_completion_cannot_resurrect_an_inflight_previ
     let id = reserve(&mut s, source.id, &binding).unwrap();
     // An unrelated plugin does not own this pending operation.
     s.forget_plugin_preview("org.example.unrelated");
-    assert!(s.extensions.previews.pending.is_some());
+    assert!(!s.extensions.previews.pending.is_empty());
     s.execute("extension.enable", json!({"id":PLUGIN,"enabled":false})).unwrap();
-    assert!(s.extensions.previews.pending.is_none());
+    assert!(s.extensions.previews.pending.is_empty());
     s.execute("extension.enable", json!({"id":PLUGIN,"enabled":true})).unwrap();
     assert!(Arc::ptr_eq(&extension, &s.extensions.installed[PLUGIN].extension));
     // The slow worker's result arrives only after the same installation was re-enabled.
@@ -362,4 +370,86 @@ fn plugin_management_immediately_releases_the_completed_preview() {
         assert!(result.upgrade().is_none(), "result retained after {action}");
         assert!(Arc::ptr_eq(&source, &s.active().unwrap().doc));
     }
+}
+
+fn install_other(s: &mut Session) -> &'static str {
+    let id = "org.example.preview-other";
+    let mut donor = session();
+    let mut installed = donor.extensions.installed.remove(PLUGIN).unwrap();
+    installed.extension = Arc::new(Extension::load(&extension_bytes_for(id)).unwrap());
+    s.extensions.installed.insert(id.into(), installed);
+    id
+}
+
+fn stage_other(s: &mut Session, id: &str) -> u64 {
+    let source = Arc::clone(&s.active().unwrap().doc);
+    let revision = s.active().unwrap().revision;
+    let extension = Arc::clone(&s.extensions.installed[id].extension);
+    let binding = PreviewBinding::for_installed(s, id, &extension, None).unwrap();
+    let token = reserve(s, source.id, &binding).unwrap();
+    stage(s, token, Arc::clone(&source), revision, (*source).clone(), binding).unwrap();
+    token
+}
+
+#[test]
+fn independent_plugins_and_sources_keep_their_own_unapplied_comparisons() {
+    let mut s = session();
+    let other = install_other(&mut s);
+    let first = staged(&mut s, 1);
+    let second = stage_other(&mut s, other);
+    assert!(s.plugin_preview(first).is_some());
+    assert!(s.plugin_preview(second).is_some());
+    assert_eq!(s.plugin_previews().count(), 2);
+    s.execute("file.new", json!({"width":8,"height":6})).unwrap();
+    let third = staged(&mut s, 1);
+    assert_eq!(s.plugin_preview_for(PLUGIN).unwrap().id, third);
+    s.set_active(0);
+    assert_eq!(s.plugin_preview_for(PLUGIN).unwrap().id, first);
+    s.execute("image.pluginPreview.discard", json!({"preview":second})).unwrap();
+    assert!(s.plugin_preview(first).is_some());
+    assert!(s.plugin_preview(third).is_some());
+    s.forget_plugin_preview(PLUGIN);
+    assert!(s.plugin_preview(first).is_none());
+    assert!(s.plugin_preview(third).is_none());
+}
+
+#[test]
+fn exhausted_memory_or_count_never_evicts_an_unrelated_result() {
+    let mut s = session();
+    let other = install_other(&mut s);
+    let first = staged(&mut s, 1);
+    let source = s.active().unwrap().doc.id;
+    let extension = Arc::clone(&s.extensions.installed[other].extension);
+    let binding = PreviewBinding::for_installed(&s, other, &extension, None).unwrap();
+    assert!(reserve_with_budget(&mut s, source, &binding, MAX_PREVIEW_BYTES).is_err());
+    assert!(s.plugin_preview(first).is_some());
+    for _ in 1..MAX_PREVIEWS {
+        s.execute("file.new", json!({"width":8,"height":6})).unwrap();
+        staged(&mut s, 1);
+    }
+    s.execute("file.new", json!({"width":8,"height":6})).unwrap();
+    let source = s.active().unwrap().doc.id;
+    let extension = Arc::clone(&s.extensions.installed[PLUGIN].extension);
+    let binding = PreviewBinding::for_installed(&s, PLUGIN, &extension, None).unwrap();
+    assert!(reserve(&mut s, source, &binding).is_err());
+    assert_eq!(s.plugin_previews().count(), MAX_PREVIEWS);
+    assert!(s.plugin_preview(first).is_some());
+    s.execute("image.pluginPreview.discard", json!({"preview":first})).unwrap();
+    assert!(reserve(&mut s, source, &binding).is_ok());
+}
+
+#[test]
+fn failed_or_cancelled_work_releases_its_pending_memory_on_next_admission() {
+    let mut s = session();
+    let source = s.active().unwrap().doc.id;
+    let extension = Arc::clone(&s.extensions.installed[PLUGIN].extension);
+    let binding = PreviewBinding::for_installed(&s, PLUGIN, &extension, None).unwrap();
+    let pending = reserve_with_budget(&mut s, source, &binding, MAX_PREVIEW_BYTES).unwrap();
+    let active = lifetime(&mut s, pending).unwrap();
+    assert_eq!(s.plugin_preview_usage()["pending"], 1);
+    drop(active);
+    let other = install_other(&mut s);
+    let second = stage_other(&mut s, other);
+    assert!(!s.extensions.previews.pending.contains_key(&pending));
+    assert!(s.plugin_preview(second).is_some());
 }

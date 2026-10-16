@@ -2,7 +2,9 @@
 
 Copy this folder to start an independent plugin project. It builds a single
 `Hello-PhotoCraft.pcext`: ordinary core WebAssembly with an embedded manifest.
-There is no dependency on PhotoCraft's Rust workspace or an external SDK.
+It implements the PhotoCraft Plugin API directly, with no dependency on the editor
+workspace or an external SDK. The manifest/export discriminator is 2; obsolete
+panel API 1 modules must be rebuilt for the current host.
 PhotoCraft draws the native panel from `manifest.json` and runs the guest only
 when a declared button is clicked.
 
@@ -90,7 +92,8 @@ into its managed installation store.
    without control characters; the engine command itself requires a string.
    Keep the test's expected choices/default in sync when you change them.
 3. Add or change button ids and match those ids in `handler::handle`. Declare
-   every editing command under `permissions.commands`, then return command
+   every editing command under `permissions.commands`, retain the required
+   `host.commands.invoke` capability, then return command
    entries with an object-valued `params`. Discover supported commands with
    `extension.commands` and inspect their parameters with `command.list`.
 4. Keep permissions narrow. This example needs only `documentRead` for the
@@ -102,7 +105,7 @@ into its managed installation store.
    name in both build scripts; the output `.pcext` name is otherwise independent
    of the manifest id.
 
-API v1 fields support `number`, `int`, `bool`, and `choice`. A free-text field
+This starter uses compact `number`, `int`, `bool`, and `choice` controls. A free-text field
 is not supported, so layer names are a dropdown. Arbitrary layouts, HTML,
 JavaScript, webviews, file/network APIs, custom canvas overlays and general
 asynchronous callbacks are outside this native-panel contract. Use the
@@ -129,9 +132,11 @@ bounds response serialization. It never turns a supplied integer/pointer
 into a Rust slice. A zero allocation or zero packed response on an ABI/buffer
 failure is rejected by the host before an edit or state commit.
 
-For every click PhotoCraft creates a **fresh guest instance**. Requests have
-`event`, validated/defaulted `values`, `state`, and `document` (null without
-an active document or read permission). The handler proposes a response with
+For every click PhotoCraft creates a **fresh guest instance**. Requests use a typed envelope with the current `apiVersion` discriminator, `host`
+capability metadata, optional negotiated `compatibility`, `event`, validated/defaulted
+`values`, `state`, `document` and `responses`. The document is null without an active
+document or read permission. Additive envelope metadata is accepted. Wrong protocol
+versions or missing command capability produce a bounded failure without commands. The handler proposes a response with
 `state`, `message`, and `commands`. Its state starts at null, then holds
 `{"createdLayers": 1}` after the first successful create. The counter is
 session-wide for this installed plugin, shared across documents, and saturates
@@ -146,7 +151,7 @@ JSON requests.
 PhotoCraft validates the complete command list against declared permissions
 and the caller's authorization before the first edit. It commits returned
 state only after all commands succeed. Omitting `state` would reset it to null
-on success. The guest has no command results or later callbacks and must not
+on success. This starter does not request broker queries or continuation events and must not
 rely on globals surviving the click. Multiple commands would run sequentially
 and would not form one atomic transaction; earlier edits could remain if a
 later command failed. This starter emits at most one editing command.
@@ -161,6 +166,7 @@ cover malformed JSON, invalid buffers/values/events/state/document metadata,
 no active document, command shape, state preservation and response limits.
 
 For the complete host contract, see
+[PhotoCraft Plugin API](../../../docs/plugin-api.md),
 [`docs/extensions.md`](../../../docs/extensions.md) and the general
 [`docs/plugin-development.md`](../../../docs/plugin-development.md). These
 links refer to the PhotoCraft source checkout; the starter itself can be

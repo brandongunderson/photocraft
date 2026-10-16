@@ -19,7 +19,8 @@ for installation and dependency ownership. This page describes the shared result
 The core has no model allowlist, plugin-specific executable name or AI processing adapter.
 The earlier typed AI service commands and version-1 package format were removed. Rebuild old
 packages for the generic interface and replace them through Manage Plugins under the same id.
-Panel API v1 and standalone filter ABI v1 remain supported; these are different version numbers.
+Panels use the current PhotoCraft Plugin API (internal discriminator `2`); obsolete version-1
+panels must be rebuilt. Standalone filter ABI 1 remains supported and is a separate contract.
 
 ```mermaid
 flowchart LR

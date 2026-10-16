@@ -1,11 +1,12 @@
 {
-  "apiVersion": 1,
+  "apiVersion": 2,
   "id": "org.example.image-gain",
   "name": "Image Gain",
   "version": "1.0.0",
   "author": "Example author",
   "description": "A standalone image processor with native and sandboxed backends. Preview before applying.",
   "permissions": {"documentRead": true, "commands": ["plugin.processImage"]},
+  "capabilities": {"required": [{"id": "host.commands.invoke", "minVersion": 1}], "optional": []},
   "panel": {
     "preview": true,
     "fields": [

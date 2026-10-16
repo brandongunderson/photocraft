@@ -1,7 +1,7 @@
 # Panel plugin command reference
 
 Generated from this PhotoCraft build's `extension.commands` and CLI command descriptions.
-Panel API version **1**; **46** permitted command ids.
+The current PhotoCraft Plugin API; **46** permitted command ids.
 The running host remains authoritative. Start with the [handbook](plugin-development.md).
 
 ## How to use this reference
@@ -412,3 +412,20 @@ not install plugins, edit user documents or attach a persistent settings store.
 
 After regenerating, review changes against `crates/engine/src/extension_cmds.rs` and the
 individual command implementations. New grants require a host API/security review.
+
+
+## Host lifecycle administration
+
+These commands are host/control operations, outside a guest's command allowlist:
+
+| Command | Parameters and behavior |
+|---|---|
+| `extension.commands` | Reports current worker transports, installed-descriptor cap and scheduler limits/usage. |
+| `extension.list` | Includes descriptor lifecycle and optional persistent-runtime status; does not activate dormant plugins. |
+| `extension.runtime` | `{id, action:"status"}` (default), `"retry"` or `"reset"`; reset runs as a cancellable background job. |
+| `extension.storage` | `{id}` reports active managed settings/data/cache/secrets-reference usage. |
+| `extension.rollback` | `{id}` validates and selects the previous code/managed-state pair. |
+| `extension.remove` | `{id, purgeData:false}` preserves managed state by default; explicit purge removes only safe owned generations. |
+
+These extend the same developing API. Package, filter and transport format labels describe
+different wire contracts, not additional production APIs for each implementation phase.

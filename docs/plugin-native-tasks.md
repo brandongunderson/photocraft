@@ -2,8 +2,8 @@
 
 `plugin.runTask` runs document-independent maintenance in an installed version-2 package's
 own native worker. Use it for explicit asset management, diagnostics or other operations that
-do not need an image. It requires a host build containing this command; panel API version 1
-and package format version 2 remain unchanged. Older hosts reject the unsupported grant.
+do not need an image. It uses the current PhotoCraft Plugin API and package format 2.
+Hosts without this command reject its unsupported grant.
 
 ## Grant and invoke
 
@@ -29,12 +29,16 @@ denies both direct calls and tasks nested in `extension.invoke`.
 
 No open document is required. The host runs work asynchronously when the UI starts it, shows
 progress and cancellation, and exposes the normal `jobs.list`/`jobs.cancel` APIs. A native
-installation cannot start another task or native image operation until its current work and
-cancel drain finish. Updating/removing the installation also waits for its native leases.
-Current desktop instances hold a shared OS store lock while executing the worker and
-recheck its stored generation before committing task state. Management operations on the
-same store return busy during native work. See [store locking](plugin-safety.md#cooperative-store-locking)
-for the first Phase 2 slice's coarse scope and remaining lifecycle limits.
+installation queues work through the bounded scheduler, with one executing job per private
+installation/generation. Native jobs retain a per-generation OS lease. Updating a plugin's
+managed data requires that generation to be idle; unrelated plugins remain manageable.
+Completion rechecks the selected code, activation epoch and owning panel before committing
+state. Disable/remove revoke queued and active work. See [lifecycle and resource limits](plugin-lifecycle.md).
+
+Existing workers keep the protocol below. Packages explicitly declaring
+[runtime/worker-v2.json](plugin-worker-v2.md) instead use framed persistent transport, with
+private model retention, reset, idle eviction, failure quarantine and generation-scoped
+[managed storage](plugin-managed-storage.md). No old worker is launched with `--serve`.
 
 ## Worker protocol
 

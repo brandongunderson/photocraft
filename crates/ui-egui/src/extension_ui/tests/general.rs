@@ -1,4 +1,4 @@
-//! General package UI coverage uses an independent filter fixture, not either shipped AI tool.
+//! Neutral package UI coverage uses an independently compiled filter fixture.
 use super::*;
 use egui_kittest::{
     Harness,
@@ -40,7 +40,7 @@ fn panel_module(manifest: &Value, response: &Value) -> Vec<u8> {
     wat::parse_str(format!(
         r#"(module (memory (export "memory") 4)
         (data (i32.const 32) "{}") (data (i32.const 65536) "{}")
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 2)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
@@ -54,9 +54,10 @@ fn panel_module(manifest: &Value, response: &Value) -> Vec<u8> {
 
 fn filter_package(dir: &Path) -> PathBuf {
     let manifest = json!({
-        "apiVersion":1,"id":ID,"name":"General Image Processor","version":"1.0.0",
+        "apiVersion":2,"id":ID,"name":"General Image Processor","version":"1.0.0",
         "author":"Example author","description":"An independently packaged sandboxed image processor.",
         "permissions":{"documentRead":true,"commands":["plugin.processImage"]},
+        "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
         "panel":{"preview":true,"fields":[],"buttons":[{"id":"process","label":"Generate preview"}]}
     });
     let response = json!({"state":{"runs":1},"commands":[{"command":"plugin.processImage","params":{
@@ -85,8 +86,9 @@ fn package_app(dir: &Path) -> PhotocraftApp {
 fn native_tasks_need_no_image_and_failed_tasks_preserve_an_existing_comparison() {
     for with_image in [false, true] {
         let dir = Scratch::new();
-        let manifest = json!({"apiVersion":1,"id":ID,"name":"General task test","version":"1",
+        let manifest = json!({"apiVersion":2,"id":ID,"name":"General task test","version":"1",
             "permissions":{"commands":["plugin.processImage","plugin.runTask"]},
+            "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
             "panel":{"preview":true,"buttons":[{"id":"refresh","label":"Check assets"}]}});
         let response = json!({"state":{"runs":1},"commands":[{"command":"plugin.runTask","params":{"options":{"action":"refresh"}}}]});
         let mut zip = photocraft_format::zip::ZipWriter::new();
@@ -179,7 +181,7 @@ fn filter_only_package_review_install_menu_and_done_need_no_native_consent() {
     assert_eq!(installed.filters.len(), 1);
     assert_eq!(installed.package.as_ref().unwrap().package_version, 2);
     assert!(installed.state.is_null());
-    assert!(h.query_by_label("Local processing engine included and ready.").is_none());
+    assert!(h.query_by_label("Local processing engine included.").is_none());
     let menu_id = format!("{PREFIX}{ID}");
     let entries = crate::menus::menu_items(h.state());
     let entry = entries.iter().find(|entry| entry.id == menu_id).unwrap();
@@ -199,7 +201,9 @@ fn filter_only_package_review_install_menu_and_done_need_no_native_consent() {
     let mut restarted = photocraft_engine::Session::new();
     restarted.extensions.attach_folder(dir.0.join("Extensions")).unwrap();
     assert!(restarted.extensions.load_errors.is_empty());
-    assert_eq!(restarted.extensions.installed[ID].filters.len(), 1);
+    assert!(restarted.extensions.installed[ID].filters.is_empty());
+    assert_eq!(restarted.extensions.installed[ID].package.as_ref().unwrap().filters.len(), 1);
+    assert_eq!(restarted.extensions.installed[ID].extension.lifecycle(), "idle");
     assert!(restarted.extensions.installed[ID].native.is_none());
 }
 

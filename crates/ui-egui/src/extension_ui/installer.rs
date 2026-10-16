@@ -9,6 +9,7 @@ fn supported(name: &str) -> bool {
 }
 
 fn review_source(app: &mut PhotocraftApp, name: &str, input: Value) -> Result<Value, String> {
+    ensure_idle(app)?;
     app.ui.extensions.manager_open = true;
     app.ui.extensions.pending = None;
     app.ui.extensions.status.clear();
@@ -17,30 +18,43 @@ fn review_source(app: &mut PhotocraftApp, name: &str, input: Value) -> Result<Va
     }
     app.ui.extensions.path = name.into();
     let panel = inspect(app, input.clone());
-    if panel.is_err() && !app.session.plugins_disabled && name.to_ascii_lowercase().ends_with(".wasm") && filter_input(&input) {
+    if panel.is_err()
+        && !app.session.plugins_disabled
+        && name.to_ascii_lowercase().ends_with(".wasm")
+        && let Some(id) = filter_input(&input)
+    {
         // Pixel filters use their existing sandboxed ABI and explicit confirmation dialog.
         // A .wasm panel still takes the normal manifest/permission review above.
         app.ui.extensions.status.clear();
-        return crate::plugin_ui::review_filter(app, input);
+        let result = crate::plugin_ui::review_filter(app, input)?;
+        app.ui.extensions.filter_review = Some(id);
+        return Ok(result);
     }
     panel
 }
 
-/// Detect the legacy ABI without registering it or hiding a panel's incompatibility error.
-fn filter_input(input: &Value) -> bool {
+fn ensure_idle(app: &PhotocraftApp) -> Result<(), String> {
+    if app.ui.extensions.manager_job.is_some() {
+        return Err("Wait for the current plugin operation to finish, or cancel it.".into());
+    }
+    Ok(())
+}
+
+/// Detect the standalone filter ABI without registering it or hiding a panel's incompatibility error.
+fn filter_input(input: &Value) -> Option<String> {
     let limits = photocraft_plugins::Limits::default();
     if let Some(data) = input.get("data").and_then(Value::as_str) {
         if data.len() > (limits.max_module_bytes / 3 + 1) * 4 {
-            return false;
+            return None;
         }
-        let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) else { return false };
-        return photocraft_plugins::Plugin::load(&bytes, limits).is_ok();
+        let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) else { return None };
+        return photocraft_plugins::Plugin::load(&bytes, limits).ok().map(|plugin| plugin.id().to_owned());
     }
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(path) = input.get("path").and_then(Value::as_str) {
-        return photocraft_plugins::registry::load_file(std::path::Path::new(path), limits).is_ok();
+        return photocraft_plugins::registry::load_file(std::path::Path::new(path), limits).ok().map(|plugin| plugin.id().to_owned());
     }
-    false
+    None
 }
 
 fn contents_input(name: &str, bytes: &[u8]) -> Result<Value, String> {
@@ -62,6 +76,9 @@ fn review_error(app: &mut PhotocraftApp, result: Result<Value, String>) -> Resul
 }
 
 pub(super) fn review_answer(app: &mut PhotocraftApp, answer: FileDialogAnswer) -> Result<Value, String> {
+    if let Err(error) = ensure_idle(app) {
+        return review_error(app, Err(error));
+    }
     app.ui.extensions.manager_open = true;
     app.ui.extensions.pending = None;
     let result = (|| match answer {
@@ -89,6 +106,10 @@ pub(super) fn review_arrived(app: &mut PhotocraftApp, files: &[(String, Vec<u8>)
     if !plugin {
         return false;
     }
+    if let Err(error) = ensure_idle(app) {
+        app.ui.extensions.status = error;
+        return true;
+    }
     app.ui.extensions.manager_open = true;
     app.ui.extensions.pending = None;
     let result = (|| {
@@ -112,6 +133,7 @@ pub(super) fn review_path(app: &mut PhotocraftApp) -> Result<Value, String> {
 }
 
 pub(super) fn review_drop(app: &mut PhotocraftApp, files: &[egui::DroppedFileHandle]) -> Result<(), String> {
+    ensure_idle(app)?;
     app.ui.extensions.manager_open = true;
     app.ui.extensions.pending = None;
     app.ui.extensions.status.clear();

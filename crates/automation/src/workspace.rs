@@ -364,6 +364,10 @@ fn preference_uses_ambient_filesystem(path: &str) -> bool {
 fn command_uses_ambient_path(id: &str, params: &Value) -> bool {
     match id {
         "extension.install"
+        | "extension.updates.check"
+        | "extension.updates.prepare"
+        | "extension.rollback"
+        | "extension.runtime"
         | "extension.enable"
         | "extension.remove"
         | "plugin.processImage"
@@ -855,6 +859,10 @@ mod tests {
     fn extension_management_does_not_bypass_automation_filesystem_authority() {
         for id in [
             "extension.install",
+            "extension.updates.check",
+            "extension.updates.prepare",
+            "extension.rollback",
+            "extension.runtime",
             "extension.enable",
             "extension.remove",
             "plugin.processImage",

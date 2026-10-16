@@ -1,4 +1,4 @@
-//! Independent read-only native inspector guest for PhotoCraft API 2.
+//! Independent read-only native inspector guest for the PhotoCraft Plugin API.
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 

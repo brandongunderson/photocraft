@@ -18,7 +18,7 @@ runtime requirement for users unless this plugin actually bundles and uses Pytho
 | Image Gain package | `python build.py --check`; this checks/builds root, `native/`, and `filter/`; also `python tools/test_package.py` |
 | Layer Organizer / Document Inspector | `python build.py --check` |
 
-Hello PhotoCraft supports `-Offline` / `--offline`. Image Gain and the API-2 Python
+Hello PhotoCraft supports `-Offline` / `--offline`. Image Gain and the current API Python
 builders accept `--offline`. Channel Gain's wrapper scripts currently take no
 offline flag; invoke Cargo with appropriate flags when needed. Do not assume every
 starter has the same command-line interface. Offline builds require cached crates
@@ -110,3 +110,31 @@ are sequential and do not roll back earlier successes. File writes and native ta
 side effects are not reversed by editor Undo. Inspect effects before retrying a
 request whose completion is uncertain. Report build, structural, handler-probe, and
 real-host acceptance results separately, with host/API/platform versions.
+
+
+For optional persistent workers, run real subprocess acceptance against the intended host:
+strict framing/handshake, private process reuse, reset, cancel, deadlines, idle eviction and
+quarantine recovery. Check `extension.commands` for scheduler limits and `extension.runtime`
+for status. These are trusted host/control calls, outside guest command grants. Managed
+migrations must leave the old code/data selected after failure; test explicit rollback and
+source/destination lease contention. Preserve external caches and verify independent packaging.
+Phase milestones evolve one current PhotoCraft Plugin API. Old panel version 1 is rejected;
+test its migration to the current API in the plugin's own project. Keep filter/native transport
+fixtures distinct. Native admission estimates are not OS hard limits.
+
+## Release-update acceptance
+
+When a plugin opts into GitHub Releases, test from an older installed version in a disposable
+store. Check the exact stable asset name for every claimed platform, matching semantic tag
+and embedded versions, SHA-256 metadata and downloaded bytes. Verify the available-update
+indicator, preparation, permission/native review, install success/file selection reset and
+paired data rollback. Treat network/rate-limit failures and missing assets/digests as errors
+or unsupported updates rather than claiming the plugin is current. Local installation must
+remain usable without the release service.
+
+Exercise ID/version mismatch, incompatible packages, changed reviewed bytes and a competing
+installation between review and install. Added permissions require review; a same-version
+reinstall or intentional downgrade belongs to explicit maintenance. A successful HTTP response
+does not establish installed behavior, native target compatibility or publisher signing trust.
+Release checks/downloads are trusted host commands outside panel grants; current restricted
+automation must not bypass its network/install restrictions through them.

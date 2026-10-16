@@ -176,6 +176,8 @@ fn apply_with(
     response: Response,
     launcher: impl FnOnce(Arc<Extension>, Value) -> Result<Receiver<std::result::Result<Response, String>>>,
 ) -> Result<bool> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let _admission = s.extensions.folder.as_deref().map(crate::extension_package::AdmissionGuard::store).transpose()?;
     validate_principal(s, &work.principal)?;
     if !s.extensions.platform.opened.get(id).is_some_and(|open| open.sequence == work.sequence) {
         if let Some(open) = s.extensions.platform.opened.get_mut(id) {

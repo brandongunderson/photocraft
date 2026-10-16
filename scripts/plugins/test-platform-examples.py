@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build exported API-2 examples and test their actual packages in the host."""
+"""Build independent Plugin API examples and test their actual packages in the host."""
 import argparse
 import json
 import os

@@ -23,7 +23,11 @@ impl StoreGuard {
     }
 
     fn acquire(root: &Path, exclusive: bool) -> Result<Self> {
-        let path = checked_path(root, LOCK)?;
+        Self::named(root, LOCK, exclusive)
+    }
+
+    pub(super) fn named(root: &Path, name: &str, exclusive: bool) -> Result<Self> {
+        let path = checked_path(root, name)?;
         match std::fs::symlink_metadata(&path) {
             Ok(metadata) if !metadata.is_file() || is_link(&metadata) => return Err(error("plugin store lock must be a regular file")),
             Ok(_) => {}
@@ -46,9 +50,9 @@ impl StoreGuard {
         let locked = if exclusive { file.try_lock() } else { file.try_lock_shared() };
         match locked {
             Ok(()) => Ok(Self { _file: file }),
-            Err(TryLockError::WouldBlock) => {
-                Err(error("The plugin store is busy in another operation or PhotoCraft instance. Wait for plugin work to finish, then retry."))
-            }
+            Err(TryLockError::WouldBlock) => Err(error(
+                "Plugin files are still in use by an operation or processing engine, possibly in another PhotoCraft instance. Wait for the engine to close, or disable the plugin and review the file again before retrying.",
+            )),
             Err(TryLockError::Error(cause)) => Err(error(format!("could not lock the plugin store: {cause}"))),
         }
     }

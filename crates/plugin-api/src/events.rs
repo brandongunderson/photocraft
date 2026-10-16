@@ -1,4 +1,4 @@
-//! Host-to-guest events for the supported panel-2 contract.
+//! Host-to-guest events for the current PhotoCraft Plugin API.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -70,7 +70,7 @@ impl EventRequest {
 
     pub fn validate(&self) -> Result<()> {
         if self.api_version != crate::PANEL_API_VERSION {
-            return Err(ApiError::new(ErrorCode::IncompatibleApi, "guest requires panel API 2"));
+            return Err(ApiError::new(ErrorCode::IncompatibleApi, "guest requires the current PhotoCraft Plugin API"));
         }
         self.host.validate()?;
         if self.compatibility.as_ref().is_some_and(|selected| selected.panel_api != self.api_version || selected.host_api != self.host.version) {

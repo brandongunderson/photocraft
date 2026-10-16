@@ -5,8 +5,10 @@ WASM pixel processor, and a native PhotoCraft comparison panel. It has **no Phot
 dependencies**. Copy the entire directory into a new repository; no editor source checkout,
 existing AI plugin, model, companion app or service registration is required.
 
-It requires a PhotoCraft build implementing **package version 2** and **`plugin.processImage`**.
-The panel ABI and filter ABI remain version 1. Older builds reject this package version.
+It uses the **PhotoCraft Plugin API**, **package format 2** and **`plugin.processImage`**.
+The manifest/export discriminator is 2; the filter ABI and native worker transport remain 1.
+The panel declares `host.commands.invoke` and parses the typed host event envelope before
+returning its scoped command. Old panel API 1 modules are unsupported and must be rebuilt.
 Native packages require a desktop persistent plugin store; browser installation is unsupported.
 
 ## Build
@@ -124,3 +126,5 @@ invalid values. Filter tests cover sample formats and failure behavior. These do
 the desktop acceptance steps above or establish compatibility on untested operating systems.
 
 The general guide is `docs/plugin-image-processing.md` in the PhotoCraft source/developer kit.
+The panel contract is [PhotoCraft Plugin API](../../../docs/plugin-api.md). The documentation
+links refer to the source/developer kit; building this copied project requires no host checkout.

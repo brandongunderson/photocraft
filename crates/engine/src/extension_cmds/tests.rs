@@ -1,7 +1,8 @@
 use super::*;
 
 fn manifest() -> Value {
-    json!({"apiVersion":1, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
+    json!({"apiVersion":2, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
+        "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
         "permissions":{"commands":["image.adjustments.invert", "layer.new.layer"]},
         "panel":{"buttons":[{"id":"apply", "label":"Apply"}]}})
 }
@@ -12,6 +13,34 @@ fn allowlist_contains_only_registered_commands() {
     assert!(missing.is_empty(), "unregistered extension commands: {missing:?}");
 }
 
+#[test]
+fn plugin_file_review_compares_versions_and_requires_explicit_replacement_intent() {
+    assert_eq!(disposition(None, "1.0.0").0, "install");
+    assert_eq!(disposition(Some("1.0.0"), "1.1.0").0, "update");
+    assert_eq!(disposition(Some("1.1.0"), "1.0.0").0, "downgrade");
+    assert_eq!(disposition(Some("1.0.0"), "1.0.0+rebuild").0, "reinstall");
+    assert_eq!(disposition(Some("nightly"), "1.0.0").0, "replace");
+    let mut session = Session::new();
+    install(&mut session, json!({}));
+    let mut candidate = manifest();
+    candidate["version"] = json!("1.1.0");
+    let mut input = json!({"data":b64(&wasm(&candidate, &json!({})))});
+    let review = session.execute("extension.inspect", input.clone()).unwrap();
+    assert_eq!(review["installation"]["action"], "update");
+    input.as_object_mut().unwrap().extend(review["installation"].as_object().unwrap().clone());
+    input["expectedHash"] = review["hash"].clone();
+    input["intent"] = json!("install");
+    assert!(session.execute("extension.install", input.clone()).is_err());
+    input["intent"] = json!("update");
+    session.execute("extension.enable", json!({"id":"org.example.panel","enabled":false})).unwrap();
+    assert!(session.execute("extension.install", input.clone()).err().unwrap().to_string().contains("review"));
+    let review = session.execute("extension.inspect", input.clone()).unwrap();
+    input.as_object_mut().unwrap().extend(review["installation"].as_object().unwrap().clone());
+    assert_eq!(session.execute("extension.install", input).unwrap()["action"], "update");
+    assert_eq!(session.extensions.installed["org.example.panel"].extension.manifest.version, "1.1.0");
+    assert!(!session.extensions.installed["org.example.panel"].enabled);
+}
+
 fn wasm(manifest: &Value, response: &Value) -> Vec<u8> {
     let manifest = manifest.to_string();
     let response = response.to_string();
@@ -20,7 +49,7 @@ fn wasm(manifest: &Value, response: &Value) -> Vec<u8> {
         r#"(module
         (memory (export "memory") 12 512)
         (data (i32.const 32) "{}") (data (i32.const 65536) "{}")
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 2)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 393216)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {})
@@ -67,9 +96,9 @@ fn standalone_storage_is_reported_for_inspection_installation_and_listing() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn standalone_storage_survives_legacy_load_update_and_restart() {
+fn standalone_storage_survives_raw_module_load_update_and_restart() {
     let folder = tempfile::tempdir().unwrap();
-    let bytes = wasm(&manifest(), &json!({"message":"legacy"}));
+    let bytes = wasm(&manifest(), &json!({"message":"raw module"}));
     std::fs::write(folder.path().join("org.example.panel.pcext"), &bytes).unwrap();
     let mut session = Session::new();
     session.extensions.attach_folder(folder.path().into()).unwrap();
@@ -156,7 +185,7 @@ fn oversized_state_is_rejected_before_edits_and_preserves_prior_state() {
     s.extensions.installed.get_mut("org.example.panel").unwrap().state = prior.clone();
     for _ in 0..2 {
         let failure = invoke(&mut s).unwrap_err().to_string();
-        assert!(failure.contains("state size"), "{failure}");
+        assert!(failure.contains("state"), "{failure}");
         assert!(!failure.contains("request size"), "the old state must remain usable");
         assert!(Arc::ptr_eq(&before, &s.active().unwrap().doc));
         assert_eq!(s.extensions.installed["org.example.panel"].state, prior);

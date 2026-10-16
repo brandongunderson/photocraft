@@ -6,16 +6,23 @@ the public APIs. Independent image processors can supply their own native worker
 packaged WASM filter through package version 2. This handbook takes you from a new project to a tested release using
 neutral starters. It does not depend on any AI plugin project.
 
-**API status:** preserved panel API version 1, experimental [panel API 2](plugin-api-v2.md),
-filter ABI version 1 and general package format version 2 in this source tree. Package 3 and
-worker protocol 2 remain proposals. Use a build
+**API status:** [the PhotoCraft Plugin API](plugin-api.md) is the only supported authoring contract.
+Its internal panel discriminator is `2`; obsolete version-1 panels must be rebuilt. Filter ABI
+version 1 and general package format 2 serve their existing layers. Native worker 1
+is preserved; [worker protocol 2](plugin-worker-v2.md) is an explicit persistent-worker opt-in.
+Use a build
 containing these APIs; an older release with the same application version number may not contain
 this contribution. Check that Plugins contains Manage Plugins. API versions, native package
 versions and your plugin's release version are different numbers.
 
 ## Contents
 
-- [Standalone API-2 SDK](plugin-sdk.md)
+- [Standalone current API SDK](plugin-sdk.md)
+- [Lifecycle, scheduling and recovery](plugin-lifecycle.md)
+- [Persistent native workers](plugin-worker-v2.md)
+- [Managed storage and migrations](plugin-managed-storage.md)
+- [Installation and GitHub release updates](plugin-updates.md)
+- [Future marketplace plan](plugin-marketplace.md)
 - [Development with agents](#development-with-agents)
 - [Choose a plugin type](#choose-a-plugin-type)
 - [Prepare your tools](#prepare-your-tools)
@@ -51,7 +58,7 @@ contract, files, commands, and verification rules. Copy that file with the entir
 It remains useful after extraction without linking to editor-internal source files.
 The editor's root `AGENTS.md` continues to describe core development; it is not a plugin SDK.
 
-The [standalone API-2 SDK](plugin-sdk.md) provides typed messages and safe ABI exports. Its
+The [standalone current API SDK](plugin-sdk.md) provides typed messages and safe ABI exports. Its
 `new` command creates a project with private SDK sources, one authoring manifest and generated
 bindings. SDK use is optional; existing independent starters and binaries remain supported.
 
@@ -86,8 +93,8 @@ plugin-scoped subscriptions require additional public contracts; they are not SD
 | A panel with your own native image processor or packaged WASM filters | Package version 2 plus `plugin.processImage` | `.pcplugin` | Plugins → Manage Plugins…; native-code review when a worker is included |
 | A panel distributed as a package without an image backend | Package version 2 plus panel API | `.pcplugin` | Plugins → Manage Plugins… |
 | A panel managing its own assets or diagnostics without an image open | Package version 2 plus `plugin.runTask` and an owned native worker | `.pcplugin` | Plugins → Manage Plugins…; native-code review |
-| Namespaced commands or atomic layer rename/visibility edits | Panel API 2; [Layer Organizer](../examples/extensions/layer-organizer/) | `.pcplugin` or `.pcext` | Plugins → Manage Plugins… |
-| A live read-only native inspector | Panel API 2; [Document Inspector](../examples/extensions/document-inspector/) | `.pcplugin` or `.pcext` | Plugins → Manage Plugins… |
+| Namespaced commands or atomic layer rename/visibility edits | PhotoCraft Plugin API; [Layer Organizer](../examples/extensions/layer-organizer/) | `.pcplugin` or `.pcext` | Plugins → Manage Plugins… |
+| A live read-only native inspector | PhotoCraft Plugin API; [Document Inspector](../examples/extensions/document-inspector/) | `.pcplugin` or `.pcext` | Plugins → Manage Plugins… |
 
 The WebAssembly APIs are different contracts. Panel guests export `pce_*`; filters export `pc_*`.
 Their manifests, budgets and execution models differ. Renaming a file does not change its API.
@@ -235,7 +242,7 @@ The complete panel starter manifest is:
 
 ```json
 {
-  "apiVersion": 1,
+  "apiVersion": 2,
   "id": "org.example.hello-photocraft",
   "name": "Hello PhotoCraft",
   "version": "1.0.0",
@@ -245,6 +252,7 @@ The complete panel starter manifest is:
     "documentRead": true,
     "commands": ["layer.new.layer"]
   },
+  "capabilities": {"required": [{"id": "host.commands.invoke", "minVersion": 1}], "optional": []},
   "panel": {
     "fields": [
       {"id": "layerName", "label": "Layer name", "type": "choice",
@@ -274,7 +282,7 @@ integer inputs are rounded then clamped. Unknown value keys, wrong types and unk
 fail. Do not rely on unknown field-schema keys being rejected: field parsing is not a full
 external JSON Schema validator.
 
-Panel API v1 has no free-text input, color/file picker, dynamic dropdown, arbitrary layout,
+The current declarative panel has no free-text input, color/file picker, dynamic dropdown, arbitrary layout,
 HTML/CSS, dockable guest panel or custom image widget. Use named choices in the manifest or
 contribute a host control type. Changing a field does not invoke the guest; buttons do.
 
@@ -294,6 +302,8 @@ A Create layer click receives this request shape:
 
 ```json
 {
+  "apiVersion": 2,
+  "host": {"version": 1, "capabilities": [{"id": "host.commands.invoke", "version": 1}]},
   "event": "create",
   "values": {"layerName": "Notes"},
   "state": null,
@@ -528,8 +538,9 @@ Use the response `message` and host action errors for user-facing diagnostics. N
 WASM `println!` is not a plugin logging channel. See [host logs](development.md#logs) for app
 installation/runtime diagnostics. Avoid logging image data, private paths or credentials.
 
-There is no watcher/hot reload. Edit, build, choose the new file, select **Replace or repair an
-existing installation** and install. Reopen a panel when controls change. Keep the id for updates. Editing
+There is no watcher/hot reload. Edit, build and choose the new file. The manager offers **Update**
+for a newer version of the same identity; use the secondary **Reinstall / Repair** action when
+rebuilding the same version. Reopen a panel when controls change. Keep the id for updates. Editing
 only `manifest.json` without rebuilding changes nothing.
 
 ## Release and update
@@ -549,9 +560,14 @@ A release workflow:
 5. Include install/update/uninstall instructions, source license and dependency notices.
 6. Publish the artifact with its source revision and an optional independent checksum.
 
-The version string is metadata; the host does not enforce SemVer ordering, minimum application
-versions, dependency resolution, update feeds or publisher signatures. Replacing an id can
-install an older version too. The manager's hash pins reviewed bytes, not publisher identity.
+Local installation compares semantic release versions to distinguish an update from maintenance.
+An older version requires an explicit maintenance action. Plugins may opt into checks and
+downloads from their own public GitHub Releases using optional `repository` and `updates`
+metadata. The manager shows available updates, prepares the selected package for access review,
+and clears the selected file after successful installation. See [plugin updates](plugin-updates.md)
+for metadata, commands and limits. Minimum application-version constraints, dependency resolution
+and publisher signatures are not implemented. The manager's hash pins reviewed bytes, not
+publisher identity; the [marketplace](plugin-marketplace.md) remains future work.
 
 Desktop panel installations/payloads/enable state persist; guest state does not survive restart.
 Standalone filters register per process and can reload from their additional folder; they do not use panel
@@ -594,12 +610,14 @@ does not conceal a missing dependency. Record ordinary OS and hardware-driver pr
 | Filesystem/network/process access from WASM | No imports/grants for these |
 | Independent native image processor | Yes, package version 2 and the generic PNG/job contract |
 | Owned native maintenance tasks | Yes, `plugin.runTask`; other native capability families require host work |
-| Contributed commands, layer snapshots and atomic rename/visibility batches | Experimental API 2; bounded single-document batches with one Undo step |
-| Native read-only inspector and document invalidations | Experimental API 2; one explicitly opened inspector/subscription per plugin |
+| Contributed commands, layer snapshots and atomic rename/visibility batches | PhotoCraft Plugin API; bounded single-document batches with one Undo step |
+| Native read-only inspector and document invalidations | PhotoCraft Plugin API; one explicitly opened inspector/subscription per plugin |
 | Free-text/dynamic/custom controls, docking, overlays | Host UI/schema work required |
 | Startup subscriptions or general async callbacks | Not exposed; the inspector invalidation/query loop is a limited separate contract |
 | Independent data-contract crate and conformance/build tool | Experimental `photocraft-plugin-api`; [Rust developer tool](../apps/photocraft-plugin/README.md), with independently exported starter builds |
-| Complete guest SDK, scaffolding CLI, marketplace, hot reload | Not provided; use the complete neutral source starters |
+| Typed guest SDK and scaffolding CLI | Available; privately included sources, one authoring input and generated bindings |
+| Plugin release updates | Optional public GitHub Releases; reviewed installation through the existing store |
+| Marketplace and hot reload | Planned marketplace; no watcher/hot reload |
 | Raw guests on desktop/browser engine | Runtime supported; browser installation/persistence UI differs |
 | Native platform targets | Windows/Linux/macOS x86-64/ARM64 declared; only Windows x64 verified; no browser packages |
 | Photoshop UXP, CEP or .8BF compatibility | Port to a PhotoCraft API |
@@ -616,7 +634,7 @@ PhotoCraft's existing layers:
 | Source area | Responsibility |
 |---|---|
 | `crates/plugin-api` and `schemas/plugins` | Independent serialized contracts, capability negotiation and generated schemas |
-| `crates/engine/src/plugin_host` | Host-created identity, scoped handles, legacy adapter, dynamic commands, atomic edits and deferred inspector events |
+| `crates/engine/src/plugin_host` | Host-created identity, scoped handles, command effects, dynamic commands, atomic edits and deferred inspector events |
 | `crates/plugins/src/extension.rs` and `extension/runtime.rs` | Manifest/response validation, panel ABI and budgets |
 | `crates/plugins/src/lib.rs` and `manifest.rs` | Filter ABI, execution limits and manifests |
 | `crates/engine/src/extension_cmds.rs` | Registry, raw guest persistence, grants, dispatch and state |
@@ -675,6 +693,8 @@ install, execution or Apply, and which target you expected.
 - [Independent image processing](plugin-image-processing.md): own native/WASM backends and the neutral starter.
 - [Native tasks](plugin-native-tasks.md): document-independent operations in an owned worker, progress, cancellation and bounded JSON results.
 - [Safety and recovery](plugin-safety.md): validation, sandbox boundaries, recovery launch and repair.
+- [Installation and updates](plugin-updates.md): optional per-plugin GitHub Releases, review and maintenance.
+- [Marketplace plan](plugin-marketplace.md): future catalog, publisher trust and release gates.
 - [Panel starter](../examples/extensions/plugin-starter/README.md): complete source/tests.
 - [Filter starter](../examples/plugins/filter-starter/README.md): complete source/tests.
 - [Independent image starter](../examples/extensions/image-plugin-starter/README.md): own native engine and packaged filter, complete build/package scripts.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Descriptor",
-  "description": "Complete independent panel-2 descriptor. Legacy manifests retain their original reader.",
+  "description": "Complete independent descriptor for the current PhotoCraft Plugin API.",
   "type": "object",
   "properties": {
     "apiVersion": {
@@ -42,6 +42,23 @@
     },
     "permissions": {
       "$ref": "#/$defs/Permissions"
+    },
+    "repository": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 160
+    },
+    "updates": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UpdateSource"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "version": {
       "type": "string",
@@ -234,7 +251,7 @@
       ]
     },
     "Field": {
-      "description": "Same declarative controls as panel-1; no host UI implementation is imported.",
+      "description": "Declarative controls with no dependency on the host UI implementation.",
       "type": "object",
       "properties": {
         "id": {
@@ -426,6 +443,32 @@
         }
       },
       "additionalProperties": false
+    },
+    "UpdateProvider": {
+      "type": "string",
+      "enum": [
+        "github"
+      ]
+    },
+    "UpdateSource": {
+      "description": "A plugin-owned release source. Declaring it never starts a network request or installs code.",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "description": "Exact release filename, optionally containing one `{platform}` substitution.",
+          "type": "string",
+          "maxLength": 160,
+          "minLength": 1
+        },
+        "provider": {
+          "$ref": "#/$defs/UpdateProvider"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "asset"
+      ]
     }
   }
 }

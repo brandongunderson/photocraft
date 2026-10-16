@@ -21,6 +21,7 @@ photocraft-ops = { workspace = true }
 photocraft-compose = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+semver = "1"
 thiserror = { workspace = true }
 rayon = { workspace = true }
 photocraft-paint = { workspace = true }
@@ -43,6 +44,10 @@ roxmltree = "0.20"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+sha2 = "0.10"
 
 [dev-dependencies]
 photocraft-affinity = { workspace = true, features = ["synth"] }

@@ -36,5 +36,8 @@ pub fn all() -> Vec<(&'static str, Schema)> {
         ("layers-edit-v1.schema.json", schema_for!(crate::LayersEdit)),
         ("layers-snapshot-v1.schema.json", schema_for!(crate::LayersSnapshot)),
         ("layers-edited-v1.schema.json", schema_for!(crate::LayersEdited)),
+        ("worker-v2.schema.json", schema_for!(crate::WorkerV2Descriptor)),
+        ("worker-v2-host-frame.schema.json", schema_for!(crate::HostWorkerFrame)),
+        ("worker-v2-guest-frame.schema.json", schema_for!(crate::WorkerHostFrame)),
     ]
 }

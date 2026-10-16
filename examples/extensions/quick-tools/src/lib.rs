@@ -8,7 +8,7 @@ static REQUEST: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pce_api_version() -> u32 {
-    1
+    2
 }
 
 fn packed(bytes: &[u8]) -> u64 {
@@ -48,6 +48,9 @@ pub extern "C" fn pce_handle(ptr: *const u8, len: u32) -> u64 {
 }
 
 fn handle(request: &Value) -> Value {
+    if request.get("apiVersion").and_then(Value::as_u64) != Some(2) {
+        return json!({"message": "Unsupported PhotoCraft Plugin API request"});
+    }
     if request.get("document").is_none_or(Value::is_null) {
         return json!({"message": "Open an image before using Quick Tools."});
     }

@@ -8,36 +8,68 @@ releases contain the panel/native package platform.
 
 | Contract | Implemented version | Important boundary |
 |---|---|---|
-| Panel | 1; additive experimental 2 | Import-free core WASM, `pce_*` exports |
+| PhotoCraft Plugin API | Current internal panel discriminator `2`; old `1` rejected | Import-free core WASM, `pce_*` exports |
 | Standalone pixel filter | ABI 1 | Import-free core WASM, `pc_*` exports |
 | Desktop package | 2 | ZIP, panel module, optional owned native/filter backends |
-| Native image/task worker | 1 | Host-owned requests/results, `--job` or `--task` |
+| Native image/task worker | 1; explicit opt-in 2 | Legacy `--job`/`--task`; worker 2 uses bounded framed `--serve` |
 | Shared contract crate | Experimental `photocraft-plugin-api` 0.1.0 | Serialized data, no editor linkage required |
 | Guest SDK | Experimental `photocraft-plugin-sdk` 0.1.0 | Typed events/replies, bounded ABI buffers, optional authoring generator |
 
-The SDK exports the same four panel-2 functions and owns its bounded buffers. The host
+The SDK exports the four panel functions and owns its bounded buffers. The host
 only writes the exact current allocation. Erroring handlers preserve state and propose no
 effects. Descriptors/effects stay strict; event envelopes and read-only snapshots may ignore
 additional optional metadata. Breaking wire behavior requires a newly negotiated major.
 API/SDK releases and plugin/protocol versions are independent. This foundation preview
 does not establish a calendar support window or certify future capability categories.
 
-The authoring input is `{formatVersion: 1, descriptor: <panel-2>, package: <package-2>}`.
+The authoring input is `{formatVersion: 1, descriptor: <current panel>, package: <package-2>}`.
 Cargo generates the embedded descriptor and Rust constants; the package builder reads the
 same input. New projects may privately include the exported API/SDK source. Nothing links
 against engine/UI types, and no shared runtime installation is required.
 
-Package 3 and worker protocol 2 are proposals. API-2 panels still use package 2.
+There is one supported Plugin API; milestones do not create new APIs or major versions.
+Add compatible capabilities and fields until a genuine breaking change requires another major.
+The current panel API and native transports use package format 2.
+Worker 2 requires the separately verified runtime/worker-v2.json member and cannot be
+probed or inferred from an executable. Typed descriptor/frames ship in the optional API crate.
 Retired package-1 fixed AI services are not an authoring route. Photoshop UXP, CEP,
 and `.8BF` files require porting. Renaming files does not convert their ABI.
 
-Current desktop store mutations use an exclusive OS lock; native jobs use shared leases.
-Completion and Apply verify the selected payload, enabled state and persistent activation
-epoch. Store-wide locking can temporarily block management of any plugin during native
-work. Other instances reload changed installations. Older hosts/manual file edits do not
-participate; native containment, lazy activation and aggregate quotas remain future work.
+Current desktop hosts use lazy validated descriptors, bounded per-plugin scheduling,
+per-generation OS leases, aggregate native admission estimates and explicit preview retention
+budgets. Panel activation checks only bounded panel code; cancellable bulk verification and
+filter compilation run in scheduled jobs. Managed storage snapshots/migrations and rollback select the same generation as code.
+Packages whose panels already implement the current API need no shared runtime. Rebuild old
+panel-version-1 binaries in their independent projects. Restricted native containment remains
+unavailable; trusted processes can exceed estimates or access the user's OS resources.
+See the matching source/kit lifecycle, worker-2 and managed-storage references for exact limits.
 
 ## Panels
+
+### Optional release updates
+
+The current descriptor accepts an optional canonical public GitHub `repository`, for example
+`https://github.com/example-org/independent-plugin`, and
+`updates: {"provider":"github","asset":"Independent-{platform}.pcplugin"}`. Updates require
+the repository. The asset is one exact safe ASCII filename ending in `.pcplugin` or `.pcext`;
+only one `{platform}` token is allowed. It expands to the host's Windows/Linux/macOS x86-64
+or ARM64 package target. A fixed `.pcext` filename can serve portable panels. Rebuild embedded
+metadata and publish matching semantic release/tag versions under the same plugin ID.
+
+Checks/preparation are explicit host background commands (`extension.updates.check` and
+`extension.updates.prepare`), not guest network imports or runtime services. Public stable
+releases only; draft/prerelease/private repositories and credentials are unsupported. Assets
+require a usable SHA-256 digest. The host verifies downloaded bytes, identity, version and
+compatibility, then presents normal permission/native-code review. Installation rechecks the
+reviewed package hash and installed revision. No automatic grant expansion or unattended
+installation is implied. GitHub metadata/digests are not publisher signatures.
+
+Local/offline installation remains available. Newer same-ID packages offer Update; same-version
+reinstall/repair and older-version installation are deliberate secondary maintenance actions.
+No metadata is required for plugins distributed only as local files. Each repository and release
+is owned by that independent plugin; PhotoCraft does not need source changes for a new publisher.
+Marketplace discovery/signing remains future work. Consult docs/plugin-updates.md in a matching
+source/kit for the complete contract.
 
 A raw panel is conventionally `.pcext`. Required exports are `memory`,
 `pce_api_version() -> i32`, `pce_manifest() -> i64`, `pce_alloc(i32) -> i32`, and
@@ -45,20 +77,21 @@ A raw panel is conventionally `.pcext`. Required exports are `memory`,
 Use the starter's owned, bounded ABI storage. The manifest is embedded at build time.
 
 Controls are `number`, `int`, `bool`, and `choice`, plus buttons. Native egui renders
-them; there is no HTML/JS UI or arbitrary guest drawing. API-1 events contain
-`event`, `values`, `state`, and an optional `document` summary. `documentRead` grants
+them; there is no HTML/JS UI or arbitrary guest drawing. The event envelope includes
+`apiVersion: 2`, host metadata, `event`, `values`, `state`, an optional `document` summary
+and correlated broker `responses`. `documentRead` grants
 summary metadata, not arbitrary pixels, paths, or the layer tree. Preserve state
 explicitly when an action should not change it. Globals do not survive fresh instances.
 
 Responses carry `state`, `message`, and `commands`. Each command must be in both the
 manifest grants and the host allowlist. Lists run sequentially; a later failure does
-not undo earlier successful commands. Do not claim atomic batches or command-result
-callbacks for API 1. Processing/task state is committed at the operation's defined
+not undo earlier successful commands. Atomic edits use the distinct document broker contract;
+command lists are not transactions. Processing/task state is committed at the operation's defined
 completion boundary, not merely when the handler returns.
 
 Panel limits: module 8 MiB, manifest 64 KiB, memory 32 MiB, call depth 256, fuel
 5 million per instance, request/response 256 KiB each, state 128 KiB, 32 commands,
-message 4096 bytes. These differ from filter limits. API 1 rejects API-2-only fields.
+message 4096 bytes. These differ from filter limits. Every supported panel uses the same parser.
 
 ## Package and native image boundary
 
@@ -135,11 +168,11 @@ as RGBA8. Channel Gain supports RGB/grayscale only; other modes need an algorith
 The host handles selection blending and overlap. Use `_image` band geometry for
 coordinate effects. Each band gets a fresh instance, without cross-band state.
 
-## Experimental panel API 2
+## Document capabilities and native views
 
 Declare required/optional versioned capabilities and plugin-namespaced contributions.
-Capability negotiation does not grant extra permissions. API-2 exports retain the
-panel signatures. Responses can use broker `requests` or legacy `commands`, not both.
+Capability negotiation does not grant extra permissions. Current API exports retain the
+panel signatures. Responses can use broker `requests` or sequential `commands`, not both.
 Broker queries resume through bounded `host_response` events, not persistent guests.
 
 `documents.layers.read` returns paginated snapshots and opaque document/layer handles
@@ -151,5 +184,5 @@ handles or failed edits leave history and proposed state unchanged.
 The current host supports one native read-only inspector and one matching
 `document.changed` subscription per plugin. Observer handlers can read and update
 bounded label/value views; they cannot edit, run commands, or start native jobs.
-Open/close controls the subscription. Handle page truncation explicitly. API-2
+Open/close controls the subscription. Handle page truncation explicitly. Current API
 support does not imply general event callbacks, custom layouts, or all proposed SDK categories.

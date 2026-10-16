@@ -26,7 +26,8 @@ mod desktop {
     const ID: &str = "org.example.task";
 
     fn module(grant: bool, calls: Value) -> Vec<u8> {
-        let manifest = json!({"apiVersion":1,"id":ID,"name":"Task test","version":"1",
+        let manifest = json!({"apiVersion":2,"id":ID,"name":"Task test","version":"1",
+            "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
             "permissions":{"commands":if grant {vec!["plugin.processImage","plugin.runTask","layer.new.layer"]} else {vec![]}},
             "panel":{"buttons":[{"id":"refresh","label":"Refresh"}]}})
         .to_string();
@@ -35,7 +36,7 @@ mod desktop {
         wat::parse_str(format!(
             r#"(module (memory (export "memory") 8)
             (data (i32.const 32) "{}") (data (i32.const 65536) "{}")
-            (func (export "pce_api_version") (result i32) i32.const 1)
+            (func (export "pce_api_version") (result i32) i32.const 2)
             (func (export "pce_manifest") (result i64) i64.const {})
             (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
             (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
@@ -53,6 +54,8 @@ mod desktop {
         session.extensions.installed.insert(
             ID.into(),
             Installed {
+                #[cfg(not(target_arch = "wasm32"))]
+                deferred: None,
                 extension,
                 enabled: true,
                 state: json!({"runs":0}),
@@ -61,6 +64,7 @@ mod desktop {
                 package: None,
                 native: Some(Arc::new(InstalledNative {
                     generation: None,
+                    worker_v2: None,
                     worker: "missing-task-fixture.exe".into(),
                     package: PackageInfo {
                         package_version: 2,
@@ -191,15 +195,25 @@ mod desktop {
     }
 
     #[test]
-    fn disable_reenable_revokes_task_state_and_native_leases_block_uninstall() {
-        let mut s = session(true, json!([]));
-        let binding = binding(&mut s);
-        assert!(s.execute("extension.remove", json!({"id":ID})).unwrap_err().to_string().contains("processing"));
-        s.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
-        s.execute("extension.enable", json!({"id":ID,"enabled":true})).unwrap();
-        assert!(binding.complete(&mut s, result()).unwrap_err().to_string().contains("revoked"));
-        assert_eq!(s.extensions.installed[ID].state["runs"], 0);
-        s.execute("extension.remove", json!({"id":ID})).unwrap();
+    fn disable_reenable_and_removal_revoke_task_completions_without_committing_state() {
+        for remove in [false, true] {
+            let mut s = session(true, json!([]));
+            let binding = binding(&mut s);
+            if remove {
+                assert_eq!(s.execute("extension.remove", json!({"id":ID})).unwrap()["removed"], ID);
+                assert!(!s.extensions.installed.contains_key(ID));
+            } else {
+                s.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
+                s.execute("extension.enable", json!({"id":ID,"enabled":true})).unwrap();
+            }
+            let failure = binding.complete(&mut s, result()).unwrap_err().to_string();
+            assert!(failure.contains(if remove { "disabled, removed or replaced" } else { "revoked" }), "{failure}");
+            if let Some(installed) = s.extensions.installed.get(ID) {
+                assert_eq!(installed.state["runs"], 0);
+            }
+            assert!(s.documents().is_empty());
+            assert!(s.journal.is_empty());
+        }
     }
 
     #[test]
@@ -223,10 +237,35 @@ mod desktop {
     #[test]
     fn async_tasks_have_no_document_lock_and_do_not_overwrite_state_when_worker_fails() {
         let mut s = session(true, json!([{"command":"plugin.runTask","params":{}}]));
+        // Hold a real admission permit so both native requests deterministically queue;
+        // no timing assumption about the missing worker's eventual spawn failure is needed.
+        let owner = crate::extension_cmds::scheduler_owner(&s, ID);
+        let permit = s
+            .plugin_scheduler
+            .enqueue(
+                &owner,
+                crate::plugin_scheduler::Priority::Background,
+                crate::plugin_scheduler::Resources { cpu_units: 1, memory_bytes: 1, ..Default::default() },
+            )
+            .unwrap()
+            .wait(&crate::jobs::JobCtx::new())
+            .unwrap();
         let crate::jobs::Started::Job(id) = s.start("extension.invoke", json!({"id":ID,"event":"refresh"})).unwrap() else { panic!("expected task") };
+        let crate::jobs::Started::Job(queued) = s.start("plugin.runTask", json!({"id":ID})).unwrap() else { panic!("expected queued task") };
         assert!(s.job(id).unwrap().document.is_none());
-        assert!(s.execute("plugin.runTask", json!({"id":ID})).unwrap_err().to_string().contains("current processing"));
-        assert!(s.wait_job(id).is_err());
+        assert!(s.job(queued).unwrap().document.is_none());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while ![id, queued].into_iter().all(|id| s.job(id).unwrap().message.contains("Waiting for plugin resource admission")) {
+            assert!(std::time::Instant::now() < deadline, "both requests must wait behind their owner's active admission");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(s.jobs().len(), 2, "a second request queues instead of failing an Arc-count busy check");
+        assert!(s.cancel_job(queued));
+        assert!(matches!(s.wait_job(queued), Err(EngineError::Cancelled)));
+        drop(permit);
+        let failure = s.wait_job(id).unwrap_err().to_string();
+        assert!(failure.contains("Could not start"), "the original worker failure remains visible: {failure}");
+        s.join_cancelled_jobs();
         assert!(s.documents().is_empty());
         assert_eq!(s.extensions.installed[ID].state["runs"], 0);
         assert!(!s.has_jobs());

@@ -2,6 +2,10 @@ use wasmi::{Config, EnforcedLimits, Engine, Instance, Linker, Memory, Module, St
 
 use super::{MAX_JSON_BYTES, MAX_MODULE_BYTES, Manifest, Response};
 use crate::{Error, Result};
+use std::sync::{
+    Mutex, OnceLock,
+    atomic::{AtomicU32, Ordering},
+};
 
 const FUEL: u64 = 5_000_000;
 const MEMORY: usize = 32 << 20;
@@ -9,8 +13,13 @@ const MEMORY: usize = 32 << 20;
 /// No imports, filesystem, network, GPU or native code. Only JSON crosses the boundary.
 pub struct Extension {
     pub manifest: Manifest,
-    engine: Engine,
-    module: Module,
+    runtime: Runtime,
+    authority: Option<Box<dyn Fn() -> Result<()> + Send + Sync>>,
+}
+
+enum Runtime {
+    Ready { engine: Engine, module: Module },
+    Deferred { loader: Box<dyn Fn() -> Result<Vec<u8>> + Send + Sync>, loaded: OnceLock<Box<Extension>>, gate: Mutex<()>, failures: AtomicU32 },
 }
 
 struct Live {
@@ -54,17 +63,90 @@ impl Extension {
         }
         let mut live = Self::instantiate(&engine, &module)?;
         let version = live.func::<(), i32>("pce_api_version")?.call(&mut live.store, ()).map_err(trap)?;
-        if !matches!(version, 1 | 2) {
-            return Err(Error::Abi("unsupported extension API version (expected 1 or 2)".into()));
+        if version != photocraft_plugin_api::PANEL_API_VERSION as i32 {
+            return Err(Error::Abi(format!(
+                "unsupported panel API export version {version}; expected 2 for the current PhotoCraft Plugin API. Rebuild or update this plugin"
+            )));
         }
         let packed = live.func::<(), i64>("pce_manifest")?.call(&mut live.store, ()).map_err(trap)?;
         let manifest = Manifest::parse(live.read(packed, crate::manifest::MAX_MANIFEST_BYTES)?)?;
-        if manifest.api_version != version as u32 {
-            return Err(Error::Abi("extension export API version differs from its manifest".into()));
-        }
         live.func::<i32, i32>("pce_alloc")?;
         live.func::<(i32, i32), i64>("pce_handle")?;
-        Ok(Self { manifest, engine, module })
+        Ok(Self { manifest, runtime: Runtime::Ready { engine, module }, authority: None })
+    }
+
+    /// A host-created, validated descriptor may be discovered without executing guest code.
+    /// Activation always loads the verified bytes and compares the embedded descriptor.
+    pub fn deferred(manifest: Manifest, loader: impl Fn() -> Result<Vec<u8>> + Send + Sync + 'static) -> Self {
+        Self {
+            manifest,
+            runtime: Runtime::Deferred { loader: Box::new(loader), loaded: OnceLock::new(), gate: Mutex::new(()), failures: AtomicU32::new(0) },
+            authority: None,
+        }
+    }
+
+    pub fn with_authority(mut self, authority: impl Fn() -> Result<()> + Send + Sync + 'static) -> Self {
+        self.authority = Some(Box::new(authority));
+        self
+    }
+
+    pub fn check_current(&self) -> Result<()> {
+        if let Some(authority) = &self.authority {
+            authority()?;
+        }
+        Ok(())
+    }
+
+    pub fn lifecycle(&self) -> &'static str {
+        match &self.runtime {
+            Runtime::Ready { .. } => "active",
+            Runtime::Deferred { loaded, .. } if loaded.get().is_some() => "active",
+            Runtime::Deferred { failures, .. } if failures.load(Ordering::Relaxed) >= 3 => "failed",
+            Runtime::Deferred { .. } => "idle",
+        }
+    }
+
+    pub fn retry_activation(&self) {
+        if let Runtime::Deferred { failures, .. } = &self.runtime {
+            failures.store(0, Ordering::Relaxed);
+        }
+    }
+
+    pub fn activate(&self) -> Result<()> {
+        self.compiled().map(|_| ())
+    }
+
+    fn compiled(&self) -> Result<(&Engine, &Module)> {
+        match &self.runtime {
+            Runtime::Ready { engine, module } => Ok((engine, module)),
+            Runtime::Deferred { loader, loaded, gate, failures } => {
+                if let Some(extension) = loaded.get() {
+                    return extension.compiled();
+                }
+                let _guard = gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                if loaded.get().is_none() {
+                    if failures.load(Ordering::Relaxed) >= 3 {
+                        return Err(Error::Failed("Plugin activation is quarantined after three failures. Enable the plugin again to retry.".into()));
+                    }
+                    let candidate = loader().and_then(|bytes| Self::load(&bytes)).and_then(|extension| {
+                        if extension.manifest != self.manifest {
+                            return Err(Error::Manifest("Installed descriptor differs from verified guest code".into()));
+                        }
+                        Ok(extension)
+                    });
+                    match candidate {
+                        Ok(extension) => {
+                            let _ = loaded.set(Box::new(extension));
+                        }
+                        Err(cause) => {
+                            failures.fetch_add(1, Ordering::Relaxed);
+                            return Err(cause);
+                        }
+                    }
+                }
+                loaded.get().ok_or_else(|| Error::Failed("Plugin activation did not complete".into()))?.compiled()
+            }
+        }
     }
 
     fn instantiate(engine: &Engine, module: &Module) -> Result<Live> {
@@ -79,11 +161,13 @@ impl Extension {
     }
 
     pub fn handle(&self, request: &serde_json::Value) -> Result<Response> {
+        self.check_current()?;
         let bytes = serde_json::to_vec(request).map_err(|e| Error::Params(e.to_string()))?;
         if bytes.len() > MAX_JSON_BYTES {
             return Err(Error::Limit("extension request size".into()));
         }
-        let mut live = Self::instantiate(&self.engine, &self.module)?;
+        let (engine, module) = self.compiled()?;
+        let mut live = Self::instantiate(engine, module)?;
         let ptr = live.func::<i32, i32>("pce_alloc")?.call(&mut live.store, bytes.len() as i32).map_err(trap)? as u32 as usize;
         if ptr == 0 {
             return Err(Error::Failed("pce_alloc returned zero".into()));
@@ -92,6 +176,6 @@ impl Extension {
         let dst = live.memory.data_mut(&mut live.store).get_mut(ptr..end).ok_or_else(|| Error::Abi("extension allocation outside memory".into()))?;
         dst.copy_from_slice(&bytes);
         let packed = live.func::<(i32, i32), i64>("pce_handle")?.call(&mut live.store, (ptr as i32, bytes.len() as i32)).map_err(trap)?;
-        Response::parse_for_version(live.read(packed, MAX_JSON_BYTES)?, self.manifest.api_version)
+        Response::parse(live.read(packed, MAX_JSON_BYTES)?)
     }
 }

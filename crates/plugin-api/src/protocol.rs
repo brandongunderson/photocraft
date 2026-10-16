@@ -30,7 +30,7 @@ pub struct CommandInvocation {
     pub params: Map<String, Value>,
 }
 
-/// Additive panel-2 response; panel-1 bytes continue through their original strict parser.
+/// Bounded response for the current PhotoCraft Plugin API.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -74,10 +74,12 @@ pub(crate) fn run(s: &mut Session, value: &Value, completion: Option<Completion>
             }
             None => {
                 let id = params.id.ok_or_else(|| error("Choose an installed plugin with `id`"))?;
+                crate::extension_cmds::activate(s, &id)?;
                 let installed = s.extensions.installed.get(&id).ok_or_else(|| error("The requested plugin is not installed"))?;
                 (id, Arc::clone(&installed.extension), None)
             }
         };
+        crate::extension_cmds::activate(s, &id)?;
         let installed = s
             .extensions
             .installed
@@ -92,9 +94,34 @@ pub(crate) fn run(s: &mut Session, value: &Value, completion: Option<Completion>
             .as_ref()
             .filter(|native| native.package.package_version == 2)
             .ok_or_else(|| error("This plugin does not contain a compatible native worker"))?;
-        if Arc::strong_count(native) > 1 {
-            return Err(error("Wait for this plugin's current processing or task to finish or cancel it first"));
-        }
+        let (resources, resident) = if let Some(worker) = &native.worker_v2 {
+            let declared = worker.resources();
+            let resources = crate::plugin_scheduler::Resources {
+                cpu_units: declared.cpu_units,
+                temp_bytes: declared.temp_bytes,
+                memory_bytes: 16 << 20,
+                ..Default::default()
+            };
+            let resident = crate::plugin_scheduler::Resources {
+                memory_bytes: declared.memory_bytes,
+                gpu_bytes: declared.gpu_bytes,
+                cache_bytes: declared.cache_bytes,
+                ..Default::default()
+            };
+            s.plugin_scheduler.validate(resources.plus(resident))?;
+            (resources, resident)
+        } else {
+            (
+                crate::plugin_scheduler::Resources { cpu_units: 1, memory_bytes: 1 << 30, gpu_bytes: 512 << 20, temp_bytes: 128 << 20, cache_bytes: 0 },
+                Default::default(),
+            )
+        };
+        let owner = crate::extension_cmds::scheduler_owner(s, &id);
+        let ticket = if resident == crate::plugin_scheduler::Resources::default() {
+            s.plugin_scheduler.enqueue(&owner, crate::plugin_scheduler::Priority::Background, resources)?
+        } else {
+            s.plugin_scheduler.enqueue_worker(&owner, crate::plugin_scheduler::Priority::Background, resources, resident)?
+        };
         let native = Arc::clone(native);
         let apply_native = Arc::clone(&native);
         let source_state = installed.state.clone();
@@ -105,8 +132,9 @@ pub(crate) fn run(s: &mut Session, value: &Value, completion: Option<Completion>
             "Run plugin task",
             false,
             move |ctx| {
+                let _permit = ticket.wait(ctx)?;
                 let _store = native.lease()?;
-                crate::plugin_runtime::task(&native.worker, &params.options, ctx)
+                crate::plugin_runtime::task_native(&native, &params.options, ctx)
             },
             move |s, result| binding.complete(s, result),
         )
@@ -127,7 +155,8 @@ struct Binding {
 impl Binding {
     fn complete(self, s: &mut Session, result: crate::plugin_runtime::TaskResult) -> Result<Value> {
         use std::sync::Arc;
-        let _store = self.native.lease()?;
+        let _store = self.native.admission()?;
+        self.extension.check_current().map_err(error)?;
         let installed = s
             .extensions
             .installed

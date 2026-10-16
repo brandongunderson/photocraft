@@ -1,7 +1,7 @@
 //! Versioned plugin capabilities. Identity is supplied by the host, never decoded from a guest.
 mod broker;
+mod command_effects;
 mod events;
-mod legacy;
 
 use std::sync::{Arc, Weak};
 
@@ -33,8 +33,8 @@ pub fn host_api() -> HostApi {
 }
 
 pub(crate) fn compatibility(manifest: &Manifest) -> Result<Value> {
-    if manifest.api_version == 1 {
-        return Ok(json!({"panelApi":1,"legacy":true}));
+    if manifest.api_version != photocraft_plugin_api::PANEL_API_VERSION {
+        return Err(failure(ErrorCode::UnsupportedVersion, "Unsupported panel version; rebuild the plugin for the current PhotoCraft Plugin API"));
     }
     for contributed in &manifest.contributes.commands {
         let root = contributed.id.split('.').next().unwrap_or_default();
@@ -89,12 +89,15 @@ pub(crate) fn validate_principal(s: &Session, principal: &Principal) -> Result<A
     {
         return Err(failure(ErrorCode::InvalidHandle, "The plugin invocation was revoked"));
     }
-    s.extensions
+    let extension = s
+        .extensions
         .installed
         .get(&principal.id)
         .filter(|installed| installed.enabled && Weak::ptr_eq(&principal.extension, &Arc::downgrade(&installed.extension)))
         .map(|installed| Arc::clone(&installed.extension))
-        .ok_or_else(|| failure(ErrorCode::InvalidHandle, "The plugin was disabled, removed or replaced"))
+        .ok_or_else(|| failure(ErrorCode::InvalidHandle, "The plugin was disabled, removed or replaced"))?;
+    extension.check_current().map_err(|cause| failure(ErrorCode::InvalidHandle, cause.to_string()))?;
+    Ok(extension)
 }
 
 pub(crate) fn require(s: &Session, principal: &Principal, capability: KnownCapability) -> Result<()> {
@@ -121,6 +124,7 @@ pub(crate) fn authorize(s: &Session, principal: &Principal, command: &str, param
 }
 
 pub(crate) fn principal(s: &mut Session, id: &str) -> Result<Principal> {
+    crate::extension_cmds::activate(s, id)?;
     let installed =
         s.extensions.installed.get(id).filter(|p| p.enabled).ok_or_else(|| failure(ErrorCode::NotFound, "The plugin is not installed or is disabled"))?;
     let extension = Arc::downgrade(&installed.extension);
@@ -132,6 +136,11 @@ pub(crate) fn principal(s: &mut Session, id: &str) -> Result<Principal> {
 
 pub(crate) fn revoke(s: &mut Session, id: &str) {
     s.extensions.platform.revoke(id);
+    s.plugin_scheduler.cancel_plugin(&crate::extension_cmds::scheduler_owner(s, id));
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(native) = s.extensions.installed.get(id).and_then(|installed| installed.native.as_ref()) {
+        native.stop();
+    }
 }
 
 pub(crate) fn event_request(s: &Session, extension: &Extension, event: &str, values: Value, state: Value, responses: Value) -> Value {
@@ -149,7 +158,7 @@ pub(crate) fn event_request(s: &Session, extension: &Extension, event: &str, val
         "event":event,"values":values,"state":state,"document":document,"responses":responses})
 }
 
-/// Runs a user-invoked panel action. API-1 requests keep their original JSON shape and semantics.
+/// Runs a user-invoked panel action through the current event and capability contract.
 pub(crate) fn invoke(s: &mut Session, id: &str, event: &str, values: &Value) -> Result<Value> {
     let identity = principal(s, id)?;
     authorize(s, &identity, "extension.invoke", &json!({"id":id,"event":event,"values":values}))?;
@@ -161,9 +170,6 @@ pub(crate) fn invoke(s: &mut Session, id: &str, event: &str, values: &Value) -> 
     }
     let values = Value::Object(extension.manifest.values(values).map_err(|e| EngineError::Other(e.to_string()))?);
     let state = s.extensions.installed.get(id).map(|installed| installed.state.clone()).unwrap_or(Value::Null);
-    if extension.manifest.api_version == 1 {
-        return legacy::invoke(s, identity, extension, event, values, state);
-    }
     let mut request = event_request(s, &extension, event, values.clone(), state, json!([]));
     for _ in 0..4 {
         let response = extension.handle(&request).map_err(|e| EngineError::Other(e.to_string()))?;
@@ -173,11 +179,14 @@ pub(crate) fn invoke(s: &mut Session, id: &str, event: &str, values: &Value) -> 
         }
         if !response.commands.is_empty() {
             if response.view.is_some() {
-                return Err(failure(ErrorCode::UnsupportedOperation, "A view update cannot be combined with legacy commands"));
+                return Err(failure(ErrorCode::UnsupportedOperation, "A view update cannot be combined with command effects"));
             }
             require(s, &identity, KnownCapability::CommandsInvoke)?;
-            return legacy::apply(s, identity, extension, response);
+            return command_effects::apply(s, identity, extension, response);
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _admission = s.extensions.folder.as_deref().map(crate::extension_package::AdmissionGuard::store).transpose()?;
+        validate_principal(s, &identity)?;
         let (responses, edited) = broker::apply_requests(s, &identity, &response.requests, false)?;
         if edited || response.requests.is_empty() {
             if let Some(view) = response.view {
@@ -223,6 +232,15 @@ pub(crate) fn preserves_floating(_s: &Session, id: &str, _params: &Value) -> boo
     matches!(
         id,
         "extension.capabilities"
+            | "extension.runtime"
+            | "extension.storage"
+            | "extension.rollback"
+            | "extension.list"
+            | "extension.commands"
+            | "extension.inspect"
+            | "extension.install"
+            | "extension.enable"
+            | "extension.remove"
             | "extension.view.open"
             | "extension.view.close"
             | "extension.view.inspect"
@@ -296,9 +314,12 @@ impl Session {
 pub fn specs() -> Vec<CommandSpec> {
     let spec = |id, label, params, run| CommandSpec { id, label, params, run, menu: &[], shortcut: None, enabled: crate::commands::always, journal: false };
     vec![
-        spec("extension.capabilities", "Plugin Capabilities", "{}", |_, _| {
-            Ok(json!({"host":host_api(),"panelApis":[1,2],"packageFormats":[2],
-            "limits":{"queryRounds":4,"requests":8,"layerPage":128,"editBatch":128,"handles":4096,"eventWorkers":4,"inspectorsPerPlugin":1},"features":{"package3":false,"worker2":false}}))
+        spec("extension.capabilities", "Plugin Capabilities", "{}", |s, _| {
+            Ok(json!({"host":host_api(),"panelApis":[photocraft_plugin_api::PANEL_API_VERSION],"packageFormats":[2],
+            "limits":{"queryRounds":4,"requests":8,"layerPage":128,"editBatch":128,"handles":4096,"eventWorkers":4,"inspectorsPerPlugin":1,
+                "installedPlugins":4096,"retainedPreviews":16,"previewBytes":512_u64<<20},
+            "features":{"package3":false,"worker2":!cfg!(target_arch="wasm32"),"restrictedNative":false,"lazyDescriptors":!cfg!(target_arch="wasm32"),"managedStorage":!cfg!(target_arch="wasm32")},
+            "scheduler":s.plugin_scheduler.status(),"previews":s.plugin_preview_usage()}))
         }),
         spec("extension.view.open", "Open Plugin Inspector", r#"{"id":text}"#, events::open),
         spec("extension.view.close", "Close Plugin Inspector", r#"{"id":text}"#, events::close),

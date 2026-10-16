@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 
 use crate::{EngineError, Result, jobs::JobCtx};
 
+pub(crate) mod worker_v2;
+
 /// Transport metadata is validated by the shared host service before starting a worker.
 pub(crate) struct ImageJob {
     pub options: Value,
@@ -165,7 +167,37 @@ impl WorkerLog {
 }
 
 /// Runs the package-owned processor using the bounded RGBA8 sRGB image protocol.
-pub(crate) fn process(doc: &Document, worker: &Path, job: &ImageJob, ctx: &JobCtx) -> Result<Document> {
+pub(crate) fn process_native(doc: &Document, native: &crate::extension_package::InstalledNative, job: &ImageJob, ctx: &JobCtx) -> Result<Document> {
+    let _watch = native.watch(ctx)?;
+    let lease = native.lease()?.map(|lease| Box::new(lease) as Box<dyn Send>);
+    native.verify_payload(ctx)?;
+    validate_storage(native)?;
+    if let Some(supervisor) = &native.worker_v2 {
+        process_with(doc, &native.worker, job, ctx, Some((supervisor, lease)), || validate_storage(native))
+    } else {
+        let _lease = lease;
+        process_with(doc, &native.worker, job, ctx, None, || validate_storage(native))
+    }
+}
+
+type Persistent<'a> = Option<(&'a std::sync::Arc<worker_v2::Supervisor>, Option<Box<dyn Send>>)>;
+
+fn validate_storage(native: &crate::extension_package::InstalledNative) -> Result<()> {
+    let result = native.validate_storage();
+    if result.is_err() {
+        native.stop();
+    }
+    result
+}
+
+fn process_with(
+    doc: &Document,
+    worker: &Path,
+    job: &ImageJob,
+    ctx: &JobCtx,
+    persistent: Persistent<'_>,
+    completed: impl FnOnce() -> Result<()>,
+) -> Result<Document> {
     ctx.check()?;
     let temp = tempfile::Builder::new().prefix("photocraft-plugin-image-").tempdir().map_err(error)?;
     let input = temp.path().join("source.png");
@@ -187,7 +219,12 @@ pub(crate) fn process(doc: &Document, worker: &Path, job: &ImageJob, ctx: &JobCt
     let payload = json!({"apiVersion":1,"input":input,"output":output,"options":job.options,
         "outputSize":{"width":job.expected.0,"height":job.expected.1},"colorSpace":"srgb"});
     std::fs::write(&request, serde_json::to_vec(&payload).map_err(error)?).map_err(error)?;
-    run_worker(worker, "--job", &request, temp.path(), job.label, ctx)?;
+    if let Some((supervisor, lease)) = persistent {
+        supervisor.run(photocraft_plugin_api::WorkerOperation::Image, payload, lease, ctx)?;
+    } else {
+        run_worker(worker, "--job", &request, temp.path(), job.label, ctx)?;
+    }
+    completed()?;
     ctx.progress(0.97, job.opening);
     read_result(doc, &output, job, ctx)
 }
@@ -203,13 +240,32 @@ pub(crate) struct TaskResult {
 
 const TASK_RESULT_BYTES: u64 = 128 << 10;
 
-pub(crate) fn task(worker: &Path, options: &Value, ctx: &JobCtx) -> Result<TaskResult> {
+pub(crate) fn task_native(native: &crate::extension_package::InstalledNative, options: &Value, ctx: &JobCtx) -> Result<TaskResult> {
+    let _watch = native.watch(ctx)?;
+    let lease = native.lease()?.map(|lease| Box::new(lease) as Box<dyn Send>);
+    native.verify_payload(ctx)?;
+    validate_storage(native)?;
+    if let Some(supervisor) = &native.worker_v2 {
+        task_with(&native.worker, options, ctx, Some((supervisor, lease)), || validate_storage(native))
+    } else {
+        let _lease = lease;
+        task_with(&native.worker, options, ctx, None, || validate_storage(native))
+    }
+}
+
+fn task_with(worker: &Path, options: &Value, ctx: &JobCtx, persistent: Persistent<'_>, completed: impl FnOnce() -> Result<()>) -> Result<TaskResult> {
     ctx.check()?;
     let temp = tempfile::Builder::new().prefix("photocraft-plugin-task-").tempdir().map_err(error)?;
     let output = temp.path().join("result.json");
     let request = temp.path().join("task.json");
-    std::fs::write(&request, serde_json::to_vec(&json!({"apiVersion":1,"options":options,"output":output})).map_err(error)?).map_err(error)?;
-    run_worker(worker, "--task", &request, temp.path(), "Plugin task", ctx)?;
+    let payload = json!({"apiVersion":1,"options":options,"output":output});
+    std::fs::write(&request, serde_json::to_vec(&payload).map_err(error)?).map_err(error)?;
+    if let Some((supervisor, lease)) = persistent {
+        supervisor.run(photocraft_plugin_api::WorkerOperation::Task, payload, lease, ctx)?;
+    } else {
+        run_worker(worker, "--task", &request, temp.path(), "Plugin task", ctx)?;
+    }
+    completed()?;
     read_task_result(&output, ctx)
 }
 
@@ -607,5 +663,386 @@ mod tests {
         assert!(read_result(&source, &path, &job, &JobCtx::new()).unwrap_err().to_string().contains("RGB or RGBA"));
         std::fs::File::create(&path).unwrap().set_len((512 << 20) + 1).unwrap();
         assert!(read_result(&source, &path, &job, &JobCtx::new()).unwrap_err().to_string().contains("exceeds 64 MiB"));
+    }
+
+    #[test]
+    fn persistent_frames_refuse_unbounded_lengths_truncation_unknown_shapes_and_stale_ids() {
+        use std::io::Cursor;
+        for bytes in [Vec::new(), vec![1, 0], 0u32.to_le_bytes().to_vec(), u32::MAX.to_le_bytes().to_vec(), vec![16, 0, 0, 0, b'{', b'}']] {
+            assert!(worker_v2::read_frame(&mut Cursor::new(bytes)).is_err());
+        }
+        for value in [json!({"type":"result","id":"0"}), json!({"type":"result","id":"1","commands":[]}), json!({"type":"unknown","id":"1"})] {
+            let body = serde_json::to_vec(&value).unwrap();
+            let mut bytes = (body.len() as u32).to_le_bytes().to_vec();
+            bytes.extend(body);
+            assert!(worker_v2::read_frame(&mut Cursor::new(bytes)).is_err());
+        }
+        let body = br#"{"type":"result","id":"1"}"#;
+        let mut bytes = (body.len() as u32).to_le_bytes().to_vec();
+        bytes.extend(body);
+        assert_eq!(worker_v2::read_frame(&mut Cursor::new(bytes)).unwrap().id(), "1");
+    }
+
+    /// A transient std-only executable exercises the production --serve pipes exactly. A
+    /// libtest child would print a harness preamble and invalidate strict binary framing.
+    const PERSISTENT_FIXTURE: &str = r#"
+use std::io::{Read,Write};
+use std::time::Duration;
+fn receive()->Option<String>{let mut header=[0u8;4];std::io::stdin().read_exact(&mut header).ok()?;let length=u32::from_le_bytes(header)as usize;if length>262144{return None}let mut bytes=vec![0;length];std::io::stdin().read_exact(&mut bytes).ok()?;String::from_utf8(bytes).ok()}
+fn send(text:&str){let mut output=std::io::stdout().lock();output.write_all(&(text.len()as u32).to_le_bytes()).unwrap();output.write_all(text.as_bytes()).unwrap();output.flush().unwrap();}
+fn string(text:&str,key:&str)->String{let needle=format!("\"{}\":",key);let Some(start)=text.find(&needle)else{return String::new()};let mut bytes=text[start+needle.len()..].trim_start().chars();if bytes.next()!=Some('"'){return String::new()}let mut result=String::new();while let Some(c)=bytes.next(){match c{'"'=>break,'\\'=>{if let Some(c)=bytes.next(){result.push(match c{'n'=>'\n','r'=>'\r','t'=>'\t',other=>other});}},other=>result.push(other)}}result}
+fn main(){
+ if std::env::args().any(|arg|arg=="--hold-stdio"){std::thread::sleep(Duration::from_millis(600));return}
+ assert!(std::env::args().any(|arg|arg=="--serve"));
+ let executable=std::env::current_exe().unwrap();let mode=executable.file_stem().unwrap().to_string_lossy();
+ let hello=receive().unwrap();let plugin=string(&hello,"pluginId");let generation=string(&hello,"generation");
+ let version=if mode.contains("badversion"){3}else{2};
+ let owner=if mode.contains("badowner"){format!("{}.other",plugin)}else{plugin};
+ if mode.contains("huge"){std::io::stdout().write_all(&u32::MAX.to_le_bytes()).unwrap();return}
+ if mode.contains("truncated"){std::io::stdout().write_all(&20u32.to_le_bytes()).unwrap();std::io::stdout().write_all(b"{}").unwrap();return}
+ if mode.contains("utf8"){std::io::stdout().write_all(&1u32.to_le_bytes()).unwrap();std::io::stdout().write_all(&[255]).unwrap();return}
+ if mode.contains("handshakehold"){std::thread::sleep(Duration::from_secs(20));return}
+ send(&format!("{{\"type\":\"ready\",\"id\":\"0\",\"protocolVersion\":{},\"pluginId\":{:?},\"generation\":{:?},\"operations\":[\"image\",\"task\"]}}",version,owner,generation));
+ let mut runs=0;
+ while let Some(request)=receive(){let kind=string(&request,"type");let id=string(&request,"id");
+  match kind.as_str(){
+   "shutdown"=>return,
+   "reset"=>{runs=0;send(&format!("{{\"type\":\"resetComplete\",\"id\":{:?}}}",id));},
+   "run"=>{
+    if mode.contains("crash"){std::process::exit(7)}
+    if mode.contains("wrongid"){send("{\"type\":\"result\",\"id\":\"999\"}");continue}
+    if mode.contains("cancel"){send(&format!("{{\"type\":\"progress\",\"id\":{:?},\"fraction\":0.1,\"message\":\"Waiting for cancellation\"}}",id));while let Some(next)=receive(){if string(&next,"type")=="cancel"{send(&format!("{{\"type\":\"cancelled\",\"id\":{:?}}}",id));break}}continue}
+    if mode.contains("ignore"){std::thread::sleep(Duration::from_secs(20));return}
+    if mode.contains("featureerror"){send(&format!("{{\"type\":\"error\",\"id\":{:?},\"error\":{{\"code\":\"conflict\",\"message\":\"Fixture feature failure\",\"details\":{{}}}}}}",id));continue}
+    if mode.contains("flood"){for _ in 0..5000{send(&format!("{{\"type\":\"progress\",\"id\":{:?},\"fraction\":0.5,\"message\":\"flood\"}}",id));}}
+    if mode.contains("retain"){std::process::Command::new(&executable).arg("--hold-stdio").stdin(std::process::Stdio::inherit()).stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit()).spawn().unwrap();}
+    runs+=1;let output=string(&request,"output");
+    if string(&request,"operation")=="image"{std::fs::copy(string(&request,"input"),&output).unwrap();}
+    else{std::fs::write(&output,format!("{{\"apiVersion\":1,\"message\":\"Ready\",\"data\":{{\"pid\":{},\"runs\":{},\"storage\":{}}}}}",std::process::id(),runs,request.contains("managedStorage"))).unwrap();}
+    send(&format!("{{\"type\":\"progress\",\"id\":{:?},\"fraction\":0.5,\"message\":\"Fixture progress\"}}",id));
+    send(&format!("{{\"type\":\"result\",\"id\":{:?}}}",id));
+    if mode.contains("retain"){return}
+   },
+   _=>std::process::exit(9),
+  }
+ }
+}
+"#;
+
+    struct ResidentCounter(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl Drop for ResidentCounter {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        }
+    }
+
+    struct GenerationCounter(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl Drop for GenerationCounter {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        }
+    }
+
+    fn persistent_supervisor(
+        path: &Path,
+        owner: &str,
+        resident: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        timeout: u64,
+    ) -> std::sync::Arc<worker_v2::Supervisor> {
+        let descriptor = photocraft_plugin_api::WorkerV2Descriptor::parse(
+            &serde_json::to_vec(&json!({"protocolVersion":2,"executionProfile":"trustedNative",
+            "operations":["image","task"],"idleTimeoutMs":1000,"requestTimeoutMs":timeout,
+            "resources":{"cpuUnits":1,"memoryBytes":1048576,"gpuBytes":0,"tempBytes":1048576,"cacheBytes":0}}))
+            .unwrap(),
+        )
+        .unwrap();
+        let count = std::sync::Arc::clone(resident);
+        std::sync::Arc::new(
+            worker_v2::Supervisor::new(path.into(), owner.into(), "fixture-generation".into(), descriptor)
+                .unwrap()
+                .with_resident_admission(std::sync::Arc::new(move |_, _| {
+                    count.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                    Ok(Box::new(ResidentCounter(std::sync::Arc::clone(&count))) as Box<dyn Send>)
+                }))
+                .with_managed_storage(json!({"schemaVersion":1,"data":"private-fixture-data"}))
+                .unwrap(),
+        )
+    }
+
+    fn wait_persistent(predicate: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(4);
+        while !predicate() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(predicate(), "persistent runtime did not release its process/lease resources");
+    }
+
+    fn persistent_package(worker: &[u8], version: &str) -> Vec<u8> {
+        let manifest = json!({"apiVersion":2,"id":"org.example.lifecycle","name":"Worker lifecycle","version":version,
+            "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
+            "permissions":{"commands":["plugin.runTask","plugin.processImage"]},"panel":{"buttons":[{"id":"run","label":"Run"}]}})
+        .to_string();
+        let escaped = manifest.bytes().map(|byte| format!("\\{byte:02x}")).collect::<String>();
+        let module = wat::parse_str(format!(
+            r#"(module (memory (export "memory") 2)
+            (data (i32.const 16) "{escaped}") (data (i32.const 2048) "{{}}")
+            (func (export "pce_api_version") (result i32) i32.const 2)
+            (func (export "pce_manifest") (result i64) i64.const {})
+            (func (export "pce_alloc") (param i32) (result i32) i32.const 4096)
+            (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
+            ((manifest.len() as u64) << 32) | 16,
+            (2u64 << 32) | 2048
+        ))
+        .unwrap();
+        let entry = if cfg!(windows) { "bin/worker-normal.exe" } else { "bin/worker-normal" };
+        let descriptor = serde_json::to_vec(&json!({"packageVersion":2,"module":"plugin.pcext","native":{
+            "service":"plugin.processImage","platform":crate::extension_package::host_platform(),"entry":entry}}))
+        .unwrap();
+        let transport = serde_json::to_vec(&json!({"protocolVersion":2,"executionProfile":"trustedNative","operations":["image","task"],
+            "idleTimeoutMs":1000,"requestTimeoutMs":1000,"resources":{"cpuUnits":1,"memoryBytes":1048576,"gpuBytes":0,"tempBytes":1048576,"cacheBytes":1048576}})).unwrap();
+        let mut archive = photocraft_format::zip::ZipWriter::new();
+        for (name, bytes) in [
+            ("package.json", descriptor.as_slice()),
+            ("plugin.pcext", module.as_slice()),
+            (entry, worker),
+            ("runtime/worker-v2.json", transport.as_slice()),
+            ("LICENSE", b"Neutral fixture".as_slice()),
+            ("THIRD-PARTY-NOTICES.md", b"No external content".as_slice()),
+        ] {
+            archive.add(name, bytes).unwrap();
+        }
+        if version == "2" {
+            archive
+                .add(
+                    "runtime/managed-v1.json",
+                    br#"{"formatVersion":1,"fromSchema":0,"toSchema":1,"settings":[{"op":"setDefault","key":"release","value":2}]}"#,
+                )
+                .unwrap();
+        }
+        archive.finish().unwrap()
+    }
+
+    fn persistent_host_lifecycle(directory: &Path, binary: &Path) {
+        use crate::Session;
+        const ID: &str = "org.example.lifecycle";
+        let folder = directory.join("Extensions");
+        let archive = directory.join("lifecycle.pcplugin");
+        let executable = std::fs::read(binary).unwrap();
+        std::fs::write(&archive, persistent_package(&executable, "1")).unwrap();
+        let mut session = Session::new();
+        session.extensions.attach_folder(folder.clone()).unwrap();
+        session.execute("extension.install", json!({"path":archive,"allowNative":true})).unwrap();
+        assert_eq!(worker_v2::process_count(), 0, "installation must not launch native code");
+        drop(session);
+        let mut session = Session::new();
+        session.extensions.attach_folder(folder.clone()).unwrap();
+        assert!(session.extensions.installed[ID].deferred.is_some(), "restart must discover without activation");
+        let first = session.execute("plugin.runTask", json!({"id":ID})).unwrap();
+        let second = session.execute("plugin.runTask", json!({"id":ID})).unwrap();
+        assert_eq!(first["data"]["storage"], true);
+        assert_eq!(first["data"]["pid"], second["data"]["pid"]);
+        assert_eq!(second["data"]["runs"], 2);
+        let mut other_session = Session::new();
+        other_session.extensions.attach_folder(folder.clone()).unwrap();
+        crate::extension_cmds::activate(&mut other_session, ID).unwrap();
+        assert_ne!(
+            session.extensions.installed[ID].native.as_ref().unwrap().scheduler_owner(),
+            other_session.extensions.installed[ID].native.as_ref().unwrap().scheduler_owner(),
+            "independent supervisors in the same store cannot borrow one another's resident process credits"
+        );
+        drop(other_session);
+        session.execute("extension.runtime", json!({"id":ID,"action":"reset"})).unwrap();
+        assert_eq!(session.execute("plugin.runTask", json!({"id":ID})).unwrap()["data"]["runs"], 1);
+        let original = session.extensions.installed[ID].native.as_ref().unwrap().clone();
+        let hash = original.worker.parent().unwrap().parent().unwrap().file_name().unwrap();
+        let managed = folder.join("managed").join(ID).join(hash);
+        std::fs::write(managed.join("settings.json"), br#"{"note":"retained"}"#).unwrap();
+        assert!(session.execute("extension.storage", json!({"id":ID})).unwrap()["settingsBytes"].as_u64().unwrap() > 2);
+        session.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
+        assert!(original.lease().is_err());
+        assert!(session.execute("plugin.runTask", json!({"id":ID})).is_err());
+        wait_persistent(|| worker_v2::process_count() == 0);
+        session.execute("extension.enable", json!({"id":ID,"enabled":true})).unwrap();
+        let refreshed = session.execute("plugin.runTask", json!({"id":ID})).unwrap();
+        assert_ne!(first["data"]["pid"], refreshed["data"]["pid"]);
+        assert_eq!(refreshed["data"]["runs"], 1);
+        let native = session.extensions.installed[ID].native.as_ref().unwrap().clone();
+        let cache = managed.join("cache").join("oversized.bin");
+        std::fs::File::create(&cache).unwrap().set_len((1 << 20) + 1).unwrap();
+        assert!(session.execute("plugin.runTask", json!({"id":ID})).is_err(), "a subsequent job must revalidate durable state before running");
+        assert_eq!(native.worker_v2.as_ref().unwrap().status()["state"], "revoked");
+        std::fs::remove_file(cache).unwrap();
+        session.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
+        wait_persistent(|| worker_v2::process_count() == 0);
+        std::fs::write(&archive, persistent_package(&executable, "2")).unwrap();
+        session.execute("extension.install", json!({"path":archive,"replace":true,"allowNative":true})).unwrap();
+        let next = session.extensions.installed[ID].native.as_ref().unwrap();
+        let next_hash = next.worker.parent().unwrap().parent().unwrap().file_name().unwrap();
+        let next_settings: Value =
+            serde_json::from_slice(&std::fs::read(folder.join("managed").join(ID).join(next_hash).join("settings.json")).unwrap()).unwrap();
+        assert_eq!(next_settings, json!({"note":"retained","release":2}));
+        session.execute("extension.rollback", json!({"id":ID})).unwrap();
+        assert_eq!(session.extensions.installed[ID].extension.manifest.version, "1");
+        assert_eq!(serde_json::from_slice::<Value>(&std::fs::read(managed.join("settings.json")).unwrap()).unwrap(), json!({"note":"retained"}));
+        session.execute("extension.enable", json!({"id":ID,"enabled":true})).unwrap();
+        assert_eq!(session.execute("plugin.runTask", json!({"id":ID})).unwrap()["data"]["runs"], 1);
+        session.execute("extension.runtime", json!({"id":ID,"action":"retry"})).unwrap();
+        wait_persistent(|| worker_v2::process_count() == 0);
+        assert_eq!(session.execute("plugin.runTask", json!({"id":ID})).unwrap()["data"]["runs"], 1);
+        session.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
+        wait_persistent(|| worker_v2::process_count() == 0);
+    }
+
+    #[test]
+    fn persistent_native_workers_reuse_reset_cancel_evict_isolate_and_quarantine_real_processes() {
+        use photocraft_plugin_api::WorkerOperation;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("worker.rs");
+        std::fs::write(&source, PERSISTENT_FIXTURE).unwrap();
+        let binary = directory.path().join(if cfg!(windows) { "worker-normal.exe" } else { "worker-normal" });
+        let compiler = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        let built = Command::new(compiler).args(["--edition=2024", "-C", "debuginfo=0"]).arg(&source).arg("-o").arg(&binary).output().unwrap();
+        assert!(built.status.success(), "standalone fixture compiler: {}", String::from_utf8_lossy(&built.stderr));
+        let executable = |mode: &str| {
+            let path = directory.path().join(if cfg!(windows) { format!("worker-{mode}.exe") } else { format!("worker-{mode}") });
+            if path != binary {
+                std::fs::copy(&binary, &path).unwrap();
+            }
+            path
+        };
+        let resident = Arc::new(AtomicUsize::new(0));
+        let released = Arc::new(AtomicUsize::new(0));
+        let supervisor = persistent_supervisor(&binary, "org.example.worker", &resident, 500);
+        let output = directory.path().join("task-result.json");
+        let payload = json!({"apiVersion":1,"options":{},"output":output});
+        supervisor.run(WorkerOperation::Task, payload.clone(), Some(Box::new(GenerationCounter(Arc::clone(&released)))), &JobCtx::new()).unwrap();
+        let first = read_task_result(&output, &JobCtx::new()).unwrap();
+        assert_eq!(first.data["runs"], 1);
+        assert_eq!(first.data["storage"], true);
+        supervisor.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap();
+        let second = read_task_result(&output, &JobCtx::new()).unwrap();
+        assert_eq!(first.data["pid"], second.data["pid"]);
+        assert_eq!(second.data["runs"], 2);
+        assert_eq!(resident.load(Ordering::Acquire), 1);
+        assert_eq!(released.load(Ordering::Acquire), 0);
+        let image = Document::with_background(
+            "Original",
+            photocraft_doc::Size::new(8, 6),
+            photocraft_color::ColorMode::Rgb,
+            photocraft_color::SampleType::U8,
+            photocraft_color::Color::WHITE,
+        );
+        let image_job = ImageJob { options: json!({}), expected: (8, 6), result_name: "Processed".into(), label: "Image fixture", opening: "Opening fixture" };
+        let processed = process_with(&image, &binary, &image_job, &JobCtx::new(), Some((&supervisor, None)), || Ok(())).unwrap();
+        assert_eq!(processed.size, image.size);
+        assert_eq!(processed.name, "Processed");
+        assert_eq!(
+            processed.layers[0].surface().unwrap().to_interleaved(processed.bounds()),
+            image.layers[0].surface().unwrap().to_interleaved(image.bounds())
+        );
+        supervisor.reset(&JobCtx::new()).unwrap();
+        supervisor.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap();
+        assert_eq!(read_task_result(&output, &JobCtx::new()).unwrap().data["runs"], 1);
+        let other = persistent_supervisor(&binary, "org.example.other", &resident, 500);
+        other.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap();
+        assert_ne!(first.data["pid"], read_task_result(&output, &JobCtx::new()).unwrap().data["pid"]);
+        other.stop();
+        supervisor.stop();
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0 && released.load(Ordering::Acquire) == 1);
+
+        let idle = persistent_supervisor(&binary, "org.example.idle", &resident, 500);
+        idle.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap();
+        wait_persistent(|| idle.status()["state"] == "inactive" && resident.load(Ordering::Acquire) == 0);
+
+        let cancelled = persistent_supervisor(&executable("cancel"), "org.example.cancel", &resident, 1000);
+        let ctx = JobCtx::new();
+        let cancel_ctx = ctx.clone();
+        let cancellation = std::thread::spawn(move || {
+            wait_persistent(|| cancel_ctx.message() == "Waiting for cancellation");
+            cancel_ctx.cancel();
+        });
+        assert!(matches!(cancelled.run(WorkerOperation::Task, payload.clone(), None, &ctx), Err(EngineError::Cancelled)));
+        cancellation.join().unwrap();
+        assert_eq!(cancelled.status()["consecutiveFailures"], 0);
+        assert_eq!(cancelled.status()["state"], "idle");
+        cancelled.reset(&JobCtx::new()).unwrap();
+        cancelled.stop();
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0);
+
+        let retained = persistent_supervisor(&executable("retain"), "org.example.descendant", &resident, 500);
+        let retained_lease = Arc::new(AtomicUsize::new(0));
+        retained.run(WorkerOperation::Task, payload.clone(), Some(Box::new(GenerationCounter(Arc::clone(&retained_lease)))), &JobCtx::new()).unwrap();
+        let started = Instant::now();
+        retained.stop();
+        assert!(started.elapsed() < Duration::from_millis(100));
+        assert_eq!(retained_lease.load(Ordering::Acquire), 0, "a descendant still owns the protocol pipe");
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0 && retained_lease.load(Ordering::Acquire) == 1);
+
+        let ignored = persistent_supervisor(&executable("ignore"), "org.example.timeout", &resident, 100);
+        let started = Instant::now();
+        let failure = ignored.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap_err();
+        assert!(failure.to_string().contains("timed out"), "{failure}");
+        assert!(started.elapsed() < Duration::from_secs(4));
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0);
+
+        for mode in ["badversion", "badowner", "huge", "truncated", "utf8", "wrongid", "crash", "flood"] {
+            let broken = persistent_supervisor(&executable(mode), "org.example.invalid", &resident, 500);
+            assert!(broken.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).is_err(), "{mode}");
+            broken.stop();
+            wait_persistent(|| resident.load(Ordering::Acquire) == 0);
+        }
+
+        let broken = persistent_supervisor(&executable("badversion"), "org.example.quarantine", &resident, 500);
+        for _ in 0..3 {
+            assert!(broken.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).is_err());
+        }
+        assert_eq!(broken.status()["state"], "quarantined");
+        assert!(broken.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap_err().to_string().contains("quarantined"));
+        broken.retry().unwrap();
+        assert_eq!(broken.status()["consecutiveFailures"], 0);
+        broken.stop();
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0);
+
+        let feature = persistent_supervisor(&executable("featureerror"), "org.example.feature", &resident, 500);
+        for _ in 0..4 {
+            assert!(matches!(feature.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()), Err(EngineError::PluginApi(_))));
+        }
+        assert_eq!(feature.status()["consecutiveFailures"], 0);
+        feature.stop();
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0);
+
+        let live = Arc::new(AtomicBool::new(true));
+        let health = Arc::clone(&live);
+        let revoked = Arc::new(
+            persistent_supervisor(&binary, "org.example.revoked", &resident, 500).fresh().with_liveness(Arc::new(move || health.load(Ordering::Acquire))),
+        );
+        revoked.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()).unwrap();
+        live.store(false, Ordering::Release);
+        wait_persistent(|| revoked.status()["state"] == "revoked" && resident.load(Ordering::Acquire) == 0);
+        assert!(matches!(revoked.run(WorkerOperation::Task, payload.clone(), None, &JobCtx::new()), Err(EngineError::Cancelled)));
+
+        let live = Arc::new(AtomicBool::new(true));
+        let health = Arc::clone(&live);
+        let startup = Arc::new(
+            persistent_supervisor(&executable("handshakehold"), "org.example.startup", &resident, 500)
+                .fresh()
+                .with_liveness(Arc::new(move || health.load(Ordering::Acquire))),
+        );
+        let admission = Arc::clone(&resident);
+        let revocation = std::thread::spawn(move || {
+            wait_persistent(|| admission.load(Ordering::Acquire) != 0);
+            live.store(false, Ordering::Release);
+        });
+        let started = Instant::now();
+        assert!(matches!(startup.run(WorkerOperation::Task, payload, None, &JobCtx::new()), Err(EngineError::Cancelled)));
+        revocation.join().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(4), "startup revocation must not wait for the ten-second handshake deadline");
+        wait_persistent(|| resident.load(Ordering::Acquire) == 0);
+        wait_persistent(|| worker_v2::process_count() == 0);
+        persistent_host_lifecycle(directory.path(), &binary);
     }
 }

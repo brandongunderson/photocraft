@@ -1,4 +1,4 @@
-//! A standalone, import-free native-panel guest for PhotoCraft extension API v1.
+//! A standalone, import-free native-panel guest for the PhotoCraft Plugin API.
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 

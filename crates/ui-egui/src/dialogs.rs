@@ -636,6 +636,11 @@ pub fn confirm(app: &mut PhotocraftApp, id: u64) -> Result<Value, String> {
             };
             let (cmd, params) = crate::smart_ui::confirm_command(&d.fields, cmd, crate::filter_dialog::params_of(&d.fields));
             let result = app.run(&cmd, params.clone());
+            if cmd == "plugin.install"
+                && let Ok(installed) = &result
+            {
+                crate::extension_ui::filter_installed(app, installed);
+            }
             // A filter that runs as a background job keeps its preview on screen until the job
             // lands (`canvas::committed_filter_preview`) instead of flashing the unfiltered image.
             let running = app

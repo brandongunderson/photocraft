@@ -28,7 +28,7 @@ def main():
     lines = [
         "# Panel plugin command reference", "",
         "Generated from this PhotoCraft build's `extension.commands` and CLI command descriptions.",
-        f"Panel API version **{allowed['apiVersion']}**; **{len(allowed['commands'])}** permitted command ids.",
+        f"The current PhotoCraft Plugin API; **{len(allowed['commands'])}** permitted command ids.",
         "The running host remains authoritative. Start with the [handbook](plugin-development.md).", "",
         "## How to use this reference", "",
         "Declare each command id in `permissions.commands`, then return it with an object-valued",

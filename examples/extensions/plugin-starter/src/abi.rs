@@ -71,7 +71,7 @@ fn packed(bytes: &[u8]) -> u64 {
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn pce_api_version() -> u32 {
-    1
+    2
 }
 
 #[allow(unsafe_code)]

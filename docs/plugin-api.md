@@ -1,21 +1,25 @@
-# Panel API 2 and host metadata contract
+# PhotoCraft Plugin API
 
-**Status:** initial additive implementation, 2026-10-15. The contract crate is experimental
-`photocraft-plugin-api 0.1.0`. Package format 2, panel API 1, filter ABI 1 and native worker
-protocol 1 remain supported without rebuilding plugins. Package format 3 is a separate
-[proposal](plugin-package-v3.md).
+**Status:** current pre-release authoring contract, 2026-10-16, supplied by
+`photocraft-plugin-api 0.1.0`. Package format 2 carries this API; filter ABI 1 remains current.
+This is the only supported public plugin API. Old panels with internal version 1 are rejected
+and must be rebuilt for the current API. Filter ABI 1 and native worker protocols 1 and 2
+are independent contracts. A separate [future package-format proposal](plugin-package-v3.md)
+describes possible packaging changes; it is not another implemented public API.
 
 The [guest SDK](plugin-sdk.md) now provides the typed event envelope, broker replies, layer
 requests/snapshots, bounded ABI exports and single-manifest authoring. These describe the
-existing implemented capability-v1 wire messages. Package 3 and worker 2 are still proposals;
+existing implemented capability-v1 wire messages. [Worker 2](plugin-worker-v2.md) adds explicitly selected persistent transport;
 SDK completion does not imply completion of later host capabilities.
 
 ## Version boundaries
 
 The plugin's release version, contract crate version, package version, panel ABI, host metadata
-version and each capability version are independent. `pce_api_version` selects panel ABI 1 or
-2 and must exactly match the embedded manifest's `apiVersion`. API 2 keeps the existing four
-export signatures, import-free WASM, fresh instance per event, fuel/memory bounds and JSON
+version and each capability version are independent. Authors currently set `apiVersion: 2`
+and export `pce_api_version() == 2`; these internal wire discriminators do not name separate
+product APIs. Other panel versions are unsupported. Evolve the API through compatible
+capabilities and optional fields; introduce another major only for a genuine breaking change.
+The API uses four export signatures, import-free WASM, a fresh instance per event, fuel/memory bounds and JSON
 transport. It does not introduce ambient filesystem, network, native or host-function imports.
 
 The host metadata object has `version: 1` and `capabilities: [{id, version}]`. Capability discovery
@@ -25,8 +29,8 @@ instead implement these documented JSON contracts in another language.
 
 ## Descriptor
 
-API 2 retains API 1 identity, metadata, permissions, declarative fields and buttons. It adds two
-optional top-level fields:
+The descriptor contains identity, metadata, permissions, declarative fields and buttons, plus
+optional capability requirements, contributions and plugin-owned release metadata:
 
 ```json
 {
@@ -51,6 +55,13 @@ optional top-level fields:
   }
 }
 ```
+
+`repository` may identify the plugin's canonical public GitHub repository. Optional
+`updates: {"provider":"github","asset":"Plugin-{platform}.pcplugin"}` opts into explicit
+release checks. Updates require a repository; only one `{platform}` token is supported and
+the asset is an exact safe `.pcplugin` or `.pcext` filename. These additive fields do not
+change the API major or grant network access to a WASM guest. See [updates](plugin-updates.md)
+for publisher instructions and host validation.
 
 Capabilities are extensible lowercase identifiers, limited to 96 ASCII bytes. Initially known
 IDs are `host.commands.invoke`, `host.document.read`, `host.document.edit`, `host.events` and
@@ -83,12 +94,12 @@ larger descriptor counts return `unsupportedOperation`. Schema capacity is not a
 every host implements every count or capability. Inspect `extension.capabilities` for host limits.
 
 The descriptor is limited to 64 KiB before parsing. Unknown descriptor fields are errors.
-API 1 explicitly rejects even empty `capabilities` or `contributes`; serialization omits these
-fields from API-1 manifests. Existing strict readers do not become permissive.
+Empty capability and contribution collections may be omitted. An old panel descriptor is
+rejected with guidance to rebuild for the current API; there is no old-panel adapter.
 
 ## Responses and broker boundary
 
-API-2 responses retain `state`, `message` and `commands`, and may add `requests` and `view`:
+Responses carry optional `state`, `message`, `commands`, `requests` and `view`:
 
 ```json
 {
@@ -115,16 +126,15 @@ and history; successful batches create one Undo step. A sole edit is terminal: t
 the validated guest state and message after the edit succeeds, and does not execute a guest
 continuation after commit. Required view permissions are checked before the edit begins.
 
-Responses permit either legacy commands or broker requests, not both. Each response is at most
+Responses permit either sequential command invocations or broker requests, not both. Each response is at most
 256 KiB, state at most 128 KiB, message at most 4096 bytes, commands at most 32 and requests at
 most 8. Each broker parameter object is at most 64 KiB. Inspector views have at most 64 rows,
 titles/labels of at most 128 characters and printable values of at most 1024 characters. Native
 view rendering belongs to the UI layer; no guest UI code executes in the drawing path.
 
-API 1 rejects `requests` and `view` even when empty/null, and retains its previous state,
-command, message and request budgets. This initial slice uses fresh WASM instances and
-host-carried state; general asynchronous continuations and persistent interactive guest
-instances are future capabilities, not implicit API-2 behavior.
+All supported panels use this response parser. The current implementation uses fresh WASM
+instances and host-carried state; general asynchronous continuations and persistent interactive
+guest instances remain future capabilities.
 
 Document invalidations coalesce and use round-robin admission so early names cannot monopolize
 the queue. Desktop inspector handlers run outside drawing, with four process-wide worker slots;

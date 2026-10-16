@@ -59,12 +59,19 @@ fn hashes(path: &Path) -> Result<Value> {
 fn check(path: &Path) -> Result<Value> {
     let mut host = Session::new();
     let inspected = host.execute("extension.inspect", json!({"path": path}))?;
+    let mut worker_transport = Value::Null;
     if let Some(native) = inspected["package"].get("native").filter(|value| value.is_object()) {
         let entry = native["entry"].as_str().ok_or_else(|| fail("missing native entry"))?;
         let platform = native["platform"].as_str().ok_or_else(|| fail("missing native platform"))?;
         let archive = read_limited(path, 512 << 20)?;
         let zip = ZipReader::new(&archive)?;
         native::check(&zip.read_by_name(entry, 256 << 20)?, platform)?;
+        if zip.find("runtime/worker-v2.json").is_some() {
+            let declaration = photocraft_plugin_sdk::api::WorkerV2Descriptor::parse(
+                &zip.read_by_name("runtime/worker-v2.json", photocraft_plugin_sdk::api::MAX_WORKER_DESCRIPTOR_BYTES)?,
+            )?;
+            worker_transport = serde_json::to_value(declaration)?;
+        }
     }
     let artifact = hashes(path)?;
     if artifact["blake3"] != inspected["hash"] {
@@ -75,6 +82,7 @@ fn check(path: &Path) -> Result<Value> {
         "hostPlatform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
         "checks": ["bounded archive and safe paths", "complete payload and CRC", "package target and native executable header", "panel manifest and WASM ABI", "packaged filter manifests and WASM ABI", "host command grants"],
         "nativeDependencyAudit": "not performed: native code is never executed by check",
+        "persistentWorker": worker_transport,
         "inspection": inspected
     }))
 }
@@ -158,13 +166,14 @@ mod tests {
     }
 
     #[test]
-    fn original_standalone_panel_passes_the_real_host_abi_and_grant_checks() {
+    fn standalone_panel_passes_the_real_host_abi_and_grant_checks() {
         let dir = tempfile::tempdir().unwrap();
         let panel = dir.path().join("panel.pcext");
-        std::fs::write(&panel, include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel-v1.wasm")).unwrap();
+        std::fs::write(&panel, include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel-v2.wasm")).unwrap();
         let report = check(&panel).unwrap();
         assert_eq!(report["status"], "passed");
         assert_eq!(report["inspection"]["manifest"]["id"], "org.example.image-gain");
+        assert_eq!(report["inspection"]["manifest"]["apiVersion"], 2);
     }
 
     #[test]

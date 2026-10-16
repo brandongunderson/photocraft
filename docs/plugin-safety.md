@@ -5,6 +5,9 @@ does not prove a plugin's algorithm is correct, establish its publisher's identi
 native processing code. This page describes the protections and their limits in this source tree.
 See the [developer handbook](plugin-development.md) for authoring and [testing](plugin-testing.md)
 for release checks. An older editor may not contain these additions.
+New plugin development targets the current API. Temporary adapters preserve our existing
+compiled plugins during this internal transition; they are not a promised external ecosystem
+support window or a reason to introduce a new API major for each implementation phase.
 
 ## What installation checks
 
@@ -62,12 +65,12 @@ if a later step fails, earlier successful actions remain. Undoable edits stay in
 navigation, document duplication and explicit Undo/Redo commands have their own semantics.
 Proposed guest state is committed only after the relevant successful operation.
 
-API-2 broker edits use a distinct contract: a single bounded rename/visibility batch either
+current API broker edits use a distinct contract: a single bounded rename/visibility batch either
 commits as one Undo step or changes no document/history/state. Host-created principals and
 opaque handles bind requests to the session, owning installation, document incarnation and
 revision. Captured and current automation restrictions both apply, including deferred-event
 retries. Inspector events are read-only; they cannot execute editing commands or native jobs.
-See [panel API 2](plugin-api-v2.md) for its experimental scope and reported limits.
+See [the PhotoCraft Plugin API](plugin-api.md) for its experimental scope and reported limits.
 
 Pixel filters use a different ABI and different fuel/memory limits. They process temporary
 band data; a failed filter does not commit partially processed pixel bands. Output samples,
@@ -86,12 +89,20 @@ must validate options and write the promised sRGB PNG. Host flattening, per-oper
 bounds, result validation and owner binding protect editing transactions; they do not remove
 the native process's OS privileges. See [the generic contract](plugin-image-processing.md).
 
-A worker runs as a separate hidden process with a host-created job request and temporary paths.
+A legacy worker runs as a separate hidden process with a host-created job request and temporary paths.
 It reports progress and receives cancellation; the host imposes a 45-minute native-worker execution deadline and
 requests direct-process termination after a 10-second cancellation grace period. Diagnostics
 use a temporary regular file with a 16 MiB checked limit and bounded reads/messages. The host
 does not wait for stderr pipe EOF from inherited child handles. That avoids an exited worker
 leaving a diagnostics thread and installation lease stuck indefinitely.
+
+Packages can explicitly select [worker protocol 2](plugin-worker-v2.md) for a private persistent
+process, framed control messages, correlated jobs and bounded idle eviction. The descriptor
+and handshake must agree; a mismatch does not silently select another protocol. Scheduling
+charges declared resident resources while that worker is idle. Per-plugin queues, fair
+admission, activation failure quarantine and preview retention limits are described in
+[lifecycle and resource admission](plugin-lifecycle.md). Legacy workers retain their launch
+arguments and diagnostic contract.
 
 The output must match the expected bounded PNG dimensions/depth/byte limit before and after
 decoding. A successful exit alone cannot admit a result. Source identity/revision and owning
@@ -122,8 +133,9 @@ Ordinary document editing remains available. Installed files, saved enable flags
 settings and preferences are retained; starting normally restores the usual plugin configuration.
 The manager shows that plugins were skipped, rather than claiming those installations were removed.
 
-This is a manual recovery option, not automatic crash attribution or quarantine. A disabled
-plugin in a normal launch still undergoes bounded startup validation; the recovery flag bypasses
+This manual recovery option also works when deferred activation or worker failures have been
+quarantined. A disabled plugin in a normal launch still undergoes bounded startup metadata
+validation; the recovery flag bypasses
 loading altogether. Start a new process with the flag; it is not an in-app switch for already
 running code. Cached Smart Filter rendering may differ when its required filter is unavailable.
 
@@ -134,7 +146,7 @@ not stop other valid installations from loading. To repair a corrupt installatio
 
 1. Start normally; the manager reports the failed installation.
 2. Choose a known-good plugin file and review its identity and requested access again.
-3. Select **Replace or repair an existing installation**, then **Install plugin**.
+3. Use the secondary **Reinstall / Repair** maintenance action and confirm the reviewed file.
 4. Enable the repaired installation explicitly if it was disabled before repair.
 
 Explicit replacement can back up bounded corrupt metadata and publish a validated replacement.
@@ -152,15 +164,19 @@ moving a suspect installation aside; do not delete the entire settings or recove
 ## Cooperative store locking
 
 Desktop instances using this implementation share `.photocraft-store.lock` in the managed
-plugin folder. Startup/loads and executing native jobs acquire shared OS locks; installation,
-repair, enable/disable and removal require an exclusive lock. Contention returns a busy error
+plugin folder. Startup/loads and authority checks acquire short shared OS locks; installation,
+repair, enable/disable, rollback and removal require an exclusive mutation lock. Native jobs
+hold separate per-generation shared leases while executing; an idle persistent worker retains
+its generation lease. Collection takes an exclusive generation lease. Contention returns a busy error
 before changing files. Locks release when their owning file closes or the process exits. Never
-replace/delete this file to clear a busy error. An existing store needs one writable initialization
+replace/delete store or generation lock files to clear a busy error. An existing store needs one writable initialization
 to create it; filesystems without working locks fail closed.
 
 Native image/task workers hold a read lease through execution. Completion and preview Apply
 recheck the selected installation record's hash, package, activation epoch and disabled marker, holding
-a read lease through result/state admission. An update/remove/disable in another current host
+a short shared store guard and generation lease through result/state admission. Packaged-filter
+previews and current API document/view/state commits also retain the shared store guard through their
+final validation and mutation. An update/remove/disable in another current host
 therefore rejects an obsolete result. Completed previews do not retain a long-running OS lease.
 Each management operation advances a bounded per-plugin epoch in `<id>.activation.json`.
 Retain this small host-owned tombstone after removal: disable/re-enable or reinstalling identical
@@ -169,22 +185,29 @@ at zero. Malformed, oversized or exhausted epochs fail closed; do not delete the
 If publication fails after revocation, the previous active record remains selected but other
 sessions may need to reload its native identity before retrying work.
 
-This first Phase 2 slice uses one lock for the entire store. Native work temporarily blocks
-management operations for every plugin in that store; concurrent readers/jobs are allowed.
-It coordinates cooperating current hosts, not old hosts, manual file edits or malicious native
-code. It does not synchronize all running instances' in-memory registries or supervise worker
+The publication lock and generation leases let unrelated plugin management proceed while a
+native worker is running. Snapshotting a managed-data source requires that generation to be
+quiescent, so an update may still report busy until its worker releases the source lease.
+Disable/removal revoke host authority and stale results; leased bytes are retained when
+immediate cleanup is unsafe. Managed-data preparation, migration and rollback publish a
+complete code/state pair; see [managed storage](plugin-managed-storage.md).
+
+These locks coordinate cooperating current hosts, not old hosts, manual file edits or malicious native
+code. They do not synchronize all running instances' in-memory registries or supervise worker
 descendants after host death. Restart other desktop instances after changing installations to
-reload their plugin registry; there is no live cross-process registry refresh yet. Per-generation
-leases, migrations, quotas and stronger native supervision remain later work.
+reload their plugin registry; there is no live cross-process registry refresh yet.
 
 ## Remaining limits and regression evidence
 
-- No automatic plugin crash quarantine, publisher signing or malware certification.
+- Deferred activation and worker-2 failures have bounded quarantine/retry; publisher signing,
+  malware certification and general crash attribution remain unavailable.
 - Native package compatibility checks are structural; runtime/model/driver behavior is validated on use.
-- Memory and image bounds are per operation/instance, not an aggregate quota for all jobs, documents,
-  filter threads, GPU allocations and other applications. Available memory can still be exhausted.
+- The scheduler bounds admitted jobs and declared resident resources within one host process.
+  It does not impose kernel resource limits on trusted native code, combine all editor instances'
+  budgets, or bound every document/filter allocation and other applications. Available memory can
+  still be exhausted.
 - Cooperative OS store locks protect current hosts; older instances must be closed before
-  changing installations. Native process trees and aggregate resources remain uncontained.
+  changing installations. Native process trees and native resource consumption remain uncontained.
 - WASM fuel bounds guest execution, not the cost of requested editor commands. Heavy built-in
   commands have their normal engine bounds and can still take time.
 - Damaged ownership metadata may require manual investigation rather than automatic removal.
@@ -196,3 +219,14 @@ issues found during review: finite HDR selection blending and forged stored-ZIP 
 These checks complement the existing hostile-module, permissions, package, jobs, stale-result,
 selection, alpha, Undo/Redo and automation tests. They do not prove the absence of every bug or
 establish compatibility with every image, plugin, machine or driver.
+
+Phase 2 adds metadata-only discovery, lazy activation, queue/resource admission, private
+persistent-worker supervision, per-generation leases, multiple preview retention, managed
+migration and rollback regressions. Coverage and platform-specific execution evidence remain
+part of the release gate; an implemented transport is not a claim of OS native containment.
+
+Full-payload integrity verification and packaged filter compilation run in scheduled jobs,
+not during panel preparation or drawing. Panel activation checks its bounded module and
+embedded descriptor. Bulk hashing uses cancellable fixed-size reads instead of allocating
+an entire model file. Native verification is scoped to the installed private activation;
+it does not promise protection from an unrestricted same-user process changing files later.

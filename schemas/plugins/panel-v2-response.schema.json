@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PanelResponse",
-  "description": "Additive panel-2 response; panel-1 bytes continue through their original strict parser.",
+  "description": "Bounded response for the current PhotoCraft Plugin API.",
   "type": "object",
   "properties": {
     "commands": {

@@ -19,6 +19,82 @@ fn complete_descriptor_round_trip_is_independent_of_editor_types() {
 }
 
 #[test]
+fn optional_repository_and_plugin_owned_update_source_round_trip() {
+    let original = Descriptor::parse(&serde_json::to_vec(&descriptor()).unwrap()).unwrap();
+    let serialized = serde_json::to_value(&original).unwrap();
+    assert!(serialized.get("repository").is_none());
+    assert!(serialized.get("updates").is_none());
+    let mut value = descriptor();
+    value["repository"] = json!("https://github.com/example-org/independent-plugin");
+    value["updates"] = json!({"provider":"github","asset":"Independent-{platform}.pcplugin"});
+    let parsed = Descriptor::parse(&serde_json::to_vec(&value).unwrap()).unwrap();
+    assert_eq!(github_repository_parts(parsed.repository.as_deref().unwrap()).unwrap(), ("example-org", "independent-plugin"));
+    let source = parsed.updates.as_ref().unwrap();
+    assert_eq!(source.provider, UpdateProvider::Github);
+    for platform in ["windows-x86_64", "windows-aarch64", "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-aarch64"] {
+        assert_eq!(source.asset_for_platform(platform).unwrap(), format!("Independent-{platform}.pcplugin"));
+    }
+    assert!(source.asset_for_platform("../other").is_err());
+    assert_eq!(Descriptor::parse(&serde_json::to_vec(&parsed).unwrap()).unwrap(), parsed);
+    value["updates"] = json!({"provider":"github","asset":"Independent.pcext"});
+    assert_eq!(
+        Descriptor::parse(&serde_json::to_vec(&value).unwrap()).unwrap().updates.unwrap().asset_for_platform("linux-x86_64").unwrap(),
+        "Independent.pcext"
+    );
+}
+
+#[test]
+fn update_sources_reject_ambiguous_repositories_and_unsafe_asset_templates() {
+    let mut value = descriptor();
+    value["updates"] = json!({"provider":"github","asset":"Independent.pcplugin"});
+    assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+    for repository in [
+        "http://github.com/example/plugin",
+        "https://github.com.evil.test/example/plugin",
+        "https://github.com@example.test/example/plugin",
+        "https://github.com/example/plugin.git",
+        "https://github.com/example/plugin/",
+        "https://github.com/example/plugin/releases",
+        "https://github.com/example/plugin?token=secret",
+        "https://github.com/example/plugin#fragment",
+        "https://github.com/example/..",
+        "https://github.com/-example/plugin",
+        "https://github.com/example--org/plugin",
+        "https://github.com/example/%70lugin",
+        "https://github.com/example/plug\nin",
+    ] {
+        value["repository"] = json!(repository);
+        assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err(), "{repository:?}");
+    }
+    value["repository"] = json!("https://github.com/example/plugin");
+    for asset in [
+        "",
+        "../plugin.pcplugin",
+        "folder/plugin.pcplugin",
+        "folder\\plugin.pcplugin",
+        "plugin*.pcplugin",
+        "plugin-{version}.pcplugin",
+        "plugin-{platform}-{platform}.pcplugin",
+        "plugin.{platform}.zip",
+        "plugin.pcplugin?x=1",
+        "NUL.pcplugin",
+        ".plugin.pcplugin",
+        "plugin.PCPLUGIN",
+    ] {
+        value["updates"] = json!({"provider":"github","asset":asset});
+        assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err(), "{asset:?}");
+    }
+    value["updates"] = json!({"provider":"github","asset":format!("{}.pcplugin", "a".repeat(160))});
+    assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+    value["updates"] = json!({"provider":"other","asset":"plugin.pcplugin"});
+    assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+    value["updates"] = json!({"provider":"github","asset":"plugin.pcplugin","url":"https://example.test"});
+    assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err());
+    value["updates"] = serde_json::Value::Null;
+    assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_ok());
+}
+
+#[test]
 fn missing_required_and_wrong_version_have_structured_errors_optional_falls_back() {
     let parsed = Descriptor::parse(&serde_json::to_vec(&descriptor()).unwrap()).unwrap();
     let absent = negotiate(&parsed.capabilities, &[]).unwrap_err();

@@ -10,6 +10,10 @@ manifest, permissions and event messages.
 
 PhotoCraft's core supplies the shared host contract only. Algorithms, model names, option
 validation, inference engines and non-system runtime dependencies belong to each package.
+New development targets the current API and SDK. Compatibility adapters keep our existing
+compiled plugins working during this internal transition; PhotoCraft does not yet have an
+external plugin ecosystem or a calendar-based public API support guarantee. Implementation
+phases do not create new API majors by themselves.
 
 ## General package version 2
 
@@ -87,7 +91,12 @@ an external JSON file cannot replace its `pce_manifest` export.
 
 The package schema version, panel API version, filter ABI version, native job protocol version
 and author's release version are independent. General packages use `packageVersion: 2` while
-the panel, filter and native job protocols remain version 1.
+panels use the PhotoCraft Plugin API (internal discriminator `2`), filters retain ABI 1,
+and native workers retain job protocol 1
+unless they explicitly declare [worker protocol 2](plugin-worker-v2.md) in the recorded
+`runtime/worker-v2.json` member. Existing workers need no descriptor or rebuild. An optional
+`runtime/managed-v1.json` member declares a bounded host-managed state migration; see
+[managed storage](plugin-managed-storage.md).
 
 The earlier version-1 **package format** and its two fixed AI services have been removed.
 Rebuild and reinstall those plugins as version-2 packages under the same panel id. Old managed
@@ -135,7 +144,7 @@ canonicalizes that root and rejects symlinks/reparse points in managed descendan
 | `plugin.pcext` | 8 MiB |
 | Any member's decompressed content | Must be nonempty |
 | Host installation record | 512 KiB |
-| Installed extensions | 128 per session, including raw guests |
+| Installed extensions | 4096 per session, including raw guests |
 
 MiB and GiB here are binary units. Declared ZIP sizes are not trusted as proof of actual
 size. Each member is decompressed within its applicable remaining budget, checked for exact
@@ -178,9 +187,13 @@ archive after packaging is complete.
 
 ## Review, native-code grant and installation
 
-The desktop manager's **Browse…**, file-drop and **Review plugin** flows call `extension.inspect`.
+The desktop manager's file picker, file-drop and typed-path inspection call `extension.inspect`.
 Its result contains `manifest`, the whole-input BLAKE3 `hash`, parsed `package` metadata,
-the selected file's `downloadBytes`, and `storage: {installedBytes, modelBytes}`. Installed
+the selected file's `downloadBytes`, `storage: {installedBytes, modelBytes}` and `installation`
+review metadata. The latter includes the proposed action and expected installed hash,
+activation and session revision. Pass those expected values with an explicit `intent`
+(`install`, `update`, `reinstall`, `repair`, `downgrade` or deliberate `replace`) to bind
+confirmation to the reviewed installation. Installed
 bytes are the sum of the validated, uncompressed payload files. Model bytes are the subset
 under `runtime/models/`, including model configuration files; they are already included in
 the installed total. Manage Plugins shows these sizes during review and on installed entries.
@@ -191,17 +204,20 @@ zero model bytes. Model files downloaded separately outside the managed payload 
 When model bytes are zero, the manager hides the Models text and still shows Installed size.
 The manager shows the plugin identity, requested commands and the native-code disclosure. When
 the user installs it, the manager passes that hash as `expectedHash`, `allowNative: true`, and
-the selected replacement flag to `extension.install`.
+the reviewed installation intent to `extension.install`. The manager offers **Update** for
+a newer release of the same identity and keeps reinstall/repair under maintenance actions.
 
 Trusted engine callers can use the same two-step flow:
 
 | Command | Inputs relevant to native packages | Result or rule |
 |---|---|---|
 | `extension.inspect` | `path` to the final local archive | Validates package and guest; returns manifest, BLAKE3 hash and package metadata |
-| `extension.install` | `path`, `allowNative: true`, returned `expectedHash`; `replace: true` for an installed id | Validates again, checks reviewed bytes and installs into the attached store |
-| `extension.list` | `{}` | Installed manifests, enabled state, package metadata and startup/cleanup errors |
+| `extension.install` | `path`, `allowNative: true`, returned `expectedHash` and reviewed installation intent | Validates again, checks reviewed bytes/revision and installs into the attached store |
+| `extension.list` | `{}` | Installed manifests, enabled/lifecycle state, package metadata and startup/cleanup errors |
 | `extension.enable` | `id`, boolean `enabled` | Persists enabled state; disabling invalidates retained comparisons |
-| `extension.remove` | `id` | Removes the active installation and its owned payload, subject to leases |
+| `extension.remove` | `id`, optional `purgeData` (default false) | Removes the active installation; managed data is preserved unless explicitly requested |
+| `extension.rollback` | `id` | Verifies and restores the retained previous code/state generation |
+| `extension.storage` | `id` | Separate managed settings/data/cache/reference bytes and file counts |
 
 Native packages require a local `path` and an attached persistent plugin directory. The base64
 `data` route is for raw guests; a ZIP supplied that way is rejected. Desktop PhotoCraft attaches
@@ -228,6 +244,8 @@ embedded id is `org.example.native-tool`, the layout is:
 ```text
 Extensions/
   org.example.native-tool.installation.json
+  org.example.native-tool.rollback.json        # previous code/state, when available
+  org.example.native-tool.activation.json      # retained revocation epoch
   org.example.native-tool.disabled             # exists only when disabled
   bundles/
     org.example.native-tool/
@@ -236,6 +254,15 @@ Extensions/
         package.json
         plugin.pcext
         ...recorded worker and assets...
+  managed/
+    org.example.native-tool/
+      <whole-archive-blake3>/
+        .photocraft-managed.json
+        .photocraft-managed-stage.json
+        settings.json
+        secrets-refs.json
+        data/
+        cache/
 ```
 
 The angle-bracket name above denotes the actual 64-character lowercase BLAKE3 hex digest,
@@ -243,17 +270,25 @@ not a literal directory name. These files are internal host metadata, not files 
 source archive or edit as an update mechanism.
 
 The active record has format version 1, the guest id, archive hash, parsed package metadata,
-and each owned member's relative path, decompressed byte size and BLAKE3 hash. The generation's
+each owned member's relative path, decompressed byte size and BLAKE3 hash, and an optional
+host-validated panel descriptor used for lazy discovery. The generation's
 ownership marker must match the active record exactly. Installation writes a temporary sibling
 generation, synchronizes its files and marker, renames it into place, verifies the result, and
-publishes the small active record last with an atomic write. Validation or extraction failures
-leave the previous active record selected. After successful publication, the host attempts to
-clean the old generation; cleanup failures are reported as warnings.
+prepares [managed state](plugin-managed-storage.md) under the same generation hash. It publishes
+the small active record last with an atomic write. Validation, extraction or migration failures
+leave the previous active record selected. The immediately previous verified installation is
+retained for explicit rollback; collection of older owned code is subject to generation leases
+and reports cleanup failures as warnings. Only the current and immediately previous pair are
+retained intentionally. A third, older generation's owned code and managed state are eligible
+for collection after a successful update; this is not a historical data archive.
 
 At startup or explicit folder attachment, the host validates the active record and ownership
-marker, then reads and verifies every recorded member's exact size and BLAKE3 hash. It reloads
-and validates the guest, permissions and id against the record before registering the package.
-Changed, missing or invalid payloads are skipped and reported. An authoritative installation
+marker. New records register the validated descriptor without reading every model or compiling
+the panel. Protocol declarations and bounded managed metadata are checked without starting a
+native process. First activation reads and verifies every recorded member's exact size and
+BLAKE3 hash, validates the embedded guest against the descriptor, and loads private filters.
+Legacy records without a cached descriptor retain eager loading. Changed, missing or invalid
+payloads fail activation and are reported. An authoritative installation
 record prevents falling back to a neighboring legacy `<id>.pcext` after corruption. These checks
 occur on installation and load; the loader does not promise to rehash every payload before
 each worker launch.
@@ -263,34 +298,41 @@ ownership/path checks. Do not modify installed assets in place. Publish a rebuil
 replace the installation instead. After successful installation, PhotoCraft uses its managed
 copy; the original download can be moved or deleted.
 
-An update is identified by the embedded guest id, not by comparing display-version strings.
-An existing registered id requires explicit `replace: true`; there is no automatic semantic
-version ordering or downgrade prohibition. Replacement preserves enabled/disabled state,
+An update retains the embedded guest ID and uses a newer semantic release version.
+Same-version reinstall/repair and older-version installation require explicit maintenance
+intent. Optional [GitHub release updates](plugin-updates.md) prepare a verified package for
+the same review and installation transaction. Replacement preserves enabled/disabled state,
 resets the guest's JSON state, and invalidates retained previews. Changing the id creates a
 different plugin. Raw guests and native packages can replace one another under the same id,
 with native consent required when the replacement contains native code.
 
 Removal deletes any legacy standalone guest before removing the active record, then deletes
 only files listed in the matching ownership record and their empty directories. It also removes
-the disabled marker. Cleanup does not recursively delete arbitrary neighboring files. Unexpected
+the disabled marker. Managed settings, durable data, cache and opaque secret references for
+the current and retained previous generation are preserved by default; `purgeData:true`
+explicitly requests safe collection of those managed states. Legacy external caches and
+downloads are always preserved. Cleanup does not recursively delete arbitrary neighboring files. Unexpected
 files, ownership conflicts or filesystem errors can leave leftovers and a reported warning;
 they do not authorize deleting unrelated data.
 
 ## Installation leases and result lifetime
 
-Current desktop hosts also coordinate through a shared OS store lock during native work,
-with exclusive locking for installation/repair, enable/disable and removal. A busy operation
-fails without changing the selected installation. The initial lock covers the whole store,
-so wait for native work to finish before managing any plugin there. Completion and Apply
-recheck the stored hash/package, activation epoch and disabled marker. Completed comparisons release the OS
-lease. See [store safety and remaining limits](plugin-safety.md#cooperative-store-locking),
+Current desktop hosts coordinate record publication through a short OS store lock, with
+exclusive mutation for installation/repair, enable/disable, rollback and removal. Separate
+per-generation reader leases protect native code and managed state during execution, including
+an idle persistent worker. Unrelated plugin management can proceed. Preparing a managed-data
+snapshot requires its source generation to be quiescent; contention returns a busy error.
+Completion and Apply recheck the stored hash/package, activation epoch and disabled marker.
+Completed comparisons release the OS lease. See
+[store safety and remaining limits](plugin-safety.md#cooperative-store-locking),
 including older hosts, instance reloads and retained activation tombstones.
 
-The registered package and jobs hold shared `Arc<InstalledNative>` handles. Replacement,
-removal and reattaching the plugin folder require the registry to be the only remaining strong
-owner. A running job keeps the installation leased through processing and its completion
-closure, so this session's installer cannot remove its executable and assets underneath it. Requesting cancellation
-does not immediately release the lease: wait for the worker and job completion to finish.
+The registered package and jobs also hold shared `Arc<InstalledNative>` handles. A running job
+retains its installation lease through processing and result admission. Revocation cancels
+host work and prevents stale commits; code still in use cannot be collected underneath a
+worker. Cancellation is bounded but does not release a lease before shutdown completes.
+Cleanup can be deferred with a warning when another process still holds a generation lease.
+Lock files are persistent host metadata; deleting one to clear a busy error breaks coordination.
 
 A completed comparison uses a weak native handle, so viewing an unapplied result does not
 keep the installation leased. Disabling, replacing, removing or reloading its plugin invalidates
@@ -364,7 +406,9 @@ The host waits for worker termination and diagnostics before admitting a result 
 the job error.
 
 See [safety and recovery](plugin-safety.md) for the recovery launch option, damaged-record repair,
-native trust boundaries and the current coarse cross-process store locking limits.
+native trust boundaries and cross-process lease limits. New packages can opt into
+[worker protocol 2](plugin-worker-v2.md) for a supervised private persistent worker. Its framed
+stdout channel and handshake are separate from the unchanged protocol-1 diagnostics above.
 
 A successful exit is necessary but insufficient. The host requires a regular output file
 within the shared byte limit, then checks the PNG header, exact expected dimensions,
@@ -387,8 +431,17 @@ an explicit host implementation and review.
 | [`extension_cmds.rs`](../crates/engine/src/extension_cmds.rs) | Permission checks, inspection hash, native grant, store attachment, instance binding and leases |
 | [`extension_ui.rs`](../crates/ui-egui/src/extension_ui.rs) | Manager review and installation workflow |
 | [`plugin_runtime.rs`](../crates/engine/src/plugin_runtime.rs) | Shared native image transport, bounded diagnostics, cancellation and PNG validation |
+| [`plugin_runtime/worker_v2.rs`](../crates/engine/src/plugin_runtime/worker_v2.rs) | Opt-in framed persistent-worker lifecycle and protocol validation |
+| [`extension_package/managed.rs`](../crates/engine/src/extension_package/managed.rs) | Managed-state paths, quotas, declarative migration and recovery |
 | [`plugin_preview.rs`](../crates/engine/src/plugin_preview.rs) | Completed-result identity, source validation and weak installation binding |
 | [`workspace.rs`](../crates/automation/src/workspace.rs) | Restricted automation's ambient-path/native-process authorization |
 
 Return to the [plugin development guide](plugin-development.md) for authoring and iteration,
 or the [extension API reference](extensions.md) for the exact guest ABI and command schemas.
+
+
+Dormant and panel activation paths do not scan model assets. The first processing job verifies
+the owned closure with cancellable 64 KiB reads before launching native code; packaged filters
+are verified and compiled on that job thread. Runtime resource/cancellation identities include
+a private host runtime instance, so two sessions using the same store cannot borrow each
+other's process reservation or accidentally share a worker.

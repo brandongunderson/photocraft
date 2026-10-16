@@ -19,16 +19,19 @@ excluding generated `target/`, `dist/`, and Git metadata; preserve locks and lic
 If no starter is available, obtain the matching source/kit before depending on its
 scaffold. Do not substitute upstream-only WASM filter documentation for these APIs.
 
-For new API-2 guests, the optional `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT`
+For new plugins, the optional `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT`
 command exports a complete project with private API/SDK 0.1 sources, licenses and locks.
 The executable embeds these public sources; no editor checkout is needed to export or
 build the project. Read its generated README and `AGENTS.md`. Edit `authoring.json` and
-the handler; Cargo generates manifests/bindings in `OUT_DIR`. Existing plugins need no
-SDK migration, synchronized SDK release or rebuild of their supported wire ABI.
+the handler; Cargo generates manifests/bindings in `OUT_DIR`. SDK adoption is optional, and
+plugin projects own their privately pinned SDK releases and independent builds.
 
-Current authoring contracts are panel API 1, experimental panel API 2, filter ABI 1,
-package format 2, and native worker protocol 1. Package format 3 and worker protocol 2
-are proposals. The application release number alone does not establish API support.
+The PhotoCraft Plugin API is the only supported authoring contract. Its current internal
+panel discriminator is `2`; old version `1` is rejected and must be rebuilt. Evolve this API
+until a genuine breaking change needs a new major; milestones do not create parallel APIs.
+Package format 2, filter ABI 1 and native worker protocols 1/2 serve independent layers.
+Select worker 2 only through a verified runtime/worker-v2.json declaration. The application
+release number alone does not establish API support.
 
 Use the running host's `extension.capabilities`, `extension.commands`, and command
 descriptions where available. Discovery reports availability, not permission. An
@@ -37,7 +40,7 @@ as unverified until exercised against the intended build.
 
 Read [API contracts](references/api-contracts.md) for version boundaries, payloads,
 ownership, and current limits. In a PhotoCraft source/kit, consult `docs/plugin-development.md`
-and the relevant `docs/extensions.md`, `docs/plugins.md`, `docs/plugin-api-v2.md`,
+and the relevant `docs/extensions.md`, `docs/plugins.md`, `docs/plugin-api.md`,
 `docs/plugin-image-processing.md`, or `docs/plugin-native-tasks.md` for full details.
 The matching `docs/plugin-sdk.md` covers typed events/replies, document builders,
 single-manifest authoring, source exports and the preview compatibility policy.
@@ -47,15 +50,15 @@ Those documents are authoring references, not runtime source dependencies.
 
 | Feature | Starter path in a source checkout or developer kit | Result |
 |---|---|---|
-| Typed new panel/command guest with single source metadata | `photocraft-plugin new` from a reviewed authoring input | API-2 project with privately included SDK/API sources |
-| Panel combining permitted editor commands | `examples/extensions/plugin-starter` | Panel API 1 `.pcext` |
+| Typed new panel/command guest with single source metadata | `photocraft-plugin new` from a reviewed authoring input | current API project with privately included SDK/API sources |
+| Panel combining permitted editor commands | `examples/extensions/plugin-starter` | Current API `.pcext` |
 | Pixel algorithm using the filter target's depth and channels | `examples/plugins/filter-starter` | Filter ABI 1 `.wasm` |
 | Panel with its own executable and/or bundled WASM algorithm | `examples/extensions/image-plugin-starter` | Package 2 `.pcplugin` |
-| Namespaced command and atomic layer rename/visibility edits | `examples/extensions/layer-organizer` | Experimental API 2 `.pcplugin` |
-| Native read-only inspector refreshed by document changes | `examples/extensions/document-inspector` | Experimental API 2 `.pcplugin` |
+| Namespaced command and atomic layer rename/visibility edits | `examples/extensions/layer-organizer` | PhotoCraft Plugin API `.pcplugin` |
+| Native read-only inspector refreshed by document changes | `examples/extensions/document-inspector` | PhotoCraft Plugin API `.pcplugin` |
 
-Use API 1 when it covers the feature. Select API 2 deliberately for its implemented
-capabilities, without changing package format. Native maintenance tasks extend a
+Use the PhotoCraft Plugin API for all panels and migrate obsolete owned panels in their
+independent projects. The package container does not change for that migration. Native maintenance tasks extend a
 package with an owned worker; they are not a sixth starter or a separate runtime.
 Identify unsupported requirements early: dynamic/free-text controls, custom docking,
 canvas tools, general callbacks, and high-precision native layer/region transport
@@ -71,7 +74,7 @@ adding a plugin-specific adapter to the editor.
   dependencies, and asset provenance here. Record platform/driver requirements and
   include redistributable dependencies and their notices where applicable.
 - Change manifest fields and matching handler logic together. New identities require
-  updating API-2 contribution namespaces and bundled processor references as well.
+  updating current API contribution namespaces and bundled processor references as well.
   Rebuild embedded manifests; editing a loose installed JSON file does not update WASM.
 - In SDK projects, change the source `authoring.json`, not generated files. Preserve
   private SDK licenses and `SDK-RELEASE.json`; audit hashes and lock resolution when
@@ -91,11 +94,22 @@ Run meaningful handler/algorithm tests, formatting, Clippy, release WASM/native 
 and packaging for each component changed. Native-only unit tests do not verify WASM
 exports or installed behavior. Keep source instructions and README usage in sync.
 
-Current desktop hosts protect native work with cooperative OS store locks and activation
-epochs. Store management can return busy until native work finishes. Completed results
-are rechecked; old generations, disable/re-enable and identical reinstall cannot revive
-an obsolete native result. Keep the store lock and activation tombstones intact. This
-does not sandbox native processes, impose aggregate quotas or implement worker protocol 2.
+Current desktop hosts discover cached descriptors lazily, use per-generation OS leases and
+activation epochs, and bound native queues, resident workers and resource reservations.
+Panel preparation verifies bounded panel code; bulk closure checks and packaged filter
+compilation run in scheduled processing jobs. A private persistent worker may opt into protocol 2; old workers retain their exact launch
+contract. Never share a process, runtime, writable cache or data migration with another plugin.
+Managed settings/data/cache/secrets references are generation-scoped; updates stage and validate
+a quiescent snapshot, and rollback selects a preserved code/data pair. Keep host lock files and
+activation tombstones intact. Reservations and managed validation quotas do not sandbox trusted
+native processes or enforce kernel memory/GPU/disk limits. Restricted native is unavailable.
+Read docs/plugin-lifecycle.md, docs/plugin-worker-v2.md and docs/plugin-managed-storage.md in the
+matching source/kit before adopting these optional facilities. Preserve existing external caches.
+For release updates, optionally declare the plugin's own public GitHub repository and exact
+release asset in its embedded descriptor; never hard-code a sibling or editor repository.
+Read the release-update section of [API contracts](references/api-contracts.md) before adding
+this metadata and [update acceptance](references/testing-and-mcp.md#release-update-acceptance)
+before claiming it works. Marketplace discovery remains planned and cannot be a runtime requirement.
 Companion apps use the authenticated local control API/MCP rather than guest handles;
 plugins remain usable without a companion and automation restrictions still apply.
 

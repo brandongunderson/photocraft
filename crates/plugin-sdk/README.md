@@ -8,8 +8,11 @@ Use `photocraft-plugin new authoring.json fresh-project` to generate a standalon
 with private copies of both SDK crates, licenses, generated manifests/bindings and a lockfile.
 That project builds with the editor and sibling sources absent. `photocraft-plugin sdk
 fresh-directory` exports just the public SDK sources for other build layouts.
+An optional plugin-owned GitHub repository/update asset belongs in `descriptor` in
+`authoring.json`; it is generated into the embedded descriptor with other metadata. Plugins
+remain usable through local installation without a release service or marketplace.
 
-`export_plugin!(MANIFEST_JSON, handle)` exports panel API 2 using the existing four `pce_*`
+`export_plugin!(MANIFEST_JSON, handle)` exports the PhotoCraft Plugin API using the existing four `pce_*`
 functions. Handlers receive `api::EventRequest` and return `api::Result<api::PanelResponse>`.
 Use `api::LayersRead` / `api::LayersEdit` to create bounded broker requests, and decode
 `api::BrokerReply` into `api::LayersSnapshot`. Handles remain opaque references checked by
@@ -22,4 +25,7 @@ their own settings and algorithms. Host memory/fuel limits remain authoritative.
 
 The macro's narrowly allowed Rust 2024 export-name attributes name symbols only. Generated
 guest crates use `deny(unsafe_code)`; no unsafe functions, blocks or pointer reads are added.
-API 1, filter ABI 1, package 2 and native worker 1 remain independent supported contracts.
+The PhotoCraft Plugin API is the only supported authoring API. Its current internal panel
+discriminator is `2`; version `1` is rejected. Evolve this API until a genuine breaking change
+requires another major. Filter ABI 1, package format 2 and native worker protocols 1/2 are
+independent contracts.

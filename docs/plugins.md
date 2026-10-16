@@ -29,7 +29,7 @@ This page is the contract for plug-in authors and the reference for the host
 
 In the app, installed filters appear under **Plugins** (with a generated dialog and live
 preview when they have parameters), next to **Install Plug-in…**.
-That menu opens the shared installer: use **Browse…**, enter a path and choose **Review plugin**,
+That menu opens the shared installer: use **Browse…** or enter a path and inspect the file,
 or drop one `.wasm` file into its window. A validated pixel filter opens **Install Filter**;
 confirming it calls `plugin.install`, with replacement disabled until explicitly selected.
 

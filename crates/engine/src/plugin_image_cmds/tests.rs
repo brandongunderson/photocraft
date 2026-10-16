@@ -7,16 +7,21 @@ const FILTER: &str = "org.photocraft.example.invert";
 const INVERT: &[u8] = include_bytes!("../../../plugins/tests/fixtures/invert.wasm");
 
 fn extension() -> Arc<Extension> {
-    let manifest = json!({"apiVersion":1,"id":ID,"name":"General image fixture","version":"1.0.0",
+    Arc::new(Extension::load(&extension_bytes()).unwrap())
+}
+
+fn extension_bytes() -> Vec<u8> {
+    let manifest = json!({"apiVersion":2,"id":ID,"name":"General image fixture","version":"1.0.0",
+        "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
         "permissions":{"commands":["plugin.processImage"]},"panel":{"buttons":[{"id":"process","label":"Process"}]}})
     .to_string();
     let response = json!({"commands":[{"command":"plugin.processImage","params":{"options":{}}}],"state":{"runs":1}}).to_string();
     let quoted = |s: &str| s.bytes().map(|b| format!("\\{b:02x}")).collect::<String>();
-    let bytes = wat::parse_str(format!(
+    wat::parse_str(format!(
         r#"(module
         (memory (export "memory") 12 512)
         (data (i32.const 32) "{}") (data (i32.const 65536) "{}")
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 2)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 393216)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {})
@@ -26,8 +31,7 @@ fn extension() -> Arc<Extension> {
         ((manifest.len() as u64) << 32) | 32,
         ((response.len() as u64) << 32) | 65536
     ))
-    .unwrap();
-    Arc::new(Extension::load(&bytes).unwrap())
+    .unwrap()
 }
 
 fn session(depth: u32) -> Session {
@@ -37,6 +41,8 @@ fn session(depth: u32) -> Session {
     s.extensions.installed.insert(
         ID.into(),
         Installed {
+            #[cfg(not(target_arch = "wasm32"))]
+            deferred: None,
             extension: extension(),
             enabled: true,
             state: json!({"runs":0}),
@@ -272,20 +278,130 @@ fn source_changes_and_plugin_disable_reject_background_results_and_preview_apply
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn disabling_then_reenabling_revokes_preview_and_immediate_jobs_and_leases_block_uninstall() {
+fn disable_reenable_and_removal_revoke_preview_and_immediate_jobs_without_applying_results() {
     for preview in [true, false] {
-        let mut s = session(8);
-        let source = Arc::clone(&s.active().unwrap().doc);
-        let started = s.start("plugin.processImage", json!({"id":ID,"preview":preview})).unwrap();
-        let crate::jobs::Started::Job(job) = started else { panic!("expected a background job") };
-        assert!(s.execute("extension.remove", json!({"id":ID})).unwrap_err().to_string().contains("processing"));
-        s.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
-        s.execute("extension.enable", json!({"id":ID,"enabled":true})).unwrap();
-        assert!(s.wait_job(job).unwrap_err().to_string().contains("discarded or replaced"));
-        assert!(Arc::ptr_eq(&source, &s.active().unwrap().doc));
-        assert_eq!(s.documents().len(), 1);
-        assert_eq!(s.extensions.installed[ID].state["runs"], 0);
+        for remove in [false, true] {
+            let mut s = session(8);
+            let source = Arc::clone(&s.active().unwrap().doc);
+            let started = s.start("plugin.processImage", json!({"id":ID,"preview":preview})).unwrap();
+            let crate::jobs::Started::Job(job) = started else { panic!("expected a background job") };
+            if remove {
+                assert_eq!(s.execute("extension.remove", json!({"id":ID})).unwrap()["removed"], ID);
+                assert!(!s.extensions.installed.contains_key(ID));
+            } else {
+                s.execute("extension.enable", json!({"id":ID,"enabled":false})).unwrap();
+                s.execute("extension.enable", json!({"id":ID,"enabled":true})).unwrap();
+            }
+            let failure = s.wait_job(job).unwrap_err();
+            assert!(matches!(failure, EngineError::Cancelled) || failure.to_string().contains("discarded or replaced"), "{failure}");
+            assert!(Arc::ptr_eq(&source, &s.active().unwrap().doc));
+            assert_eq!(s.documents().len(), 1);
+            if let Some(installed) = s.extensions.installed.get(ID) {
+                assert_eq!(installed.state["runs"], 0);
+            }
+            assert_eq!(s.plugin_previews().count(), 0);
+            assert!(!s.has_jobs());
+        }
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn restarted_filter_package(filter_bytes: &[u8]) -> (tempfile::TempDir, Session, std::path::PathBuf) {
+    let temporary = tempfile::tempdir().unwrap();
+    let archive = temporary.path().join("filter.pcplugin");
+    let store = temporary.path().join("Extensions");
+    let mut package = photocraft_format::zip::ZipWriter::new();
+    package
+        .add("package.json", &serde_json::to_vec(&json!({"packageVersion":2,"module":"plugin.pcext","filters":[{"module":"filters/invert.wasm"}]})).unwrap())
+        .unwrap();
+    package.add("plugin.pcext", &extension_bytes()).unwrap();
+    package.add("filters/invert.wasm", filter_bytes).unwrap();
+    package.add("LICENSE", b"Neutral filter test fixture").unwrap();
+    package.add("THIRD-PARTY-NOTICES.md", b"Neutral filter test fixture").unwrap();
+    std::fs::write(&archive, package.finish().unwrap()).unwrap();
+    let mut installer = Session::new();
+    installer.extensions.attach_folder(store.clone()).unwrap();
+    installer.execute("extension.install", json!({"path":archive})).unwrap();
+    drop(installer);
+    std::fs::remove_file(archive).unwrap();
+    let record: Value = serde_json::from_slice(&std::fs::read(store.join(format!("{ID}.installation.json"))).unwrap()).unwrap();
+    let filter = store.join("bundles").join(ID).join(record["hash"].as_str().unwrap()).join("filters/invert.wasm");
+    let mut session = Session::new();
+    session.extensions.attach_folder(store).unwrap();
+    assert!(session.extensions.load_errors.is_empty(), "{:?}", session.extensions.load_errors);
+    assert!(session.extensions.installed[ID].filters.is_empty(), "startup must not load packaged filter code");
+    session.execute("file.new", json!({"width":8,"height":6,"background":"white"})).unwrap();
+    (temporary, session, filter)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn deferred_filters_resolve_default_explicit_owner_and_parameters_on_the_job_thread() {
+    let (_temporary, mut s, _filter) = restarted_filter_package(INVERT);
+    let source = Arc::clone(&s.active().unwrap().doc);
+    assert!(s.start("plugin.processImage", json!({"id":ID,"width":16})).unwrap_err().to_string().contains("dimensions"));
+    assert!(!s.has_jobs(), "dimension validation must precede deferred work");
+    // Legacy filters drop unknown options; deferred loading preserves that behavior.
+    for settings in [json!({"id":ID}), json!({"id":ID,"processor":FILTER}), json!({"id":ID,"options":{"unknownSetting":true}})] {
+        let crate::jobs::Started::Job(job) = s.start("plugin.processImage", settings).unwrap() else { panic!("expected a deferred filter job") };
+        let response = s.wait_job(job).unwrap();
+        let token = response["preview"].as_u64().unwrap();
+        let pixel = s.plugin_preview(token).unwrap().result.layers[0].surface().unwrap().pixel(0, 0);
+        assert!(pixel[0] < 0.01 && pixel[1] < 0.01 && pixel[2] < 0.01);
+        s.execute("image.pluginPreview.discard", json!({"preview":token})).unwrap();
+    }
+    let crate::jobs::Started::Job(job) = s.start("plugin.processImage", json!({"id":ID,"processor":"org.example.foreign"})).unwrap() else {
+        panic!("expected deferred ownership validation")
+    };
+    assert!(s.wait_job(job).unwrap_err().to_string().contains("does not belong"));
+    assert!(Arc::ptr_eq(&source, &s.active().unwrap().doc));
+    assert!(s.extensions.installed[ID].state.is_null());
+    assert!(s.extensions.installed[ID].filters.is_empty(), "worker-loaded filters do not mutate the UI discovery registry");
+    assert_eq!(s.plugin_previews().count(), 0);
+
+    let gain = include_bytes!("../../../../tests/plugin-compatibility/frozen/channel-gain-filter-v1.wasm");
+    let (_gain_temporary, mut gain_session, _) = restarted_filter_package(gain);
+    let source = Arc::clone(&gain_session.active().unwrap().doc);
+    let crate::jobs::Started::Job(job) = gain_session.start("plugin.processImage", json!({"id":ID,"options":{"gain":"invalid"}})).unwrap() else {
+        panic!("expected deferred parameter validation")
+    };
+    assert!(gain_session.wait_job(job).unwrap_err().to_string().contains("gain"));
+    assert!(Arc::ptr_eq(&source, &gain_session.active().unwrap().doc));
+    assert_eq!(gain_session.plugin_previews().count(), 0);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn opening_a_panel_and_queueing_its_filter_do_not_verify_bulk_payload_on_the_caller() {
+    let (_temporary, mut s, filter) = restarted_filter_package(INVERT);
+    let source = Arc::clone(&s.active().unwrap().doc);
+    std::fs::write(&filter, b"tampered filter payload").unwrap();
+    // Occupy only this owner's admission, guaranteeing no work can verify the payload
+    // before start returns. The caller validates bounded panel bytes and metadata only.
+    let owner = crate::extension_cmds::scheduler_owner(&s, ID);
+    let permit = s
+        .plugin_scheduler
+        .enqueue(
+            &owner,
+            crate::plugin_scheduler::Priority::Background,
+            crate::plugin_scheduler::Resources { cpu_units: 1, memory_bytes: 1, ..Default::default() },
+        )
+        .unwrap()
+        .wait(&JobCtx::new())
+        .unwrap();
+    crate::extension_cmds::activate(&mut s, ID).unwrap();
+    let crate::jobs::Started::Job(job) = s.start("plugin.processImage", json!({"id":ID,"processor":FILTER})).unwrap() else {
+        panic!("expected deferred verification")
+    };
+    assert!(s.job(job).is_some());
+    assert!(s.extensions.installed[ID].filters.is_empty());
+    drop(permit);
+    let failure = s.wait_job(job).unwrap_err().to_string();
+    assert!(failure.contains("installed file changed"), "the job must reject unverified payload bytes: {failure}");
+    assert!(Arc::ptr_eq(&source, &s.active().unwrap().doc));
+    assert!(s.extensions.installed[ID].state.is_null());
+    assert_eq!(s.plugin_previews().count(), 0);
+    assert!(!s.has_jobs());
 }
 
 /// Independent SDK package proof: no matching id, service-specific options or worker path

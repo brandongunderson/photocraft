@@ -18,7 +18,9 @@ photocraft-plugin new AUTHORING_JSON FRESH_PROJECT
 
 Every command emits a versioned JSON report and returns a nonzero exit status on failure.
 The [SDK guide](../../docs/plugin-sdk.md) explains SDK export, a complete authoring manifest,
-typed handlers, the compatibility policy and independent-build acceptance.
+typed handlers, the single supported PhotoCraft Plugin API and independent-build acceptance.
+Old panel version 1 is rejected; rebuild those panels for the current API. Filter ABI 1,
+package format 2 and native worker protocols 1/2 remain separate supported wire formats.
 
 `sdk` exports privately usable public API/SDK sources, licenses and a SHA-256 release index.
 `generate` derives package metadata, an embedded descriptor and Rust bindings from one source.

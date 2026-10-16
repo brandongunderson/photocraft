@@ -81,7 +81,7 @@ pub fn packed(bytes: &[u8]) -> u64 {
     (u64::from(length) << 32) | u64::from(pointer)
 }
 
-/// Export the four existing import-free panel-2 entry points. Rust 2024's narrow unsafe
+/// Export the four import-free PhotoCraft Plugin API entry points. Rust 2024's narrow unsafe
 /// export attributes name symbols only: generated functions contain no unsafe operations.
 #[macro_export]
 macro_rules! export_plugin {
