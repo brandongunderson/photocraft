@@ -100,15 +100,14 @@ Artwork shown in the screenshots (all public domain, via Wikimedia Commons; deta
 
 ## Compatibility test fixtures (not bundled in the app)
 
-These frozen WASM modules test the generic host against independently released plugins.
-They are test inputs, not built-in plugins or runtime dependencies. Native workers,
-inference libraries and models remain in the separate plugin packages. Fixture identities
+These fixed WASM modules are compiled neutral examples used to test the generic host.
+They are test inputs, not built-in plugins or runtime dependencies. Independently released
+plugins and their notices, native workers, libraries and models stay in their own repositories. Fixture identities
 and use are documented in [`tests/plugin-compatibility/README.md`](tests/plugin-compatibility/README.md).
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
 | `tests/plugin-compatibility/frozen/image-gain-panel-v1.wasm`, `channel-gain-filter-v1.wasm` | Frozen neutral plugin compatibility modules | PhotoCraft contributors | Exact compiled Image Gain release package pinned in `tests/plugin-compatibility/catalog.json`; licenses under `tests/plugin-compatibility/licenses` | MIT OR Apache-2.0 |
-| `tests/plugin-compatibility/frozen/ai-upscale-panel-v1.wasm`, `background-removal-panel-v1.wasm`, `rembg-panel-v1.wasm` | Frozen AI plugin panel compatibility modules | PhotoCraft plugin contributors | Exact 2026-10-15 plugin archives pinned by the compatibility corpus; full notices under `tests/plugin-compatibility/licenses` | MIT (panel code); dependency notices accompany the fixtures |
 
 ## Downloaded test corpora (not committed, not shipped)
 

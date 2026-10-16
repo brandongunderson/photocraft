@@ -1,6 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)][string]$ArtifactRoot,
-    [switch]$IncludeVulkan
+    [Parameter(Mandatory = $true)][string]$ArtifactRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,12 +34,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Portable compatibility fixtures failed.' }
     $cases = @(
         'pinned_native_packages_install_restart_cancel_and_repair',
-        'pinned_image_gain_native_processes_and_applies',
-        'pinned_upscale_cpu_processes_and_applies',
-        'pinned_background_removal_processes_and_applies',
-        'pinned_rembg_processes_and_applies'
+        'pinned_image_gain_native_processes_and_applies'
     )
-    if ($IncludeVulkan) { $cases += 'pinned_upscale_vulkan_processes_and_applies' }
     foreach ($case in $cases) {
         & cargo test -p photocraft-engine --test plugin_compatibility --locked --offline $case -- --ignored --exact --nocapture
         if ($LASTEXITCODE -ne 0) { throw "Pinned artifact compatibility case failed: $case" }

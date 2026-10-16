@@ -1,108 +1,6 @@
 {
   "artifacts": [
     {
-      "blake3": "e59de2ea82784a1ee09fda1c65033aaef3fc7cfd85d70528ca28da7b0f37cc34",
-      "license": "See embedded LICENSE and THIRD-PARTY-NOTICES.md; this catalog grants no additional redistribution rights",
-      "members": [
-        {
-          "path": "plugin.pcext",
-          "sha256": "e8342d2a7c345cb07f17e25aa6fcb2f52ffaeb6f38e49bbb48aa2637696b4d9e",
-          "size": 67039
-        },
-        {
-          "path": "LICENSE",
-          "sha256": "012271942cb21bf1613bc1c11be1c44b3c8c1a3d89f46fbb353348fc29d93475",
-          "size": 1088
-        },
-        {
-          "path": "THIRD-PARTY-NOTICES.md",
-          "sha256": "682b07fbf7551be7f0556b4d32ce392c5cc275042c1d0df04ecdd5939d6a17a2",
-          "size": 4593
-        }
-      ],
-      "name": "PhotoCraft-AI-Upscale.pcplugin",
-      "package": {
-        "module": "plugin.pcext",
-        "native": {
-          "entry": "photocraft-upscale-worker.exe",
-          "platform": "windows-x86_64",
-          "service": "plugin.processImage"
-        },
-        "packageVersion": 2
-      },
-      "path": "../../PhotoCraft-AI-Upscale.pcplugin",
-      "sha256": "187a8d2d094069f26fbf65914fcf44cc0663595e259a0b32a326eb357d2cf4e5",
-      "size": 170088981
-    },
-    {
-      "blake3": "e2f793e5978a2b42c58f1b16ee94510dfe79bf6e4218954f72625f339182f70c",
-      "license": "See embedded LICENSE and THIRD-PARTY-NOTICES.md; this catalog grants no additional redistribution rights",
-      "members": [
-        {
-          "path": "plugin.pcext",
-          "sha256": "0ed9e8a5cfda6611954c9c8566f756a51d4c530de23a154206172df28fc94790",
-          "size": 64241
-        },
-        {
-          "path": "LICENSE",
-          "sha256": "012271942cb21bf1613bc1c11be1c44b3c8c1a3d89f46fbb353348fc29d93475",
-          "size": 1088
-        },
-        {
-          "path": "THIRD-PARTY-NOTICES.md",
-          "sha256": "30351e40325a74f0a4ce3c9a1224cfadb1069956e7158c1e20b3b46a018d3c81",
-          "size": 3143
-        }
-      ],
-      "name": "PhotoCraft-Background-Removal.pcplugin",
-      "package": {
-        "module": "plugin.pcext",
-        "native": {
-          "entry": "photocraft-background-worker.exe",
-          "platform": "windows-x86_64",
-          "service": "plugin.processImage"
-        },
-        "packageVersion": 2
-      },
-      "path": "../../PhotoCraft-Background-Removal.pcplugin",
-      "sha256": "faf9dfae43d7f7a55e7193be93de354d1a31211ef06ea8aa4de4f688a662bc05",
-      "size": 282090807
-    },
-    {
-      "blake3": "8c375899c704582c9bdc79e8978c7cf906b3e1bc9a6eaf13a0ec6197c3d669ff",
-      "license": "See embedded LICENSE and THIRD-PARTY-NOTICES.md; this catalog grants no additional redistribution rights",
-      "members": [
-        {
-          "path": "plugin.pcext",
-          "sha256": "3f34f2a3fe7ed13d238919c4246d11df9e31d4597c9494d49b26cf40ad1b1f97",
-          "size": 105925
-        },
-        {
-          "path": "LICENSE",
-          "sha256": "16157283e0baf66b08e2383b8dab02add09aedf6db01124d121307f1328c2bd3",
-          "size": 1093
-        },
-        {
-          "path": "THIRD-PARTY-NOTICES.md",
-          "sha256": "98fa8dcc4929f635763c5d49b56891342d70c7f687c814434874609bac0a9ddb",
-          "size": 6409
-        }
-      ],
-      "name": "PhotoCraft-Rembg.pcplugin",
-      "package": {
-        "module": "plugin.pcext",
-        "native": {
-          "entry": "photocraft-rembg-worker.exe",
-          "platform": "windows-x86_64",
-          "service": "plugin.processImage"
-        },
-        "packageVersion": 2
-      },
-      "path": "../../PhotoCraft-Rembg.pcplugin",
-      "sha256": "26227de6cbe8633f33dbbb263c7b3107d7a73fa616b5197b4d0337c255b7ec15",
-      "size": 312946045
-    },
-    {
       "blake3": "222bbd68e2846f67a8d3408ade8dbfae031da904f16f8a77d2c09ee454ffab16",
       "license": "See embedded LICENSE and THIRD-PARTY-NOTICES.md; this catalog grants no additional redistribution rights",
       "members": [
@@ -145,18 +43,6 @@
   "formatVersion": 1,
   "frozen": [
     {
-      "blake3": "fa530b215ac015d769e07ef8df7c02b59ad2ccaee18929f53c96fe9d2fd0494b",
-      "path": "frozen/ai-upscale-panel-v1.wasm",
-      "size": 67039,
-      "sha256": "e8342d2a7c345cb07f17e25aa6fcb2f52ffaeb6f38e49bbb48aa2637696b4d9e"
-    },
-    {
-      "blake3": "9ea3ad0651538a6292f77971c6529cfc26e7920e9de4499e4b619a03ce4e9376",
-      "path": "frozen/background-removal-panel-v1.wasm",
-      "size": 64241,
-      "sha256": "0ed9e8a5cfda6611954c9c8566f756a51d4c530de23a154206172df28fc94790"
-    },
-    {
       "blake3": "d6e5fccab8f4015b9c142c822ebe82889e8101c13f8ede3574c222862888d226",
       "path": "frozen/channel-gain-filter-v1.wasm",
       "size": 41748,
@@ -167,12 +53,6 @@
       "path": "frozen/image-gain-panel-v1.wasm",
       "size": 68211,
       "sha256": "9ec081105d49c8e45d44067ddb797626ebb79d73bb34619b72d6a7d5fe72c2f8"
-    },
-    {
-      "blake3": "1e836584a6b26cbd872ea63a087dfb8a632e7e24f1157e5542a57491ff659014",
-      "path": "frozen/rembg-panel-v1.wasm",
-      "size": 105925,
-      "sha256": "3f34f2a3fe7ed13d238919c4246d11df9e31d4597c9494d49b26cf40ad1b1f97"
     }
   ],
   "frozenAt": "2026-10-15",

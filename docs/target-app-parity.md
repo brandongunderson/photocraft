@@ -1,6 +1,6 @@
 # PhotoCraft vs Adobe Photoshop: target-app parity
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-15 · **Change:** minor (AI plugins migrated to the generic API; dedicated core model and algorithm adapters removed; native-panel extension API v1, self-contained desktop packages, Background Removal and AI Upscale comparison previews added; on-canvas corner radius widgets, TOOL-214-12; `.atn` import maps 112 events; Free Transform H/V skew fields; stale rows corrected against `main` and the scorecard, estimates unchanged; Photoshop Actions `.atn` load and save; 2026-10-10: Tilt-Shift measurements added; earlier the same day: major, full re-measure against Photoshop 2026 27.11.0; merged `parity-estimate.md` and the roadmap's honest assessment; stale missing-tool rows corrected: Color Replacement and Red Eye are live toolbar tools, Frame landed; percentages unchanged) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-15 · **Change:** minor (native-panel extension API v1, self-contained desktop packages and generic comparison previews added; on-canvas corner radius widgets, TOOL-214-12; `.atn` import maps 112 events; Free Transform H/V skew fields; stale rows corrected against `main` and the scorecard, estimates unchanged; Photoshop Actions `.atn` load and save; 2026-10-10: Tilt-Shift measurements added; earlier the same day: major, full re-measure against Photoshop 2026 27.11.0; merged `parity-estimate.md` and the roadmap's honest assessment; stale missing-tool rows corrected: Color Replacement and Red Eye are live toolbar tools, Frame landed; percentages unchanged) · **Target:** Adobe Photoshop 2026
 
 The authoritative answer to "how close is PhotoCraft to Photoshop, and how much work is left". The
 one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is [`gaps.md`](gaps.md);
@@ -565,11 +565,8 @@ See [method, raw measurements and reproduction](five-algorithm-performance.md).
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-15 | minor | AI Upscale: 1× detail enhancement, deferred native before/after comparison, Apply to a new tab or same-size undoable layer, bounded 256 MP output; readiness estimates unchanged |
-| 2026-10-15 | minor | Background Removal plugin service: managed IMG.LY model package, isolated native processing, same-size foreground/background/mask outputs; readiness estimates unchanged |
 | 2026-10-15 | minor | General plugin package v2: independent native image workers and owned WASM filters with host jobs, previews and Apply; Photoshop compatibility and readiness estimates unchanged |
-| 2026-10-15 | minor | AI Upscale and Background Removal migrated to generic package-owned processing; dedicated host model/algorithm adapters removed; readiness estimates unchanged |
-| 2026-10-15 | minor | Self-contained Windows x64 plugin packages: bundled AI engine/models, managed install/update/remove, native-code review, integrity validation and recovery; estimates unchanged |
+| 2026-10-15 | minor | Self-contained Windows x64 plugin packages: privately bundled runtimes/assets, managed install/update/remove, native-code review, integrity validation and recovery; estimates unchanged |
 | 2026-10-14 | minor | Native-panel extension API v1: installation, bounded WASM events, explicit editing grants and a Rust starter; Photoshop compatibility and broader host APIs remain open; estimates unchanged |
 | 2026-10-13 | minor | Vector shapes: on-canvas corner radius widgets on live rectangles (TOOL-214-12); estimates unchanged |
 | 2026-10-13 | minor | Stale "missing tool" rows corrected against main: Color Replacement (`paint.colorReplacement`), Red Eye (`paint.redEye`) and Add/Delete Anchor Point (the Pen flyout) are live toolbar tools and Frame landed, so Art History Brush is the only tool still missing; percentages unchanged |

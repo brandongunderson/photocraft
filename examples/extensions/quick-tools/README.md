@@ -14,4 +14,4 @@ Undo. No external app or local control server is needed.
 The guest runs without filesystem, network, native process or GPU access. See the complete
 [API contract](../../../docs/extensions.md) for permissions, limits, state and exported functions.
 The [development guide](../../../docs/plugin-development.md) covers the host architecture,
-customizing this starter, rebuilding/replacing plugins and the separate AI Upscale worker.
+customizing this starter, rebuilding/replacing plugins and package-owned native workers.

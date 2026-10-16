@@ -42,7 +42,7 @@ The implementation currently provides package format 2, panel API 1, standalone 
 | `crates/engine/src/plugin_preview.rs` | Source/revision validation, result revocation and safe Apply/Discard. |
 | `crates/ui-egui/src/extension_ui.rs` and submodules | Native panels, manager, review, comparison and shared controls. |
 
-Keep the current AI Upscale, Background Removal, Rembg and neutral starters working as delivered. Do not silently reinterpret old messages, increase their permissions or change the legacy 8-bit sRGB processing boundary. Existing panel command lists remain sequential; a new atomic editing API must have distinct semantics.
+Keep existing supported plugins and neutral starters working as delivered. Do not silently reinterpret old messages, increase their permissions or change the legacy 8-bit sRGB processing boundary. Existing panel command lists remain sequential; a new atomic editing API must have distinct semantics.
 
 ## 3. Supported extension categories
 
@@ -227,7 +227,7 @@ Separate package code, immutable assets, settings, durable data, caches and secr
 
 Startup uses the validated descriptor index instead of rereading every model payload. Verify executable code and dependency closure before activation. Verify assets before use according to the integrity profile, with tests for changes between validation and access. File timestamps alone are not proof of integrity. Do not promise tamper-proof native execution against another process with the same user's unrestricted privileges.
 
-Support interrupted installation/migration recovery, read-only stores, full disks, long paths, cache cleanup and explicit uninstall choices. Preserve existing plugin-owned external caches, including current Rembg downloads, unless a specific authorized migration/removal operation manages them.
+Support interrupted installation/migration recovery, read-only stores, full disks, long paths, cache cleanup and explicit uninstall choices. Preserve existing plugin-owned external caches, including assets downloaded by a plugin, unless a specific authorized migration/removal operation manages them.
 
 ### 7.3 Honest execution profiles
 
@@ -255,7 +255,7 @@ Effort ranges below are initial engineering estimates for completed code, tests,
 
 | Phase | Work packages and concrete output | Primary source areas | Dependencies | Effort |
 |---|---|---|---|---|
-| 0 Baseline and compatibility | Archive current supported artifacts and hashes; record behavior; establish performance harness and independent-build checks; separate legacy contracts | Existing engine/plugin/UI tests, `docs/plugin-testing.md`, `perf/`, `xtask` | None | 1–2 weeks |
+| 0 Baseline and compatibility | Archive neutral protocol artifacts and hashes; record behavior; establish performance harness and independent-build checks; separate legacy contracts | Existing engine/plugin/UI tests, `docs/plugin-testing.md`, `perf/`, `xtask` | None | 1–2 weeks |
 | 1 Contracts and SDK | Publish API crate/schema; capability and contribution descriptors; API-2 handshake/envelopes; legacy adapters; starter CLI/specification | New `crates/plugin-api`, guest SDK, `crates/plugins`, engine registry, `xtask/src/layers.rs` | Phase 0 | 3–5 weeks |
 | 2 Lifecycle and store | Lazy descriptors, supervisor, worker protocol 2, per-plugin scheduling, quotas, cross-process locks/leases and migration/rollback plumbing | `extension_package.rs`, proposed `engine/src/plugin_host/`, `jobs.rs`, startup | Phase 1 | 5–8 weeks |
 | 3 Commands documents events and views | Dynamic command registration; paged reads; atomic edit batches; event delivery; native view schema/docking; durable settings | `commands.rs`, proposed `plugin_host/{broker,contributions,documents,events}.rs`, `extension_ui/`, `state.rs`, automation | Phases 1–2 | 6–9 weeks |
@@ -293,7 +293,7 @@ Start with the following small, ordered changes. Each is a reviewable pull reque
 
 | Change | Exact scope | Required evidence |
 |---|---|---|
-| P01 Compatibility fixtures | Add immutable-artifact fixtures for current panel/filter/package/native protocols and all three shipped plugins. Record hashes and licenses; fetch large permitted artifacts from a controlled test store rather than commit runtime/model binaries. | Exercise old bytes, not rebuilt current-source replacements; install/restart/cancel/Apply/repair all pass. |
+| P01 Compatibility fixtures | Add immutable neutral fixtures for current panel/filter/package/native protocols. Keep independently released plugin fixtures and acceptance tests in their own repositories. Record hashes and licenses; fetch large permitted artifacts from a controlled test store rather than commit runtime/model binaries. | Exercise old bytes, not rebuilt current-source replacements; install/restart/cancel/Apply/repair all pass. |
 | P02 Standalone conformance tool | Extend the independent starter checks into a developer command that checks package shape, manifests, ABI, declared targets, dependency ownership and clean exported builds. Keep Python packaging helpers supported while adding a Rust developer-tool path. | A clean exported Image Gain project builds and packages without the editor, a sibling plugin, companion or hidden PATH dependency. |
 | P03 API and descriptor schema | Add `photocraft-plugin-api`, JSON schemas, typed capability IDs, structured errors and descriptor validation. Register its L0 layer. Produce the package-3/panel-2 protocol RFCs without changing accepted legacy behavior. | Schema round trips, malformed inputs, generation consistency and layer/wasm checks pass. |
 | P04 Broker and legacy adapter | Introduce host-injected principals, scoped handles, capability discovery and structured incompatibility errors. Route existing plugin requests through the adapter without changing their wire format. | Cross-plugin/generation/automation authority tests and all legacy fixtures pass. |
@@ -308,7 +308,7 @@ extension categories, rather than completion of all categories in section 3.
 
 | Change | Implementation |
 |---|---|
-| P01 | [Immutable compatibility corpus](../tests/plugin-compatibility/README.md), pinned original compiled panels/filter, golden responses and external native archive hashes. Explicit native tests fail when an artifact is absent or changed. |
+| P01 | [Immutable compatibility corpus](../tests/plugin-compatibility/README.md), pinned compiled neutral panel/filter, golden responses and the external neutral native archive hash. Explicit native tests fail when an artifact is absent or changed. |
 | P02 | [Rust conformance tool](../apps/photocraft-plugin/README.md): package/ABI/target validation, local dependency ownership, clean exported builds, deterministic packaging and hashes. Existing Python helpers remain usable. |
 | P03 | Independent `photocraft-plugin-api` L0 contract crate, generated [JSON schemas](../schemas/plugins/), capability negotiation, contributions and structured errors. [Panel API 2](plugin-api-v2.md) is experimental; [package 3](plugin-package-v3.md) and worker 2 remain proposals. |
 | P04 | `engine/src/plugin_host/`: host-created principals, session/installation-scoped handles, revision checks, captured/current automation policies, capability discovery and a legacy adapter preserving API-1 wire messages and sequential behavior. Startup and installation reject contributed command collisions. |

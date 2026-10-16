@@ -257,10 +257,11 @@ tests do not establish a support window for future host releases.
 For a local host built without optional HEIF support, pass `--host-features=`; CI retains the
 default `heif` selection.
 
-Full native package qualification remains separate. The pinned Windows artifacts and optional
-Vulkan cases require the [native compatibility runner](../tests/plugin-compatibility/README.md)
-before advertising those targets as qualified. The ordinary CI sequence above does not download
-models, run that native corpus or certify every independently published plugin.
+Full native package qualification remains separate. The pinned neutral Windows worker requires
+the [native compatibility runner](../tests/plugin-compatibility/README.md) before advertising
+that target as qualified. Each independent plugin maintains and runs its own package acceptance
+tests. The ordinary CI sequence above does not download models or certify independently
+published plugins.
 
 A provider-independent CI sequence, inside each starter/project:
 

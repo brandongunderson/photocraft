@@ -289,7 +289,3 @@ pub fn specs() -> Vec<CommandSpec> {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(all(test, not(target_arch = "wasm32")))]
-#[path = "plugin_image_cmds/packaged_tests.rs"]
-mod packaged_tests;

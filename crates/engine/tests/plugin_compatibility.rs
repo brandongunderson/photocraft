@@ -270,27 +270,3 @@ fn process_case(package_name: &str, event: &str, values: Value) {
 fn pinned_image_gain_native_processes_and_applies() {
     process_case("Image-Gain-windows-x86_64.pcplugin", "process", json!({"backend":"Native worker","gain":0.5}));
 }
-
-#[test]
-#[ignore = "requires unchanged pinned Windows AI Upscale; conventional CPU backend"]
-fn pinned_upscale_cpu_processes_and_applies() {
-    process_case("PhotoCraft-AI-Upscale.pcplugin", "upscale", json!({"engine":"Conventional resize (Lanczos)"}));
-}
-
-#[test]
-#[ignore = "requires unchanged pinned Windows AI Upscale and a working Vulkan driver"]
-fn pinned_upscale_vulkan_processes_and_applies() {
-    process_case("PhotoCraft-AI-Upscale.pcplugin", "upscale", json!({"engine":"Local AI (Vulkan)"}));
-}
-
-#[test]
-#[ignore = "requires unchanged pinned Windows Background Removal with bundled ONNX model"]
-fn pinned_background_removal_processes_and_applies() {
-    process_case("PhotoCraft-Background-Removal.pcplugin", "remove", json!({"model":"Small · quantized"}));
-}
-
-#[test]
-#[ignore = "requires unchanged pinned Windows Rembg with bundled U²-Net Small model"]
-fn pinned_rembg_processes_and_applies() {
-    process_case("PhotoCraft-Rembg.pcplugin", "remove", json!({"model":"U²-Net Small: Small model for simple general cutouts"}));
-}

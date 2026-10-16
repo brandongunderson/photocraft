@@ -1,12 +1,24 @@
 //! Real installed panel, full editor hit testing, and actual edge drags.
-#![cfg(all(target_os = "windows", target_arch = "x86_64"))]
+#![cfg(not(target_arch = "wasm32"))]
 
 use egui::{Event, Modifiers, PointerButton, Pos2, Rect, Vec2, vec2};
 use egui_kittest::{Harness, kittest::Queryable};
 use photocraft_ui_egui::{PhotocraftApp, theme::ThemeKind};
 use serde_json::json;
 
-const PLUGIN: &str = "org.photocraft.ai-upscale";
+const PLUGIN: &str = "org.example.image-gain";
+
+fn portable_package() -> Vec<u8> {
+    use photocraft_format::zip::ZipWriter;
+    let mut zip = ZipWriter::new();
+    let info = json!({"packageVersion":2,"module":"plugin.pcext","filters":[{"module":"filters/channel-gain.wasm"}]});
+    zip.add("package.json", &serde_json::to_vec(&info).unwrap()).unwrap();
+    zip.add("plugin.pcext", include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel-v1.wasm")).unwrap();
+    zip.add("filters/channel-gain.wasm", include_bytes!("../../../tests/plugin-compatibility/frozen/channel-gain-filter-v1.wasm")).unwrap();
+    zip.add("LICENSE", include_bytes!("../../../tests/plugin-compatibility/licenses/LICENSE")).unwrap();
+    zip.add("THIRD-PARTY-NOTICES.md", include_bytes!("../../../tests/plugin-compatibility/licenses/THIRD-PARTY-NOTICES.md")).unwrap();
+    zip.finish().unwrap()
+}
 
 struct Scratch(std::path::PathBuf);
 impl Drop for Scratch {
@@ -33,7 +45,6 @@ fn drag(h: &mut Harness<'_, PhotocraftApp>, from: Pos2, delta: Vec2) {
 }
 
 #[test]
-#[ignore = "requires PHOTOCRAFT_UPSCALE_PACKAGE; never executes inference"]
 fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
     let folder = Scratch(std::env::temp_dir().join(format!(
         "photocraft-preview-resize-{}-{}",
@@ -41,15 +52,16 @@ fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
     )));
     std::fs::create_dir(&folder.0).unwrap();
-    let package = std::env::var("PHOTOCRAFT_UPSCALE_PACKAGE").unwrap();
+    let package = folder.0.join("neutral-preview.pcplugin");
+    std::fs::write(&package, portable_package()).unwrap();
     let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
     app.session.extensions.attach_folder(folder.0.join("Extensions")).unwrap();
-    app.run("extension.install", json!({"path":package,"allowNative":true})).unwrap();
+    app.run("extension.install", json!({"path":package})).unwrap();
     app.run("file.new", json!({"width":64,"height":48,"background":"white"})).unwrap();
     app.background_jobs = true;
     app.ui.extensions.panels.entry(PLUGIN.into()).or_default().open = true;
     let source = app.session.active().unwrap().doc.clone();
-    let captures = std::env::var_os("PHOTOCRAFT_UPSCALE_RESIZE_CAPTURES").map(std::path::PathBuf::from);
+    let captures = std::env::var_os("PHOTOCRAFT_PLUGIN_PREVIEW_CAPTURES").map(std::path::PathBuf::from);
     let builder = Harness::builder().with_size(vec2(1800.0, 1100.0));
     let builder = if captures.is_some() { builder.wgpu() } else { builder };
     let mut h = builder.build_eframe(|cc| {
@@ -60,7 +72,7 @@ fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
     let ctx = h.ctx.clone();
     h.state_mut().set_theme(&ctx, ThemeKind::ProMedium);
     h.run_steps(6);
-    assert_eq!(h.state().ui.extensions.panels[PLUGIN].values["scale"], "1× · Enhance only");
+    assert_eq!(h.state().ui.extensions.panels[PLUGIN].values["gain"], 1.25);
     let original = window(&h);
     drag(&mut h, original.center_bottom() - vec2(0.0, 1.0), vec2(0.0, -180.0));
     let shorter = window(&h);
@@ -84,12 +96,12 @@ fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
     assert!((window(&h).size() - larger.size()).length() < 2.0, "wide layout keeps the enlarged size");
     if let Some(captures) = &captures {
         std::fs::create_dir_all(captures).unwrap();
-        h.render().unwrap().save(captures.join("upscale-resized-wide.png")).unwrap();
+        h.render().unwrap().save(captures.join("plugin-resized-wide.png")).unwrap();
     }
-    // Completed and enlarged results add labels and a footer hint. They must not
+    // Completed results add labels and a footer hint. They must not
     // reintroduce height growth after the initial settings-only state is fixed.
-    h.state_mut().ui.extensions.panels.get_mut(PLUGIN).unwrap().values["engine"] = json!("Conventional resize (Lanczos)");
-    h.state_mut().ui.extensions.panels.get_mut(PLUGIN).unwrap().values["scale"] = json!("2×");
+    h.state_mut().ui.extensions.panels.get_mut(PLUGIN).unwrap().values["backend"] = json!("Sandboxed filter");
+    h.state_mut().ui.extensions.panels.get_mut(PLUGIN).unwrap().values["gain"] = json!(0.5);
     h.run_steps(3);
     // Resizing can put this action below the settings scroll area; querying it
     // still succeeds, but a pointer click needs the control to be visible.
@@ -100,7 +112,7 @@ fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
     assert!(generate.bottom() < h.get_by_label("Apply").rect().top(), "Generate preview must be above the footer");
     h.get_by_label("Generate preview").click();
     h.run_steps(3);
-    // A small conventional resize may have completed during those frames.
+    // The small neutral filter may have completed during those frames.
     if let Some(job) = h.state().ui.extensions.panels[PLUGIN].job {
         h.state_mut().session.wait_job(photocraft_engine::jobs::JobId(job)).unwrap();
     }
@@ -138,7 +150,7 @@ fn installed_preview_resizes_in_the_full_editor_and_keeps_actions_visible() {
                 for label in ["Apply", "Done", "Discard preview"] {
                     assert!(viewport.contains_rect(h.get_by_label(label).rect()), "{} {width}x{height}: {label} is clipped", theme.id());
                 }
-                h.render().unwrap().save(captures.join(format!("upscale-resize-{}-{width:.0}x{height:.0}.png", theme.id()))).unwrap();
+                h.render().unwrap().save(captures.join(format!("plugin-resize-{}-{width:.0}x{height:.0}.png", theme.id()))).unwrap();
             }
         }
     }

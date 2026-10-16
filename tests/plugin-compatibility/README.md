@@ -1,62 +1,54 @@
-# Immutable plugin compatibility corpus
+# Neutral plugin compatibility fixtures
 
-These tests freeze the compiled guests and packages that existed on 2026-10-15, before the
-universal platform work. Never rebuild an existing baseline from current source to repair a
-failure. A changed artifact is a new fixture with its own identity; keep the old one.
+These tests keep compiled Image Gain and Channel Gain examples from 2026-10-15 unchanged
+to detect regressions in panel API 1, filter ABI 1, package format 2 and native protocol 1.
+The `frozen/` directory means fixed test bytes: never rebuild a baseline from current source
+to repair a failure. Add a new fixture with its own identity when a contract changes.
 
-`catalog.json` pins size, SHA-256 and BLAKE3 for the three shipped Windows packages and the
-original independent Image Gain package. It also pins the small compiled guests committed in
-`frozen/`. These are copied directly from the original archives, including their license and
-notice files under `licenses/`. `panel-golden.json` records requests and responses from those
-old compiled panels. The compiled Channel Gain filter is exercised at 8-bit, 16-bit and float
-depths. None of those tests invokes a guest compiler.
+Only neutral examples belong here. Independently released plugins keep their source, binary
+fixtures, package hashes, model details, notices and package acceptance tests in their own
+repositories.
 
-The ordinary engine test target is self-contained:
+`catalog.json` pins the two committed WASM modules and the original neutral Image Gain native
+archive. `panel-golden.json` records the neutral panel's manifest, request and response. The
+Channel Gain filter is exercised at 8-bit, 16-bit and float depths. Original notices are under
+`licenses/`. None of these tests invokes a guest compiler.
 
-```powershell
+## Portable compatibility
+
+```sh
 cargo test -p photocraft-engine --test plugin_compatibility
 ```
 
-It verifies immutable bytes, panel responses, filter processing, installation, restart after
-removing the downloaded copy, persistent enable state, preview, Apply, one-step Undo/Redo,
-cancellation and repair of a corrupted installed module. Its portable test package is a small
-synthetic wrapper around the exact old panel and filter; it is not presented as the original
-native archive.
+This self-contained target verifies fixed module bytes, panel responses, filter processing,
+installation, restart after removing the downloaded copy, persistent enable state, previews,
+Apply, one-step Undo/Redo, cancellation and repair of a corrupted installed module. The portable
+package is a synthetic wrapper around the original neutral panel and filter, rather than the
+original native archive.
 
-## Large native artifacts
+## Neutral native worker
 
-Full native archives and runtime/model payloads stay outside Git. Restore the exact files from
-a controlled artifact store, preserving their names. No network URL is configured until a
-maintainer provides a permitted store. The runner checks the pinned hashes before installation;
-a missing or mismatched corpus fails the explicitly selected tests. The default Rust test run
-reports these cases as **ignored**, never silently passing them.
+The original `Image-Gain-windows-x86_64.pcplugin` stays outside Git. Restore the exact archive
+from a controlled artifact store. The runner verifies its pinned size and hashes; a missing
+or mismatched artifact fails an explicitly selected native test. Default Rust runs report
+the two native cases as **ignored**.
 
-`PHOTOCRAFT_PLUGIN_COMPAT_ROOT` may point to a flat directory containing all four named archives,
-or to the original PhotoCraft workspace containing the root packages and
-`upstream/photocraft/examples/extensions/image-plugin-starter/dist/`.
+`PHOTOCRAFT_PLUGIN_COMPAT_ROOT` may point to a flat artifact directory, or to the original
+workspace containing `upstream/photocraft/examples/extensions/image-plugin-starter/dist/`.
 
 ```powershell
 ./scripts/plugins/test-compatibility.ps1 -ArtifactRoot C:/path/to/immutable-artifact-store
 ```
 
-The runner first tests the portable fixtures, then all four packages' install/restart/cancel/
-repair lifecycle. It then runs the original Image Gain native worker, AI Upscale's conventional
-CPU backend, Background Removal's bundled quantized ONNX model, and Rembg's bundled U²-Net Small
-model through the old panel/native transport and Apply/Undo/Redo. The native fixtures advertise
-Windows x86-64 and deliberately fail on a different platform. Each test uses temporary stores;
-it never attaches the user's installed Extensions folder. No model download action is invoked.
-The runner redirects native runtime caches into `target/plugin-compatibility-cache` and restores
-the calling shell's cache environment afterward. Direct native processing tests require
-`PHOTOCRAFT_PLUGIN_COMPAT_CACHE` and an isolated `LOCALAPPDATA` within it; this is enforced before
-starting a worker.
+The runner exercises install/restart/cancel/repair and the neutral worker's PNG processing,
+preview, Apply and Undo/Redo. This archive targets Windows x86-64; its tests reject another
+target. The worker owns its dependencies and needs no model download or inference runtime.
 
-Add `-IncludeVulkan` only on a runner with a functioning Vulkan driver. CPU conformance does not
-prove Vulkan compatibility, and an unrun Vulkan test is not a pass. These tests check host
-cancellation and result rejection; they do not establish a timed native descendant-cleanup
-guarantee. The immutable transport examples in `native-v1.json` record the protocol field set;
-the real original workers provide the executable transport check.
+Tests use temporary installation stores. The runner isolates worker caches under
+`target/plugin-compatibility-cache` and restores the shell's cache environment afterward.
+Direct native processing tests require `PHOTOCRAFT_PLUGIN_COMPAT_CACHE` and an isolated
+`LOCALAPPDATA` within it. No test attaches the user's real installed Extensions folder.
 
-Archived packages include licenses with their individual runtime and model conditions. In
-particular, some optional AI Upscale models have noncommercial conditions. Hashes and catalog
-entries do not grant redistribution rights. Maintain the permitted private test store rather
-than copying model payloads into this repository.
+`native-v1.json` records generic protocol fields. These checks cover cancellation and result
+rejection, without certifying a timed descendant-process cleanup guarantee or any independently
+published plugin. Individual plugin repositories maintain their own release acceptance tests.
