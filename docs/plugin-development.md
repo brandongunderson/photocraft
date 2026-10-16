@@ -17,6 +17,7 @@ versions and your plugin's release version are different numbers.
 
 ## Contents
 
+- [Plugin platform changelog](plugin-changelog.md)
 - [Standalone current API SDK](plugin-sdk.md)
 - [Lifecycle, scheduling and recovery](plugin-lifecycle.md)
 - [Persistent native workers](plugin-worker-v2.md)

@@ -184,6 +184,8 @@ Retained previews have explicit byte/count budgets and cannot silently evict ano
 Update developer docs, this guide and the plugin developer skill with completed features and
 actual limits. Extend existing neutral suites with process/crash/cancel/store/rollback coverage;
 compile temporary native fixtures outside shipped source and remove generated projects/packages.
+Record completed platform changes and compatibility notes in `docs/plugin-changelog.md`.
+Independent plugins maintain release history in their own repositories' `CHANGELOG.md` files.
 
 ## 8. Keeping the native format complete
 

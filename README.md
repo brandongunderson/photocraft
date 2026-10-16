@@ -371,6 +371,9 @@ tools and custom WebAssembly pixel filters, with neutral source starters, a comm
 testing steps and packaging limits. Start with the [panel starter](examples/extensions/plugin-starter)
 or [filter starter](examples/plugins/filter-starter); neither depends on another plugin.
 
+See the [plugin platform changelog](docs/plugin-changelog.md) for integration changes and
+compatibility notes.
+
 ## The Crafting Apps
 
 PhotoCraft is one of the **Crafting Apps**: free, open-source creative tools from the
