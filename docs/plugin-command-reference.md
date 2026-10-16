@@ -283,7 +283,7 @@ Select Layer
 Layer Properties
 
 ```text
-{"layer":id?,"name":str?,"visible":bool?,"opacity":0..1?,"fill":0..1?,"blend":"Multiply|…"?,"clipped":bool?,"locked":bool?,"locks":{"transparency","pixels","position","artboard","all":bool}?,"channels":[bool,…]? (Advanced Blending: which colour channels blend, R G B / C M Y K / L a b)}
+{"layer":id?,"layers":[id,…]? (the same change to each, one step: the Layers panel's controls with several layers selected),"name":str? (one layer only),"visible":bool?,"opacity":0..1?,"fill":0..1?,"blend":"Multiply|…"?,"clipped":bool?,"locked":bool?,"locks":{"transparency","pixels","position","artboard","all":bool}?,"channels":[bool,…]? (Advanced Blending: which colour channels blend, R G B / C M Y K / L a b)}
 ```
 
 ### `layer.flattenImage`
@@ -413,7 +413,6 @@ not install plugins, edit user documents or attach a persistent settings store.
 After regenerating, review changes against `crates/engine/src/extension_cmds.rs` and the
 individual command implementations. New grants require a host API/security review.
 
-
 ## Host lifecycle administration
 
 These commands are host/control operations, outside a guest's command allowlist:
@@ -426,6 +425,9 @@ These commands are host/control operations, outside a guest's command allowlist:
 | `extension.storage` | `{id}` reports active managed settings/data/cache/secrets-reference usage. |
 | `extension.rollback` | `{id}` validates and selects the previous code/managed-state pair. |
 | `extension.remove` | `{id, purgeData:false}` preserves managed state by default; explicit purge removes only safe owned generations. |
+| `extension.updates.check` | `{id?}` checks opted-in GitHub releases in a bounded background job. |
+| `extension.updates.prepare` | `{id, candidate}` verifies and inspects a download for review; does not install it. |
 
 These extend the same developing API. Package, filter and transport format labels describe
 different wire contracts, not additional production APIs for each implementation phase.
+See [plugin updates](plugin-updates.md) for reviewed installation guards and source metadata.
