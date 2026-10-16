@@ -538,6 +538,10 @@ pub struct Performance {
     pub low_latency_drawing: bool,
     /// Linux display server (applies at next launch; see [`LinuxDisplayServer`]).
     pub linux_display_server: LinuxDisplayServer,
+    /// GPU memory the canvas compositor may hold for layer pages and effect maps, in MB; 0 is
+    /// automatic (a graphics card's own memory isn't charged for the document's pixels, memory
+    /// shared with the system is). Layers that don't fit redraw the whole document on the CPU.
+    pub gpu_memory_mb: u32,
     /// Memory budget of the layer-effect cache, in MB.
     pub effect_cache_mb: u32,
     pub legacy_compositing: bool,
@@ -569,6 +573,7 @@ impl Default for Performance {
             low_resolution_previews: true,
             low_latency_drawing: false,
             linux_display_server: LinuxDisplayServer::Auto,
+            gpu_memory_mb: 0,
             effect_cache_mb: 768,
             legacy_compositing: false,
         }
@@ -1107,6 +1112,7 @@ pub fn range(path: &str) -> Option<(f64, f64)> {
         "interface.notificationDurationSeconds" => (1.0, 120.0),
         "export.jpegQuality" | "export.webpQuality" => (1.0, 100.0),
         "performance.memoryUsageMb" => (256.0, 1_048_576.0),
+        "performance.gpuMemoryMb" => (0.0, 1_048_576.0),
         "performance.historyStates" => (1.0, 1000.0),
         "performance.cacheLevels" => (1.0, 8.0),
         "performance.cacheTileSize" => (256.0, 16384.0),

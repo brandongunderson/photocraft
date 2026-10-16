@@ -2410,7 +2410,6 @@ layerLabel	No Color	Renk Yok
 	Large document: redrawing on the CPU	Büyük belge: CPU'da yeniden çizim
 	This redraw took {seconds} s on the CPU.	Bu yeniden çizim CPU'da {seconds} saniye sürdü.
 	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Bir katmanın karışım modu, opaklığı veya görünürlüğü gibi belgenin tamamını değiştiren düzenlemeler, belgenin tamamını yeniden çizer.
-	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Katmanları GPU bellek bütçesine uymuyor. Tercihler'de Bellek kullanımını artırma › Performans, bütçeyi bu bilgisayarın belleğinin dörtte birine kadar artırır.
 	The GPU compositor wasn't used: {reason}	GPU dizgicisi kullanılmadı: {reason}
 cameraRaw	Light	Açık Tonlar
 fontWeight	Thin	İnce
@@ -3937,3 +3936,13 @@ cameraData	Lens	Lens
 # Plugins menu
 	Plugins	Eklentiler
 	Manage Plugins…	Eklentileri yönet…
+
+# Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
+	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	Katmanlarının {needed} GPU belleğine ihtiyacı var; bütçe onlara {budget} bırakıyor.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	Tercihler › Performans içindeki GPU Belleği'ni ekran kartınızın kaldırabileceği miktara ayarlayın (Otomatik, Bellek kullanımını izler; en fazla bu bilgisayarın belleğinin dörtte biri). Sığmadıkları sürece durum çubuğu GPU Belleği Dolu gösterir.
+	GPU Memory Full	GPU Belleği Dolu
+	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	Katmanların {needed} GPU belleğine ihtiyacı var ve en fazla {budget} kullanabilirler; bu yüzden tüm belgeyi yeniden çizen düzenlemeler bunu CPU'da yapar. GPU Belleği'ni ayarlamak için tıklayın.
+	GPU memory budget: {budget}	GPU bellek bütçesi: {budget}
+	This document's layers: {needed} of {budget} for layers	Bu belgenin katmanları: katmanlar için {budget} içinden {needed}
+	This document's layers need {needed} but may hold {budget}: whole-document redraws use the CPU	Bu belgenin katmanlarının {needed} belleğe ihtiyacı var ama en fazla {budget} kullanabilirler: tüm belgenin yeniden çizimi CPU'yu kullanır
+	GPU Memory (MB, 0 = Automatic)	GPU Belleği (MB, 0 = Otomatik)

@@ -2836,7 +2836,6 @@ cameraRaw	Blending	Stapanje
 	Large document: redrawing on the CPU	Veliki dokument: ponovno iscrtavanje procesorom
 	This redraw took {seconds} s on the CPU.	Ovo iscrtavanje je trajalo {seconds} s na procesoru.
 	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Izmene koje menjaju ceo dokument, kao što su režim stapanja, neprozirnost ili vidljivost sloja, ponovo iscrtavaju ceo dokument.
-	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Njegovi slojevi ne staju u budžet GPU memorije. Povećanje vrednosti Korišćenje memorije u Podešavanja › Performanse povećava budžet, do četvrtine memorije ovog računara.
 	The GPU compositor wasn't used: {reason}	GPU kompozitor nije korišćen: {reason}
 fontWeight	Thin	Tanko
 fontWeight	ExtraLight	Ekstra lagano
@@ -4280,3 +4279,13 @@ shape	Appearance	Izgled
 # Plugins menu
 	Plugins	Додаци
 	Manage Plugins…	Управљање додацима…
+
+# Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
+	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	Njegovim slojevima treba {needed} GPU memorije; budžet im ostavlja {budget}.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	Podesite GPU memoriju u Podešavanja › Performanse na onoliko koliko vaša grafička kartica može da primi (Automatski prati Korišćenje memorije, do četvrtine memorije ovog računara). Dok ne staju, statusna traka prikazuje GPU memorija je puna.
+	GPU Memory Full	GPU memorija je puna
+	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	Slojevima treba {needed} GPU memorije, a smeju da zauzmu {budget}, pa izmene koje ponovo iscrtavaju ceo dokument to rade na CPU-u. Kliknite da podesite GPU memoriju.
+	GPU memory budget: {budget}	Budžet GPU memorije: {budget}
+	This document's layers: {needed} of {budget} for layers	Slojevi ovog dokumenta: {needed} od {budget} za slojeve
+	This document's layers need {needed} but may hold {budget}: whole-document redraws use the CPU	Slojevima ovog dokumenta treba {needed}, a smeju da zauzmu {budget}: ceo dokument se ponovo iscrtava na CPU-u
+	GPU Memory (MB, 0 = Automatic)	GPU memorija (MB, 0 = Automatski)

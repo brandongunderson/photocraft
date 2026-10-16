@@ -2849,7 +2849,6 @@ cameraRaw	Blending	Pembauran
 	Redrawing	Menggambar ulang
 	This redraw took {seconds} s on the CPU.	Penggambaran ulang di CPU ini memakan waktu {seconds} dtk.
 	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Suntingan yang mengubah seluruh dokumen, seperti mode campuran, opasitas, atau visibilitas layer, menggambar ulang semuanya.
-	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Layer tidak muat dalam anggaran memori GPU. Menaikkan Pemakaian memori di Preferensi › Performa menaikkan anggaran, hingga seperempat memori komputer ini.
 	The GPU compositor wasn't used: {reason}	Kompositor GPU tidak digunakan: {reason}
 fontWeight	Thin	Sangat Tipis
 fontWeight	ExtraLight	Ekstra Tipis
@@ -3199,3 +3198,13 @@ curves	Smooth	Haluskan
 # Plugins menu
 	Plugins	Plugin
 	Manage Plugins…	Kelola plugin…
+
+# Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
+	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	Layer-nya membutuhkan {needed} memori GPU; anggaran menyisakan {budget}.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	Atur Memori GPU di Preferensi › Performa sesuai kapasitas kartu grafis Anda (Otomatis mengikuti Pemakaian memori, hingga seperempat memori komputer ini). Selama belum muat, bilah status menampilkan Memori GPU Penuh.
+	GPU Memory Full	Memori GPU Penuh
+	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	Layer membutuhkan {needed} memori GPU dan boleh memakai {budget}, sehingga suntingan yang menggambar ulang seluruh dokumen melakukannya di CPU. Klik untuk mengatur Memori GPU.
+	GPU memory budget: {budget}	Anggaran memori GPU: {budget}
+	This document's layers: {needed} of {budget} for layers	Layer dokumen ini: {needed} dari {budget} untuk layer
+	This document's layers need {needed} but may hold {budget}: whole-document redraws use the CPU	Layer dokumen ini membutuhkan {needed} tetapi boleh memakai {budget}: penggambaran ulang seluruh dokumen memakai CPU
+	GPU Memory (MB, 0 = Automatic)	Memori GPU (MB, 0 = Otomatis)

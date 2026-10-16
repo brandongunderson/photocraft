@@ -2862,7 +2862,6 @@ cameraRaw	Blending	Fusion
 	Redrawing	Redessin
 	This redraw took {seconds} s on the CPU.	Ce redessin sur le CPU a pris {seconds} s.
 	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Les modifications qui touchent tout le document, comme le mode de fusion, l'opacité ou la visibilité d'un calque, le redessinent entièrement.
-	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	Les calques dépassent le budget de mémoire GPU. Augmenter Utilisation de la mémoire dans Préférences › Performances relève ce budget, jusqu'au quart de la mémoire de cet ordinateur.
 	The GPU compositor wasn't used: {reason}	Le compositeur GPU n'a pas été utilisé : {reason}
 fontWeight	Thin	Ultrafin
 fontWeight	ExtraLight	Extrafin
@@ -3212,3 +3211,13 @@ curves	Smooth	Lisser
 # Plugins menu
 	Plugins	Modules externes
 	Manage Plugins…	Gérer les modules externes…
+
+# Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
+	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	Ses calques ont besoin de {needed} de mémoire GPU ; le budget leur laisse {budget}.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	Réglez Mémoire GPU dans Préférences › Performances sur ce que votre carte graphique peut contenir (Automatique suit Utilisation de la mémoire, jusqu'au quart de la mémoire de cet ordinateur). Tant qu'ils ne tiennent pas, la barre d'état affiche Mémoire GPU pleine.
+	GPU Memory Full	Mémoire GPU pleine
+	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	Les calques ont besoin de {needed} de mémoire GPU et peuvent en occuper {budget} : les modifications qui redessinent tout le document le font sur le CPU. Cliquez pour régler Mémoire GPU.
+	GPU memory budget: {budget}	Budget de mémoire GPU : {budget}
+	This document's layers: {needed} of {budget} for layers	Calques de ce document : {needed} sur {budget} pour les calques
+	This document's layers need {needed} but may hold {budget}: whole-document redraws use the CPU	Les calques de ce document ont besoin de {needed} mais peuvent occuper {budget} : le document entier se redessine sur le CPU
+	GPU Memory (MB, 0 = Automatic)	Mémoire GPU (Mo, 0 = Automatique)

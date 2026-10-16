@@ -2512,7 +2512,6 @@ cameraRaw	Amount	Quantità
 	Redrawing	Ridisegno
 	This redraw took {seconds} s on the CPU.	Questo ridisegno sulla CPU ha richiesto {seconds} s.
 	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	Le modifiche che cambiano tutto il documento, come metodo di fusione, opacità o visibilità di un livello, lo ridisegnano per intero.
-	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	I livelli non rientrano nel budget di memoria della GPU. Aumentare Uso memoria in Preferenze › Prestazioni alza il budget, fino a un quarto della memoria di questo computer.
 	The GPU compositor wasn't used: {reason}	Il compositore GPU non è stato usato: {reason}
 fontWeight	Thin	Sottile
 fontWeight	ExtraLight	Extraleggero
@@ -4328,3 +4327,13 @@ shape	Appearance	Aspetto
 # Plugins menu
 	Plugins	Plugin
 	Manage Plugins…	Gestisci plugin…
+
+# Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
+	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	I livelli richiedono {needed} di memoria GPU; il budget ne lascia {budget}.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	Imposta Memoria GPU in Preferenze › Prestazioni su quanto può contenere la tua scheda grafica (Automatico segue Uso memoria, fino a un quarto della memoria di questo computer). Finché non ci stanno, la barra di stato mostra Memoria GPU piena.
+	GPU Memory Full	Memoria GPU piena
+	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	I livelli richiedono {needed} di memoria GPU e possono occuparne {budget}, quindi le modifiche che ridisegnano tutto il documento lo fanno sulla CPU. Fai clic per impostare Memoria GPU.
+	GPU memory budget: {budget}	Budget di memoria GPU: {budget}
+	This document's layers: {needed} of {budget} for layers	Livelli di questo documento: {needed} su {budget} per i livelli
+	This document's layers need {needed} but may hold {budget}: whole-document redraws use the CPU	I livelli di questo documento richiedono {needed} ma possono occupare {budget}: i ridisegni dell'intero documento usano la CPU
+	GPU Memory (MB, 0 = Automatic)	Memoria GPU (MB, 0 = Automatico)

@@ -2413,7 +2413,6 @@ cameraRaw	Color	カラー
 	Redrawing	再描画中
 	This redraw took {seconds} s on the CPU.	この再描画は CPU で {seconds} 秒かかりました。
 	Edits that change the whole document, such as a layer's blend mode, opacity or visibility, redraw all of it.	レイヤーの描画モード、不透明度、表示/非表示など、ドキュメント全体に関わる編集では全体が再描画されます。
-	Its layers don't fit the GPU memory budget. Raising Memory usage in Preferences › Performance raises the budget, up to a quarter of this computer's memory.	レイヤーが GPU メモリの予算に収まりません。環境設定 › パフォーマンスのメモリ使用量を増やすと、このコンピューターのメモリの4分の1まで予算が増えます。
 	The GPU compositor wasn't used: {reason}	GPU コンポジターは使用されませんでした: {reason}
 fontWeight	Thin	極細
 fontWeight	ExtraLight	特細
@@ -3883,3 +3882,13 @@ curves	Smooth	スムーズ
 # Plugins menu
 	Plugins	プラグイン
 	Manage Plugins…	プラグインを管理…
+
+# Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
+	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	レイヤーには {needed} の GPU メモリが必要ですが、予算で使えるのは {budget} です。
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	環境設定 › パフォーマンスの GPU メモリを、グラフィックカードが保持できる量に設定してください（自動はメモリ使用量に従い、このコンピューターのメモリの4分の1までです）。収まらない間、ステータスバーに「GPU メモリ不足」と表示されます。
+	GPU Memory Full	GPU メモリ不足
+	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	レイヤーには {needed} の GPU メモリが必要ですが、使えるのは {budget} のため、ドキュメント全体を再描画する編集は CPU で行われます。クリックして GPU メモリを設定します。
+	GPU memory budget: {budget}	GPU メモリ予算: {budget}
+	This document's layers: {needed} of {budget} for layers	このドキュメントのレイヤー: レイヤー用 {budget} のうち {needed}
+	This document's layers need {needed} but may hold {budget}: whole-document redraws use the CPU	このドキュメントのレイヤーには {needed} が必要ですが、使えるのは {budget} です: ドキュメント全体の再描画は CPU で行われます
+	GPU Memory (MB, 0 = Automatic)	GPU メモリ（MB、0 = 自動）
