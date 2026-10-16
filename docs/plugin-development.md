@@ -15,6 +15,7 @@ versions and your plugin's release version are different numbers.
 
 ## Contents
 
+- [Development with agents](#development-with-agents)
 - [Choose a plugin type](#choose-a-plugin-type)
 - [Prepare your tools](#prepare-your-tools)
 - [Build a first panel plugin](#build-a-first-panel-plugin)
@@ -34,6 +35,24 @@ versions and your plugin's release version are different numbers.
 - [Host architecture and new capabilities](#host-architecture-and-new-capabilities)
 - [Troubleshooting](#troubleshooting)
 - [Reference documents](#reference-documents)
+
+## Development with agents
+
+The reusable [PhotoCraft Plugin Developer skill](../skills/photocraft-plugin-developer/SKILL.md)
+guides an agent through current API selection, independent source ownership, builds,
+packaging, and acceptance testing. Its bundled references work when the skill is installed
+outside this checkout. Copy its complete folder into your agent's skill directory when
+using a client that supports this skill format; it does not require an MCP connection.
+
+Each of the five standalone starters below includes a local `AGENTS.md` with its own
+contract, files, commands, and verification rules. Copy that file with the entire starter.
+It remains useful after extraction without linking to editor-internal source files.
+The editor's root `AGENTS.md` continues to describe core development; it is not a plugin SDK.
+
+MCP can discover commands and inspect/test allowed behavior, while filesystem and build
+tools create the plugin. Current restricted automation denies managed panel/package installation and
+processing/task execution; these instructions do not expand that authority. Distinguish
+package/handler validation from real-host acceptance, and report unavailable checks.
 
 ## Choose a plugin type
 

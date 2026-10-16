@@ -12,6 +12,8 @@ worker, service, model or shared-runtime dependencies.
 
 ## Build and verify
 
+Agents: read the local [AGENTS.md](AGENTS.md) for read-only events, paging, and verification.
+
 Install Rust 1.95+ with the `wasm32-unknown-unknown` target and Python 3.11+.
 Copy this entire directory anywhere, then run `python build.py --check`.
 Use `--offline` once the locked crates are cached. Outputs go into `dist/`.

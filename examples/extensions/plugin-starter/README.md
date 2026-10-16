@@ -14,6 +14,8 @@ when an image must be opened first.
 
 ## Project layout
 
+Agents: read the local [AGENTS.md](AGENTS.md) for project boundaries and acceptance checks.
+
 ```text
 plugin-starter/
   Cargo.toml            independent cdylib project and release settings

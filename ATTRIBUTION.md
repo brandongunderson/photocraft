@@ -82,8 +82,6 @@ The other built-in ICC profiles and the generated LUT looks are produced by code
 | `docs/brand/` (all files) | ArtCraft name, wordmark and mark | ArtCraft Team | getartcraft.com | Not open source; trademarks of the ArtCraft Team, [`docs/brand/LICENSE-brand.txt`](docs/brand/LICENSE-brand.txt) |
 | `docs/images/photocraft-*.jpg` | PhotoCraft screenshots | PhotoCraft contributors (UI) | Rendered offscreen with the `snapshot` example | MIT OR Apache-2.0 (UI); the artwork in each is public domain, listed below |
 | `docs/images/preferences-apply-*.png` | Preferences before and after adding Apply (no artwork) | PhotoCraft contributors | PhotoCraft control-channel capture and offscreen `snapshot` example | MIT OR Apache-2.0 |
-| `tests/plugin-compatibility/frozen/image-gain-panel-v1.wasm`, `channel-gain-filter-v1.wasm` | Frozen neutral plugin compatibility modules | PhotoCraft contributors | Exact compiled Image Gain release package pinned in `tests/plugin-compatibility/catalog.json`; licenses under `tests/plugin-compatibility/licenses` | MIT OR Apache-2.0 |
-| `tests/plugin-compatibility/frozen/ai-upscale-panel-v1.wasm`, `background-removal-panel-v1.wasm`, `rembg-panel-v1.wasm` | Frozen AI plugin panel compatibility modules | PhotoCraft plugin contributors | Exact 2026-10-15 plugin archives pinned by the compatibility corpus; full notices under `tests/plugin-compatibility/licenses` | MIT (panel code); dependency notices accompany the fixtures |
 
 Artwork shown in the screenshots (all public domain, via Wikimedia Commons; details in
 [`docs/images/SOURCES.md`](docs/images/SOURCES.md)):
@@ -100,9 +98,21 @@ Artwork shown in the screenshots (all public domain, via Wikimedia Commons; deta
 | `photocraft-type.jpg` | *Among the Sierra Nevada, California*, Albert Bierstadt, 1868 | [Commons](https://commons.wikimedia.org/wiki/File:Albert_Bierstadt_-_Among_the_Sierra_Nevada,_California_-_Google_Art_Project.jpg) |
 | `photocraft-export-light.jpg` | *The Kiss*, Gustav Klimt, 1907–1908 | [Commons](https://commons.wikimedia.org/wiki/File:Gustav_Klimt_016.jpg) |
 
-## Test data (not committed, not shipped)
+## Compatibility test fixtures (not bundled in the app)
 
-`corpus/` is gitignored and no test fixtures are committed to the repository.
+These frozen WASM modules test the generic host against independently released plugins.
+They are test inputs, not built-in plugins or runtime dependencies. Native workers,
+inference libraries and models remain in the separate plugin packages. Fixture identities
+and use are documented in [`tests/plugin-compatibility/README.md`](tests/plugin-compatibility/README.md).
+
+| Path | Title | Author | Source | License |
+|---|---|---|---|---|
+| `tests/plugin-compatibility/frozen/image-gain-panel-v1.wasm`, `channel-gain-filter-v1.wasm` | Frozen neutral plugin compatibility modules | PhotoCraft contributors | Exact compiled Image Gain release package pinned in `tests/plugin-compatibility/catalog.json`; licenses under `tests/plugin-compatibility/licenses` | MIT OR Apache-2.0 |
+| `tests/plugin-compatibility/frozen/ai-upscale-panel-v1.wasm`, `background-removal-panel-v1.wasm`, `rembg-panel-v1.wasm` | Frozen AI plugin panel compatibility modules | PhotoCraft plugin contributors | Exact 2026-10-15 plugin archives pinned by the compatibility corpus; full notices under `tests/plugin-compatibility/licenses` | MIT (panel code); dependency notices accompany the fixtures |
+
+## Downloaded test corpora (not committed, not shipped)
+
+`corpus/` is gitignored; its downloaded files are not committed to the repository.
 `cargo xtask corpus --all` fetches every corpus at the pinned commits in `xtask/src/corpus_pins.rs`
 and verifies each file against the sha256 lists in `xtask/*.sha256`, with the upstream licence
 next to the files:

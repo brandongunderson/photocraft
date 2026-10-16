@@ -394,7 +394,6 @@ A future plugin that uses existing capabilities ships independently. A future ca
 - [Session and engine gate](../crates/engine/src/lib.rs), [command registry](../crates/engine/src/commands.rs), [jobs](../crates/engine/src/jobs.rs), [extension host](../crates/engine/src/extension_cmds.rs), [package store](../crates/engine/src/extension_package.rs), [image commands](../crates/engine/src/plugin_image_cmds.rs), [native transport](../crates/engine/src/plugin_runtime.rs), [tasks](../crates/engine/src/plugin_task_cmds.rs) and [previews](../crates/engine/src/plugin_preview.rs).
 - [WASM panel schema](../crates/plugins/src/extension.rs), [runtime](../crates/plugins/src/extension/runtime.rs), [native plugin UI](../crates/ui-egui/src/extension_ui.rs), [document model](../crates/doc/src/lib.rs), [composition](../crates/compose/src/lib.rs), [I/O](../crates/io/src/lib.rs), [automation authority](../crates/automation/src/workspace.rs) and [layer enforcement](../xtask/src/layers.rs).
 - [Package ownership and runtime boundaries](plugin-native-packages.md) and the [shared processing lifecycle](plugin-image-services.md).
-- Independent plugin projects: [AI Upscale](https://github.com/brandongunderson/photocraft-ai-upscale-plugin), [Background Removal](https://github.com/brandongunderson/photocraft-background-removal-plugin) and [Rembg](https://github.com/brandongunderson/photocraft-rembg-plugin).
 
 ### External design references
 

@@ -15,6 +15,8 @@ Bitmap, Indexed, Duotone and Multichannel modes are deliberately rejected.
 
 ## Build and install
 
+Agents: read the local [AGENTS.md](AGENTS.md) for ABI, precision, and verification rules.
+
 Install Rust and its core WebAssembly target:
 
 ```sh

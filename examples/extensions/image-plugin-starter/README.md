@@ -11,6 +11,8 @@ Native packages require a desktop persistent plugin store; browser installation 
 
 ## Build
 
+Agents: read the local [AGENTS.md](AGENTS.md) for the panel, worker, and bundled filter boundaries.
+
 Install Rust 1.95+ with its normal native linker, Python 3.11+, and the WASM target:
 
 ```sh
