@@ -3885,7 +3885,7 @@ curves	Smooth	スムーズ
 
 # Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
 	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	レイヤーには {needed} の GPU メモリが必要ですが、予算で使えるのは {budget} です。
-	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	環境設定 › パフォーマンスの GPU メモリを、グラフィックカードが保持できる量に設定してください（自動はメモリ使用量に従い、このコンピューターのメモリの4分の1までです）。収まらない間、ステータスバーに「GPU メモリ不足」と表示されます。
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold, at most 3/8 of its memory. Automatic follows Memory Usage, within a quarter of this computer's memory and 3/8 of the card's, and doesn't count the document against a card whose memory is known. The status bar shows GPU Memory Full while they don't fit.	環境設定 › パフォーマンスの GPU メモリを、グラフィックカードが保持できる量（最大でメモリの 3/8）に設定してください。自動はメモリ使用量に従い、このコンピューターのメモリの4分の1とカードの 3/8 の範囲内で、メモリ量がわかるカードではドキュメント分を差し引きません。収まらない間、ステータスバーに「GPU メモリ不足」と表示されます。
 	GPU Memory Full	GPU メモリ不足
 	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	レイヤーには {needed} の GPU メモリが必要ですが、使えるのは {budget} のため、ドキュメント全体を再描画する編集は CPU で行われます。クリックして GPU メモリを設定します。
 	GPU memory budget: {budget}	GPU メモリ予算: {budget}

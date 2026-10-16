@@ -3388,7 +3388,7 @@ curves	Smooth	매끄럽게
 
 # Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
 	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	레이어에 GPU 메모리 {needed}가 필요하지만 예산은 {budget}만 남겨 둡니다.
-	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	환경 설정 › 성능에서 GPU 메모리를 그래픽 카드가 감당할 수 있는 양으로 설정하세요(자동은 메모리 사용량을 따르며 이 컴퓨터 메모리의 4분의 1까지입니다). 맞지 않는 동안 상태 표시줄에 GPU 메모리 부족이 표시됩니다.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold, at most 3/8 of its memory. Automatic follows Memory Usage, within a quarter of this computer's memory and 3/8 of the card's, and doesn't count the document against a card whose memory is known. The status bar shows GPU Memory Full while they don't fit.	환경 설정 › 성능에서 GPU 메모리를 그래픽 카드가 감당할 수 있는 양으로 설정하세요(최대 카드 메모리의 3/8). 자동은 메모리 사용량을 따르며, 이 컴퓨터 메모리의 4분의 1과 카드 메모리의 3/8 이내이고, 메모리를 알 수 있는 카드에서는 문서를 차감하지 않습니다. 맞지 않는 동안 상태 표시줄에 GPU 메모리 부족이 표시됩니다.
 	GPU Memory Full	GPU 메모리 부족
 	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	레이어에 GPU 메모리 {needed}가 필요하지만 {budget}만 사용할 수 있어 문서 전체를 다시 그리는 편집은 CPU에서 처리됩니다. 클릭하여 GPU 메모리를 설정합니다.
 	GPU memory budget: {budget}	GPU 메모리 예산: {budget}

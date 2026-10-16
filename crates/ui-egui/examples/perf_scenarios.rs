@@ -543,7 +543,6 @@ fn layered_scenarios(b: &mut Bench, sz: &Sizes) {
     });
 }
 
-/// #209: arrow-key nudge in the 150-layer document; #1771: a new layer there.
 /// Layers overhaul L3: edits that redraw the whole document (a layer's opacity, hiding it) with
 /// many full-canvas layers, under the app's own GPU memory budget (Memory Usage at its default,
 /// the adapter's kind; `gpu_canvas::memory_budget`). Past what the budget holds, each one went to
@@ -580,7 +579,8 @@ fn full_canvas_layer_scenarios(b: &mut Bench, sz: &Sizes) {
         }
     };
     if let (Some((g, _)), Some(st)) = (&b.gpu, s.active()) {
-        let pixels = st.history.pixel_bytes(&st.doc) as u64;
+        // As the app counts it (`canvas::gpu_budget`).
+        let pixels = st.memory_bytes() as u64;
         let allowance = u64::from(photocraft_engine::prefs::Performance::default().memory_usage_mb) << 20;
         g.set_memory_budget(photocraft_ui_egui::gpu_canvas::memory_budget(
             allowance,
@@ -604,6 +604,7 @@ fn full_canvas_layer_scenarios(b: &mut Bench, sz: &Sizes) {
     });
 }
 
+/// #209: arrow-key nudge in the 150-layer document; #1771: a new layer there.
 fn many_layer_scenarios(b: &mut Bench, sz: &Sizes) {
     // Row names stay stable across modes: the layer count is in the mode, not the key.
     let name = "nudge 1 px in the many-layer document + refresh".to_string();

@@ -1379,7 +1379,8 @@ fn detect_physical_memory() -> Option<u64> {
 /// it: DXGI's dedicated video memory on Windows, amdgpu's VRAM size on Linux. `None` for
 /// integrated and software adapters, whose textures live in system memory (the RAM-based
 /// budgets already cover them), and where nothing reports it. `PHOTOCRAFT_VRAM_MB` overrides it
-/// for any adapter (to simulate a smaller card).
+/// for any adapter, simulating a discrete card of that size: on an integrated GPU the budget then
+/// stops charging the document's pixels too, as for a real card (a development switch).
 pub fn video_memory(adapter: &wgpu::AdapterInfo) -> Option<u64> {
     if let Some(mb) = std::env::var("PHOTOCRAFT_VRAM_MB").ok().and_then(|v| v.trim().parse::<u64>().ok()) {
         return mb.checked_mul(1 << 20).filter(|b| *b > 0);

@@ -3695,7 +3695,7 @@ curves	Smooth	Làm mượt
 
 # Preferences › Performance › GPU Memory; the status bar and slow-redraw notice
 	Its layers need {needed} of GPU memory; the budget leaves them {budget}.	Các lớp cần {needed} bộ nhớ GPU; ngân sách chỉ dành cho chúng {budget}.
-	Set GPU Memory in Preferences › Performance to what your graphics card can hold (Automatic follows Memory Usage, up to a quarter of this computer's memory). The status bar shows GPU Memory Full while they don't fit.	Đặt Bộ nhớ GPU trong Tùy chọn › Hiệu năng bằng mức card đồ họa của bạn chứa được (Tự động theo mức sử dụng bộ nhớ, tối đa một phần tư bộ nhớ máy này). Khi chúng chưa vừa, thanh trạng thái hiện Bộ nhớ GPU đầy.
+	Set GPU Memory in Preferences › Performance to what your graphics card can hold, at most 3/8 of its memory. Automatic follows Memory Usage, within a quarter of this computer's memory and 3/8 of the card's, and doesn't count the document against a card whose memory is known. The status bar shows GPU Memory Full while they don't fit.	Đặt Bộ nhớ GPU trong Tùy chọn › Hiệu năng bằng mức card đồ họa của bạn chứa được, tối đa 3/8 bộ nhớ của card. Tự động theo mức sử dụng bộ nhớ, trong giới hạn một phần tư bộ nhớ máy này và 3/8 bộ nhớ card, và không tính tài liệu vào card đã biết dung lượng bộ nhớ. Khi chúng chưa vừa, thanh trạng thái hiện Bộ nhớ GPU đầy.
 	GPU Memory Full	Bộ nhớ GPU đầy
 	The layers need {needed} of GPU memory and may hold {budget}, so edits that redraw the whole document do it on the CPU. Click to set GPU Memory.	Các lớp cần {needed} bộ nhớ GPU và chỉ được dùng {budget}, nên những chỉnh sửa vẽ lại toàn bộ tài liệu sẽ làm trên CPU. Nhấp để đặt Bộ nhớ GPU.
 	GPU memory budget: {budget}	Ngân sách bộ nhớ GPU: {budget}
