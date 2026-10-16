@@ -461,6 +461,39 @@ fn remove_instance(f: &mut Map<String, Value>, id: &str) {
 /// the layer's order), the blending options and the selected page. `select`
 /// names a kind to open: its first instance is selected (and enabled), or one
 /// is created. `light` is the document's global light angle.
+/// Whether the selected page is a Drop Shadow or Inner Shadow, which a drag on the image moves
+/// while the dialog is open, as in Photoshop (#5701; [`drag_shadow`]).
+pub fn drags_shadow(f: &Map<String, Value>) -> bool {
+    let selected = f.get("selected").and_then(Value::as_str).unwrap_or_default();
+    entry(f, selected).and_then(|e| e.get("kind")).and_then(Value::as_str).is_some_and(|k| matches!(k, "dropShadow" | "innerShadow"))
+}
+
+/// A drag on the image with a shadow page selected: `start` is true on the press (it records the
+/// shadow's angle and distance then), `total` the pointer's movement since in document pixels.
+/// The shadow's offset follows the pointer, kept as Photoshop's whole-degree angle and whole-pixel
+/// distance (offset = (−cos angle, sin angle) × distance, the light opposite the shadow); with
+/// Use Global Light the shared angle moves too ([`set_param`]).
+pub fn drag_shadow(f: &mut Map<String, Value>, start: bool, total: [f64; 2]) {
+    const KEY: &str = "__shadowDrag";
+    let Some(id) = f.get("selected").and_then(Value::as_str).map(str::to_string).filter(|_| drags_shadow(f)) else { return };
+    let Some(p) = entry(f, &id).and_then(|e| e.get("params")) else { return };
+    if start || f.get(KEY).is_none() {
+        let angle = p.get("angle").and_then(Value::as_f64).unwrap_or(120.0);
+        let distance = p.get("distance").and_then(Value::as_f64).unwrap_or(0.0);
+        f.insert(KEY.into(), json!([angle, distance]));
+    }
+    let Some([angle, distance]) = f.get(KEY).and_then(Value::as_array).and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])) else { return };
+    let a = angle.to_radians();
+    let (ox, oy) = (-a.cos() * distance + total[0], a.sin() * distance + total[1]);
+    let d = ox.hypot(oy);
+    if !d.is_finite() {
+        return;
+    }
+    let new_angle = if d >= 0.5 { oy.atan2(-ox).to_degrees().round() } else { angle };
+    set_param(f, &id, "angle", json!(new_angle));
+    set_param(f, &id, "distance", json!(d.round().clamp(0.0, 30000.0)));
+}
+
 pub fn initial_fields(layer: &Layer, select: Option<&str>, light: f32) -> Map<String, Value> {
     let mut f = Map::new();
     f.insert("layer".into(), json!(layer.id.0));
@@ -1345,6 +1378,38 @@ impl MaxAlpha for Color32 {
 mod tests {
     use super::*;
     use photocraft_doc::StrokeFx;
+
+    /// #5701: with a shadow page selected, a drag on the image moves the shadow: its offset
+    /// follows the pointer, as whole degrees and pixels, the global light angle with it.
+    #[test]
+    fn dragging_on_the_image_moves_the_selected_shadow() {
+        let shadow = |id: &str, kind: &str, global: bool| json!({"id": id, "kind": kind, "on": true, "params": {"angle": 120.0, "distance": 10.0, "useGlobalLight": global}});
+        let mut f = Map::new();
+        f.insert("selected".into(), json!("fx1"));
+        f.insert("globalLight".into(), json!(120.0));
+        f.insert("effects".into(), json!([shadow("fx1", "dropShadow", true), shadow("fx2", "innerShadow", true), shadow("fx3", "dropShadow", false)]));
+        assert!(drags_shadow(&f));
+        let params = |f: &Map<String, Value>, id: &str| {
+            let p = &entry(f, id).unwrap()["params"];
+            (p["angle"].as_f64().unwrap(), p["distance"].as_f64().unwrap())
+        };
+        // The press keeps the shadow where it is: (5, 8.66) px.
+        drag_shadow(&mut f, true, [0.0, 0.0]);
+        assert_eq!(params(&f, "fx1"), (120.0, 10.0));
+        // Dragged to (15, 0): straight right of the layer, the light from the left (180°).
+        drag_shadow(&mut f, false, [10.0, -8.660_254]);
+        assert_eq!(params(&f, "fx1"), (180.0, 15.0));
+        assert_eq!(params(&f, "fx2").0, 180.0, "the global light angle is shared");
+        assert_eq!(params(&f, "fx3"), (120.0, 10.0), "an instance with its own angle is left alone");
+        // Back onto the layer: no offset, and the angle the drag started with.
+        drag_shadow(&mut f, false, [-5.0, -8.660_254]);
+        assert_eq!(params(&f, "fx1"), (120.0, 0.0));
+        // Not on a shadow page: nothing moves.
+        f.insert("selected".into(), json!(BLENDING));
+        assert!(!drags_shadow(&f));
+        drag_shadow(&mut f, true, [50.0, 50.0]);
+        assert_eq!(params(&f, "fx1"), (120.0, 0.0));
+    }
 
     fn session() -> photocraft_engine::Session {
         let mut s = photocraft_engine::Session::new();

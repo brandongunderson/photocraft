@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (CMYK Hue/Saturation and Color Balance keep the black ink; CMYK Posterize on the stored values, psd-tools oracle floor 242/309; CMYK adjustment layers composite on the document's inks; Photoshop-oracle floor 165/258; CMYK Brightness/Contrast on the inks, CMYK Threshold's luma; modern Brightness/Contrast's brightness curve; Photoshop-oracle floor 151/258; Lab documents composite on their stored L, a, b; Photoshop-oracle floor 152/258; Levels on whole levels at every step with Photoshop's shadow toe; Photoshop-oracle floor 146/258, psd-tools 238/309; 32-bit adjustments unclipped; Photoshop-oracle floor 149/258; mask feathers blur with their exact variance; Threshold splits on Photoshop's luminosity; a pass-through clipping base with an adjustment renders isolated; psd-tools oracle floor 240/309; 16-bit Posterize as Photoshop bins it; psd-tools oracle floor 241/309; Gradient Map luminosity; Photoshop-oracle floor 147/258; PSD: `Mt16`/`Mt32` merged transparency read; palette PNGs open in Indexed Color mode, #4804; earlier: CMYK Invert, Posterize and Threshold on the inks; 16-bit Lab Invert; Photoshop-oracle floor 145/258; `.atn` import maps 112 events; DDS textures open, #1327; DPX read and write, #1049; #2465 fixed: CS2 placed layers with only a `PlLd` block open their contents; Photoshop Actions `.atn` read and write; `.shc` contour files read and write; earlier the same day: indexed BMP palette mode; Save keeps a JPEG's quality and a WebP's encoding) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (earlier: PDF write one flattened page via Save As / Save a Copy / CLI, #3401; CMYK Invert, Posterize and Threshold on the inks; smart filter masks on PSD open and save; Photoshop-oracle floor 188/258; lossy DNG, compression 34892, decodes with its levels and LinearizationTable applied to the stored 8-bit samples, FILE-215-11; CMYK Hue/Saturation and Color Balance keep the black ink; CMYK Posterize on the stored values, psd-tools oracle floor 242/309; CMYK adjustment layers composite on the document's inks; Photoshop-oracle floor 165/258; CMYK Brightness/Contrast on the inks, CMYK Threshold's luma; modern Brightness/Contrast's brightness curve; Photoshop-oracle floor 151/258; Lab documents composite on their stored L, a, b; Photoshop-oracle floor 152/258; Levels on whole levels at every step with Photoshop's shadow toe; Photoshop-oracle floor 146/258, psd-tools 238/309; 32-bit adjustments unclipped; Photoshop-oracle floor 149/258; mask feathers blur with their exact variance; Threshold splits on Photoshop's luminosity; a pass-through clipping base with an adjustment renders isolated; psd-tools oracle floor 240/309; 16-bit Posterize as Photoshop bins it; psd-tools oracle floor 241/309; Gradient Map luminosity; Photoshop-oracle floor 147/258; PSD: `Mt16`/`Mt32` merged transparency read; palette PNGs open in Indexed Color mode, #4804; earlier: CMYK Invert, Posterize and Threshold on the inks; 16-bit Lab Invert; Photoshop-oracle floor 145/258; `.atn` import maps 112 events; DDS textures open, #1327; DPX read and write, #1049; #2465 fixed: CS2 placed layers with only a `PlLd` block open their contents; Photoshop Actions `.atn` read and write; `.shc` contour files read and write; earlier the same day: indexed BMP palette mode; Save keeps a JPEG's quality and a WebP's encoding) · **Target:** Adobe Photoshop 2026
 
 Every format Photoshop 2026 (27.11.0) reads or writes, with PhotoCraft's support, fidelity and
 tests. Photoshop's list comes from its `Info.plist` `CFBundleDocumentTypes`, the PiPL read/write
@@ -21,7 +21,7 @@ XL are missing (gap G10). Remaining: 300–500 h including PSD fidelity.
 
 | Format | Photoshop | PhotoCraft read | PhotoCraft write | Fidelity and tests |
 |---|---|---|---|---|
-| PSD | R/W | yes | yes | 1/8/16/32-bit; Bitmap, Gray, Indexed, RGB, CMYK, Multichannel, Lab, Duotone; layers, groups, masks, vector masks, adjustment and fill layers, effects, text, shapes, smart objects (SoLd/lnk2; CS2 PlLd/lnkD read with their warp, kept as is or re-saved as SoLd once edited), smart filters (14 mapped plus Filter Gallery with Chrome, rest verbatim), slices, comps, Advanced Blending. Oracle floors: Photoshop-authored 185/258, io 148/170, psd-tools 249/309; round trip ≥ 169/170, 308/309, 258/256. Known failures: #1281, #2469 (#2374, text layers, closed 2026-10-10; #2465, CS2 `PlLd`-only smart objects, fixed 2026-10-12) |
+| PSD | R/W | yes | yes | 1/8/16/32-bit; Bitmap, Gray, Indexed, RGB, CMYK, Multichannel, Lab, Duotone; layers, groups, masks, vector masks, adjustment and fill layers, effects, text, shapes, smart objects (SoLd/lnk2; CS2 PlLd/lnkD read with their warp, kept as is or re-saved as SoLd once edited), smart filters (14 mapped plus Filter Gallery with Chrome, rest verbatim), slices, comps, Advanced Blending. Oracle floors: Photoshop-authored 188/258, io 148/170, psd-tools 249/309; round trip ≥ 169/170, 308/309, 258/256. Known failures: #1281, #2469 (#2374, text layers, closed 2026-10-10; #2465, CS2 `PlLd`-only smart objects, fixed 2026-10-12) |
 | PSB | R/W | yes | yes | Auto-switches above 2 GB (REL-212-2); 4–5 GB fixtures generated (FILE-216-2); > 4 GB fails on Windows (#375) |
 | Cloud PSD (.psdc) | R/W | no | no | Out of scope (Adobe cloud) |
 | TIFF | R/W | yes | yes | 8/16/32f, Gray/RGB/CMYK, BigTIFF, every IFD, banded parallel decode; layered TIFF both byte orders (FILE-215-7: extra alpha channels not written) |
@@ -38,12 +38,12 @@ XL are missing (gap G10). Remaining: 300–500 h including PSD fidelity.
 | Portable Bit Map (PBM/PGM/PPM/PNM/PFM/PAM) | R/W | yes | yes | 8/16/32f |
 | FITS | R/W (FITS Liberator plug-in) | yes | yes | 8/16/32f gray or RGB, header cards kept; no fpack, no debayer |
 | Targa | R/W | yes | yes | 8-bit |
-| Photoshop PDF | R/W | no (#2541) | raster only (print, artboards to PDF) | No vector/text PDF, no multi-page save, no PDF presentation (FILE-215-10) |
+| Photoshop PDF | R/W | no (#2541) | yes, one flattened page (Save As / Save a Copy / CLI, #3401; also print and artboards-to-PDF) | No vector/text PDF, no multi-page save, no PDF presentation, layers are not preserved (FILE-215-10); read still missing (#2541) |
 | Photoshop EPS, DCS 1.0/2.0, EPS TIFF/PICT preview | R/W | no | no | |
 | Generic EPS / AI | R (rasterize) | no | no | |
 | SVG | R (rasterize) | yes, as editable shape layers or a vector smart object | no | Better than Photoshop for editing; gradients approximated (FILE-215-9) |
 | JPEG 2000 | R/W | no (#1047) | no | |
-| Cineon / DPX | R (DPX), R/W (CIN) | DPX: luma, RGB, RGBA at 8/10/12/16 bits, both byte orders (#1049); Cineon no | DPX: 8/10/12/16 bits (`dpxBits`, `--dpx-bits`); Cineon no | Writes DPX, which Photoshop only reads; header fields (creator, project, copyright, transfer, frame rate, time code…) round-trip; no Cineon, no RLE |
+| Cineon / DPX | R (DPX), R/W (CIN) | DPX: luma, RGB, RGBA at 8/10/12/16 bits, both byte orders (#1049); Cineon: 10-bit gray/RGB, read-only | DPX: 8/10/12/16 bits (`dpxBits`, `--dpx-bits`); Cineon no | Writes DPX, which Photoshop only reads; header fields (creator, project, copyright, transfer, frame rate, time code…) round-trip; Cineon read-only, no RLE |
 | DICOM | R/W | no | no | |
 | PCX | R/W | no | no | |
 | Pixar | R/W | no | no | |
@@ -63,10 +63,10 @@ supports many more, including CR3).
 
 | Camera format | PhotoCraft | Evidence |
 |---|---|---|
-| DNG (incl. LJPEG and JPEG XL tiles) | yes; lossy DNG no | FILE-215-11 |
+| DNG (incl. LJPEG, lossy JPEG and JPEG XL tiles) | yes | 2026-10-13: lossy DNG (DNG 1.4 compression 34892: 8-bit baseline JPEG tiles or strips, CFA and LinearRaw, partial edge tiles) decodes to the stored samples, which go through LinearizationTable / BlackLevel / WhiteLevel (default 255) like every other depth; `crates/raw/tests/dng.rs` `lossy_jpeg_*` (FILE-215-11, lossy DNG part; no lossy file in the raw corpus yet) |
 | Canon CR2 | yes | |
 | Canon CR3 | detected, unsupported | `crates/raw/src/lib.rs:219` |
-| Nikon NEF/NRW (lossless, lossy) | yes; "lossy after split" no | #50; D5100 image area measured on three 14-bit lossy NEFs; [validation](nikon-nef-development.md) |
+| Nikon NEF/NRW (lossless, lossy) | yes; "lossy after split" no | #50; D5100 and D90 image areas measured (14-bit NEFs); [validation](nikon-nef-development.md) |
 | Sony ARW/SR2/SRF (incl. compressed) | yes | |
 | Panasonic RW2, Pentax PEF | yes | |
 | Olympus ORF | uncompressed only | |
@@ -129,7 +129,7 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 | Patterns `.pat` | R/W | R/W | |
 | Swatches `.aco`, `.ase` | R/W | R/W | FILE-215-14 |
 | LUTs `.cube` / `.3dl` / `.look` | R/W (Export Color Lookup) | R/W / R / R | `cms/src/lutfile.rs` |
-| Keyboard shortcuts `.kys` | R/W | R | `engine/src/kys.rs` |
+| Keyboard shortcuts `.kys` | R/W | R/W | `engine/src/kys.rs` (`write`: Edit › Keyboard Shortcuts › Export…, rows carry our id; Photoshop reading our files is unverified) |
 | ICC profiles | R | R | Own CMS |
 | Actions `.atn` | R/W | R/W | `psd/src/atn.rs` (version 16 sets, exact round trip), `engine/src/atn_cmds.rs` (112 Photoshop events ↔ commands; other steps kept verbatim). Panel menu, CLI `batch --actions set.atn`, `actions.load`/`actions.save`. Photoshop 5-era version 12 files unsupported (AUTO-219-2) |
 | Styles `.asl` | R/W | no | #1693 |
@@ -142,6 +142,8 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | PSD smart filter masks: Photoshop stores a smart object's filtered pixels without its filter mask and mixes the unfiltered ones (`FEid`) back in; import now mixes them and export writes them that way, so sf-filter-mask-hard, -gradient and sf-stack-blend-and-mask pass; Photoshop-oracle floor 185 → 188 of 258 |
+| 2026-10-13 | minor | Lossy DNG (compression 34892) decodes: 8-bit baseline JPEG tiles and strips, CFA and LinearRaw, partial edge tiles; the stored values take the normal levels and LinearizationTable (FILE-215-11, lossy DNG part) |
 | 2026-10-14 | minor | Corpus floors raised to the measured results of the CMYK, Lab, 32-bit, Levels, Threshold, Posterize, feather and pass-through fixes landed together: Photoshop-authored 165 → 185 of 258, io 146 → 148 of 170, psd-tools 242 → 249 of 309 |
 | 2026-10-13 | minor | CMYK Hue/Saturation (not Colorize) and Color Balance work on C, M and Y as inverted RGB with black kept, on the inks for display, export and destructive edits; cmyk8/16 hue-saturation 100% → 0.4–0.7% bad pixels, color-balance 74% → 25% |
 | 2026-10-13 | minor | CMYK Posterize works on the stored values (1 − ink), as Photoshop does: psd-tools posterize_cmyk passes (13.8 % → 0 of pixels off on the ink path); psd-tools floor → 242 of 309 |
@@ -170,4 +172,5 @@ remaining gaps in #1606 stay tracked with per-sample corpus ceilings.
 | 2026-10-12 | minor | Save writes a JPEG at its own estimated quality and a WebP lossy or lossless as opened (#2399) |
 | 2026-10-11 | minor | PSD smart filters: Filter Gallery (`GEfc`) maps to `filter.filterGallery` when every effect is modelled (Chrome so far), editable from the Layers panel |
 | 2026-10-11 | minor | D5100 image area and fitted-look preservation in Camera Raw tuning |
+| 2026-10-11 | minor | PDF write now covers Save As / Save a Copy / CLI (`io::pdf::export`, #3401): one flattened RGB/Gray/CMYK page at the document's print size with the embedded profile. Read (#2541), multi-page save, PDF presentation, vector/text output still open
 | 2026-10-10 | major | First version: Photoshop 2026 27.11.0's formats from its bundle, against our codecs; Affinity notes moved from `roadmap.md` |

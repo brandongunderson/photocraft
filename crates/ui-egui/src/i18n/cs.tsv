@@ -3783,6 +3783,31 @@ navigator	Zoom	Zvětšení
 # View › Guides › right-click a guide
 	Edit Selected Guides	Upravit vybraná vodítka
 	Clear Selected Guides	Vymazat vybraná vodítka
+	Delete this set	Smazat tuto sadu
+	New Set…	Nová sada…
+	PhotoCraft Defaults	Výchozí PhotoCraft
+	Save a list of these shortcuts as a web page	Uložit seznam těchto zkratek jako webovou stránku
+	Save the changes to this set	Uložit změny do této sady
+	Save these shortcuts as a .kys file	Uložit tyto zkratky jako soubor .kys
+	Save these shortcuts as a new set	Uložit tyto zkratky jako novou sadu
+	Set deleted.	Sada smazána.
+	Set saved.	Sada uložena.
+	Set:	Sada:
+	Summarize…	Shrnout…
+	There are too many sets: delete one first.	Sad je příliš mnoho: nejprve jednu smažte.
+	set name	název sady
+	{set} (modified)	{set} (změněno)
+	Accept and Go to Conflict	Přijmout a přejít ke konfliktu
+	Changes undone.	Změny vráceny.
+	Choose a new shortcut for this command, or leave it without one.	Zvolte pro tento příkaz novou zkratku, nebo ho nechte bez ní.
+	Put this command's shortcuts back as they were	Vrátit zkratky tohoto příkazu do původního stavu
+	Take the shortcut from the other command and select it	Odebrat zkratku druhému příkazu a vybrat ho
+	Undo Changes	Vrátit změny
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} je vyhrazena systémem a nelze ji přiřadit.
+	Low-Latency Drawing (vsync off, applies at next launch)	Kreslení s nízkou latencí (bez vertikální synchronizace, platí po dalším spuštění)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Volná transformace se stále použije; zkuste to znovu, až skončí.
+	The transform couldn't be applied.	Transformaci nelze použít.
 
 # Native-panel extensions
 	Manage Extensions…	Spravovat rozšíření…

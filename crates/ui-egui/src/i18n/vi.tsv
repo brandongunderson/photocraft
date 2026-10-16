@@ -3661,6 +3661,31 @@ curves	Smooth	Làm mượt
 # View › Guides › right-click a guide
 	Edit Selected Guides	Sửa đường căn đã chọn
 	Clear Selected Guides	Xóa đường căn đã chọn
+	Delete this set	Xóa bộ này
+	New Set…	Bộ mới…
+	PhotoCraft Defaults	Mặc định của PhotoCraft
+	Save a list of these shortcuts as a web page	Lưu danh sách các phím tắt này thành trang web
+	Save the changes to this set	Lưu thay đổi vào bộ này
+	Save these shortcuts as a .kys file	Lưu các phím tắt này thành tệp .kys
+	Save these shortcuts as a new set	Lưu các phím tắt này thành bộ mới
+	Set deleted.	Đã xóa bộ.
+	Set saved.	Đã lưu bộ.
+	Set:	Bộ:
+	Summarize…	Tóm tắt…
+	There are too many sets: delete one first.	Có quá nhiều bộ: hãy xóa một bộ trước.
+	set name	tên bộ
+	{set} (modified)	{set} (đã sửa đổi)
+	Accept and Go to Conflict	Chấp nhận và đến xung đột
+	Changes undone.	Đã hoàn tác thay đổi.
+	Choose a new shortcut for this command, or leave it without one.	Chọn phím tắt mới cho lệnh này, hoặc để lệnh không có phím tắt.
+	Put this command's shortcuts back as they were	Khôi phục phím tắt của lệnh này như cũ
+	Take the shortcut from the other command and select it	Lấy phím tắt khỏi lệnh kia và chọn lệnh đó
+	Undo Changes	Hoàn tác thay đổi
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} được hệ thống dành riêng và không thể gán.
+	Low-Latency Drawing (vsync off, applies at next launch)	Vẽ độ trễ thấp (tắt vsync, áp dụng ở lần khởi động sau)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Biến đổi tự do vẫn đang được áp dụng; hãy thử lại khi hoàn tất.
+	The transform couldn't be applied.	Không thể áp dụng phép biến đổi.
 
 # Native-panel extensions
 	Manage Extensions…	Quản lý tiện ích mở rộng…

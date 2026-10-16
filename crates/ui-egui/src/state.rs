@@ -1073,6 +1073,9 @@ pub struct UiState {
     /// Inline type editing session, if any.
     #[serde(default)]
     pub text_edit: Option<TextEdit>,
+    /// Tool to restore when an inline type edit session commits or cancels (e.g. Move tool, #1132).
+    #[serde(skip)]
+    pub text_edit_return_tool: Option<Tool>,
     /// Ctrl/Cmd Type-tool gesture, exposed to automation but never restored as a held pointer.
     #[serde(default, skip_deserializing)]
     pub type_transform: Option<TypeTransform>,
@@ -1306,6 +1309,7 @@ impl Default for UiState {
             spring: None,
             recent_files: Vec::new(),
             text_edit: None,
+            text_edit_return_tool: None,
             type_transform: None,
             type_transform_pivot: None,
             cam_transform: None,

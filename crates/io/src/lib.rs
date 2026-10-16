@@ -51,6 +51,7 @@ mod multichannel_map;
 mod ora;
 pub use ora::losses as ora_losses;
 pub mod pattern_map;
+pub mod pdf;
 mod pdn;
 pub mod pixels;
 mod psd_export;
@@ -273,13 +274,18 @@ fn import_stages(name: &str, bytes: &[u8], ctl: &photocraft_raster::Interrupt, m
         return Ok(ImportResult { document: photocraft_format::load_from_bytes(bytes)?, warnings: Vec::new(), source_read_only: false, preview_only: false });
     }
     if is_psd(bytes) {
-        let file = PsdFile::from_bytes(bytes)?;
+        // A merged image the import reads is decoded with the parse: a ZIP one is inflated once.
+        let (file, merged) = PsdFile::from_bytes_and_merged_recovering(
+            bytes,
+            |f| psd_import::check_group_depth(f).is_ok() && psd_import::merged_needed(f),
+            psd_import::can_recover_layers,
+        )?;
         // Nesting past the document model's cap could never be saved; reject the file with the
         // actionable limit.
         psd_import::check_group_depth(&file)?;
         ctl.check().map_err(|_| IoError::Cancelled)?;
         ctl.progress(0.05);
-        let (mut document, warnings) = psd_import::psd_to_document_with(&file, ctl).ok_or(IoError::Cancelled)?;
+        let (mut document, warnings) = psd_import::psd_to_document_decoded(&file, ctl, merged).ok_or(IoError::Cancelled)?;
         document.name = name.to_string();
         text_import::prepare(&mut document);
         return Ok(ImportResult { document, warnings, source_read_only: false, preview_only: false });
@@ -389,6 +395,9 @@ fn export_stages(doc: &Document, name_or_ext: &str, opts: &ExportOptions, ctl: &
     }
     if ext == "ora" {
         return ora::export(doc);
+    }
+    if ext == "pdf" {
+        return pdf::export(doc);
     }
     if ext == photocraft_format::EXTENSION {
         let doc = named_for_file(doc, name_or_ext);

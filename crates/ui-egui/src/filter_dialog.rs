@@ -822,6 +822,11 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(label(&p.key)).color(t.text_dim));
                     crate::widgets::value_field(ui, &mut v, -30000.0..=30000.0, "", 80.0);
+                    // A seed gets a fresh random value in one click (#5710): Clouds, Add Noise,
+                    // Fibers… then render a new pattern, as each run of Photoshop's does.
+                    if p.key == "seed" && ui.button(tl!("Random")).clicked() {
+                        v = random_seed(ui.input(|i| i.time).to_bits(), v as i64) as f32;
+                    }
                 });
                 f.insert(p.key, json!(v.round() as i64));
             }
@@ -837,6 +842,15 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
         crate::widgets::checkbox(ui, &mut preview, tl!("Preview"));
         f.insert("__preview".into(), json!(preview));
     }
+}
+
+/// A new seed for a dialog's Random button: 0..=30000 (what the field takes), never `current`.
+/// `entropy` varies per click (the input time); the process's random hasher keys mix it.
+fn random_seed(entropy: u64, current: i64) -> i64 {
+    use std::hash::BuildHasher;
+    let h = std::collections::hash_map::RandomState::new().hash_one(entropy);
+    let seed = (h % 30_001) as i64;
+    if seed == current { (seed + 1) % 30_001 } else { seed }
 }
 
 /// User-facing params (strip the dialog's private `__` keys).
@@ -1004,6 +1018,28 @@ impl FilterPreviewKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #5710: the seed field's Random button always gives a different seed the field can hold.
+    #[test]
+    fn random_seeds_stay_in_range_and_change() {
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..200u64 {
+            let s = random_seed(i, 7);
+            assert!((0..=30_000).contains(&s), "{s}");
+            assert_ne!(s, 7, "a click always changes the seed");
+            seen.insert(s);
+        }
+        assert!(seen.len() > 100, "seeds spread out: {}", seen.len());
+        assert_ne!(random_seed(1, 30_000), 30_000);
+        // Every seed dialog shows the button: Clouds, Add Noise and the like carry a `seed` param.
+        let specs = photocraft_engine::command_specs();
+        assert!(
+            specs
+                .iter()
+                .filter(|c| c.id.starts_with("filter."))
+                .any(|c| parse_spec(c.params).iter().any(|p| p.key == "seed" && matches!(p.kind, Kind::Int { .. })))
+        );
+    }
 
     /// Preset names such as "iPhone 14 Pro Max" (the artboard dialog's choices) are text, not
     /// camelCase keys: they used to read "I Phone 14  Pro  Max".
@@ -1920,8 +1956,12 @@ mod tests {
         assert_eq!(sm.smart_filters.len(), 1, "the preview adds the Curves smart filter");
         assert_eq!(shown.size, crate::proxy::proxy_document(&doc, k).size);
         // The 16 px square at (16, 16) is a 4 px square at (4, 4) on the proxy, not 16 px at (16, 16).
-        for (x, y) in [(4, 4), (5, 6), (7, 7)] {
+        // Its corners are partly covered by the smart object's resampling (220/255), its inside fully.
+        for (x, y) in [(5, 5), (5, 6), (6, 6)] {
             assert!(alpha(&shown, x, y) > 0.99, "({x}, {y}) is inside the reduced square");
+        }
+        for (x, y) in [(4, 4), (7, 7)] {
+            assert!(alpha(&shown, x, y) > 0.5, "({x}, {y}) is a corner of the reduced square");
         }
         for (x, y) in [(2, 2), (9, 9), (12, 12), (15, 15)] {
             assert!(alpha(&shown, x, y) < 0.01, "({x}, {y}) is outside the reduced square");

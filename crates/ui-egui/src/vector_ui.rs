@@ -104,6 +104,19 @@ fn shape_geometry(o: &ToolOptions, tool: Tool, start: [f64; 2], end: [f64; 2], m
     })
 }
 
+/// The box `[x0, y0, x1, y1]` a Shape-tool drag draws (a line's: its ends'), which snaps while
+/// Space repositions it (`snap_ui`). None when too small to draw.
+pub fn shape_bounds(o: &ToolOptions, tool: Tool, start: [f64; 2], end: [f64; 2], mods: egui::Modifiers) -> Option<[f64; 4]> {
+    let g = shape_geometry(o, tool, start, end, mods)?;
+    if tool == Tool::Line {
+        let a: [f64; 2] = serde_json::from_value(g["from"].clone()).ok()?;
+        let b: [f64; 2] = serde_json::from_value(g["to"].clone()).ok()?;
+        return Some([a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])]);
+    }
+    let [x, y, w, h]: [f64; 4] = serde_json::from_value(g["rect"].clone()).ok()?;
+    Some([x, y, x + w, y + h])
+}
+
 /// Finish a Shape-tool drag: ⇧ constrains proportions, ⌥ draws from the centre.
 pub fn finish_shape(app: &mut PhotocraftApp, tool: Tool, start: [f64; 2], end: [f64; 2], mods: egui::Modifiers) {
     let Some(mut p) = shape_geometry(&app.ui.tool_options, tool, start, end, mods) else { return };
@@ -725,6 +738,19 @@ pub(crate) fn active_shape_path(app: &PhotocraftApp) -> Option<(u64, Path)> {
     }
 }
 
+/// Does ⌫ / Delete delete the work path? With the Pen, Freeform Pen or Path Selection tool, no
+/// path being drawn and the work path the one these tools show and edit (no shape layer or
+/// targeted vector mask in front of it), as in Photoshop (#5702). It was drawn whenever one of
+/// these tools was active, but the key reached Edit › Clear, so it looked impossible to delete.
+/// Direct Selection and the Curvature Pen delete selected anchors in Photoshop, not the path.
+pub(crate) fn delete_key_deletes_work_path(app: &PhotocraftApp) -> bool {
+    matches!(app.ui.tool, Tool::Pen | Tool::FreeformPen | Tool::PathSelection)
+        && app.ui.pen.is_none()
+        && app.ui.transform.is_none()
+        && app.ui.view.shows(app.ui.view.show.target_path)
+        && matches!(target_path(app), Some((PathTarget::Work, _)))
+}
+
 /// The path Path Selection edits: the targeted vector mask, the active shape layer's path, else
 /// the work path.
 fn target_path(app: &PhotocraftApp) -> Option<(PathTarget, Path)> {
@@ -990,8 +1016,6 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
         if let Some((_, p)) = targeted_vector_mask(app) {
             draw_path(&p, tool == Tool::PathSelection);
         }
-        // The segment the Pen's Auto Add/Delete would add an anchor to, or the anchor it would delete.
-        crate::anchor_tools::draw_pen_hover(app, painter, &to_scr, accent, painter.ctx().input(|i| i.modifiers));
         crate::corner_radius::draw(app, painter, &to_scr, accent);
     }
     // Pen path in progress, with handles of the last knot and a rubber band to the pointer. While
@@ -1012,9 +1036,12 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
             pts.extend(curve_points(w[0][0], w[0][2], w[1][1], w[1][0], &to_scr));
         }
         painter.add(egui::Shape::line(pts, Stroke::new(1.5, accent)));
+        // No rubber band where a click adds or deletes an anchor of this path instead (#6140).
+        let auto = app.hover_doc.is_some_and(|h| crate::anchor_tools::pen_auto(app, tool, painter.ctx().input(|i| i.modifiers), h).is_some());
         if let (Some(last), Some(h)) = (pen.knots.last(), app.hover_doc)
             && !pen.dragging
             && pen.moving.is_none()
+            && !auto
         {
             if pen.curvature && pen.knots.len() >= 2 {
                 // The Curvature Pen previews the curve the next click makes through the pointer.
@@ -1052,6 +1079,11 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
             painter.rect_filled(Rect::from_center_size(c, vec2(8.0, 8.0)), 0.0, accent);
             painter.circle_stroke(c + vec2(11.0, 11.0), 3.5, Stroke::new(1.5, accent));
         }
+    }
+    // The segment the Pen's Auto Add/Delete would add an anchor to, or the anchor it would delete,
+    // over the path being drawn. While drawing, the other paths can be hidden: it edits none of them.
+    if paths || app.ui.pen.is_some() {
+        crate::anchor_tools::draw_pen_hover(app, painter, &to_scr, accent, painter.ctx().input(|i| i.modifiers));
     }
 }
 

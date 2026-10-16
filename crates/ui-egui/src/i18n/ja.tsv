@@ -3851,6 +3851,31 @@ curves	Smooth	スムーズ
 # View › Guides › right-click a guide
 	Edit Selected Guides	選択したガイドを編集
 	Clear Selected Guides	選択したガイドを消去
+	Delete this set	このセットを削除
+	New Set…	新規セット…
+	PhotoCraft Defaults	PhotoCraft 初期設定
+	Save a list of these shortcuts as a web page	これらのショートカットの一覧を Web ページとして保存
+	Save the changes to this set	このセットへの変更を保存
+	Save these shortcuts as a .kys file	これらのショートカットを .kys ファイルとして保存
+	Save these shortcuts as a new set	これらのショートカットを新規セットとして保存
+	Set deleted.	セットを削除しました。
+	Set saved.	セットを保存しました。
+	Set:	セット：
+	Summarize…	概要…
+	There are too many sets: delete one first.	セットが多すぎます。先に 1 つ削除してください。
+	set name	セット名
+	{set} (modified)	{set}（変更あり）
+	Accept and Go to Conflict	適用して競合へ移動
+	Changes undone.	変更を取り消しました。
+	Choose a new shortcut for this command, or leave it without one.	このコマンドに新しいショートカットを選択するか、なしのままにしてください。
+	Put this command's shortcuts back as they were	このコマンドのショートカットを元に戻す
+	Take the shortcut from the other command and select it	もう一方のコマンドからショートカットを外して選択
+	Undo Changes	変更を取り消し
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} はシステムで予約されているため割り当てられません。
+	Low-Latency Drawing (vsync off, applies at next launch)	低遅延描画（垂直同期オフ、次回起動時に適用）
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	自由変形を適用中です。完了してからもう一度お試しください。
+	The transform couldn't be applied.	変形を適用できませんでした。
 
 # Native-panel extensions
 	Manage Extensions…	拡張機能を管理…

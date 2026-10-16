@@ -52,6 +52,7 @@ pub(crate) fn cancel_stale(app: &mut PhotocraftApp) {
         cancel_drag(app);
         if lost_layer {
             app.ui.text_edit = None;
+            app.ui.text_edit_return_tool = None;
         }
     }
 }

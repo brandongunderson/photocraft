@@ -477,6 +477,19 @@ pub fn handle(app: &mut PhotocraftApp, ctx: &egui::Context) {
         crate::vector_ui::pen_commit(app, false);
         return;
     }
+    // A finished work path shown by the Pen or Path Selection: ⌫/Delete deletes it, as in
+    // Photoshop (#5702), never Edit › Clear on the pixels under it.
+    if focus != Focus::DeletingWidget && crate::vector_ui::delete_key_deletes_work_path(app) {
+        let mods = ctx.input(|i| i.modifiers);
+        if !mods.command && !mods.ctrl && !mods.shift && !mods.alt && ctx.input_mut(|i| i.consume_key(mods, Key::Backspace) || i.consume_key(mods, Key::Delete))
+        {
+            if let Err(e) = app.run("path.delete", json!({"name": "work"})) {
+                app.ui.status = e;
+                app.ui.status_error = true;
+            }
+            return;
+        }
+    }
     // Magnetic Lasso: ↩ closes, Esc cancels, ⌫ removes a fastening point (not Edit › Clear),
     // [ ] change the detection width (not the brush size).
     if crate::magnetic_lasso_ui::keys(app, ctx) {

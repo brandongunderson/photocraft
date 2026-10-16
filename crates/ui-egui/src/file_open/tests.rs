@@ -653,6 +653,29 @@ fn a_drop_slot_counts_documents_not_the_tabs_shown() {
     assert_eq!(crate::canvas::TabStrip { rect: strip.rect, tabs: vec![] }.slot(10.0), 0);
 }
 
+/// #5687: files dropped from another app's window bring PhotoCraft to the front (a focus request
+/// in the frame that takes the drop), so the source window ends up behind it.
+#[test]
+fn a_drop_brings_the_window_to_the_front() {
+    let dir = std::env::temp_dir().join(format!("photocraft-drop-focus-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("photo.png");
+    std::fs::write(&file, png_bytes(8, 8)).unwrap();
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).with_max_steps(8).build_eframe(|cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        PhotocraftApp::new(photocraft_engine::Session::new(), Services::default())
+    });
+    h.run_steps(2);
+    let focus = |h: &egui_kittest::Harness<'_, PhotocraftApp>| {
+        h.output().viewport_output.get(&egui::ViewportId::ROOT).is_some_and(|v| v.commands.contains(&egui::ViewportCommand::Focus))
+    };
+    assert!(!focus(&h), "no focus request without a drop");
+    h.input_mut().dropped_files.push(dropped(file, Err("read from the path".into())));
+    h.step();
+    assert!(focus(&h), "the drop brings the window forward");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The whole app (eframe harness, real layout): over the tab strip, the pointer read from the OS
 /// service picks a slot; files dropped there open (in the background) at it; dropped on the canvas they're placed in Free Transform, and Esc takes the place back.
 #[test]

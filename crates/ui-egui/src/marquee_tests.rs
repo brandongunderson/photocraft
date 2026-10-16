@@ -546,6 +546,15 @@ fn mouse_drag_inside_the_selection_moves_it() {
     assert_eq!(selection(&h), Rect::new(120, 90, 220, 170), "moved by (20, 10)");
 }
 
+/// #5646: the Move tool keeps Photoshop's arrow pointer instead of the 4-way move cursor (the
+/// hover outline still marks the layer under the pointer).
+#[test]
+fn the_move_tool_keeps_the_arrow_pointer() {
+    let mut h = harness(Tool::Move);
+    move_to(&mut h, 200.0, 150.0);
+    assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::Default);
+}
+
 /// #1428: hovering inside the ants with a marquee shows the move cursor (a press there drags the
 /// outline); outside it is the marquee's own cursor.
 #[test]

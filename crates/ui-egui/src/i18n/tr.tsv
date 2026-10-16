@@ -3905,6 +3905,31 @@ cameraData	Lens	Lens
 # View › Guides › right-click a guide
 	Edit Selected Guides	Seçili Kılavuzları Düzenle
 	Clear Selected Guides	Seçili Kılavuzları Temizle
+	Delete this set	Bu Kümeyi Sil
+	New Set…	Yeni Küme…
+	PhotoCraft Defaults	PhotoCraft Varsayılanları
+	Save a list of these shortcuts as a web page	Bu kısayolların listesini web sayfası olarak kaydet
+	Save the changes to this set	Bu kümedeki değişiklikleri kaydet
+	Save these shortcuts as a .kys file	Bu kısayolları .kys dosyası olarak kaydet
+	Save these shortcuts as a new set	Bu kısayolları yeni bir küme olarak kaydet
+	Set deleted.	Küme silindi.
+	Set saved.	Küme kaydedildi.
+	Set:	Küme:
+	Summarize…	Özetle…
+	There are too many sets: delete one first.	Çok fazla küme var: önce birini silin.
+	set name	küme adı
+	{set} (modified)	{set} (değiştirildi)
+	Accept and Go to Conflict	Kabul Et ve Çakışmaya Git
+	Changes undone.	Değişiklikler geri alındı.
+	Choose a new shortcut for this command, or leave it without one.	Bu komut için yeni bir kısayol seçin veya kısayolsuz bırakın.
+	Put this command's shortcuts back as they were	Bu komutun kısayollarını eski haline getir
+	Take the shortcut from the other command and select it	Kısayolu diğer komuttan al ve o komutu seç
+	Undo Changes	Değişiklikleri Geri Al
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} sistem tarafından ayrılmıştır ve atanamaz.
+	Low-Latency Drawing (vsync off, applies at next launch)	Düşük gecikmeli çizim (dikey eşitleme kapalı, sonraki açılışta geçerli)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Serbest Dönüştürme hâlâ uygulanıyor; bittiğinde yeniden deneyin.
+	The transform couldn't be applied.	Dönüştürme uygulanamadı.
 
 # Native-panel extensions
 	Manage Extensions…	Uzantıları yönet…

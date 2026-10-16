@@ -945,6 +945,9 @@ pub struct GpuInfo {
     pub canvas: String,
     /// Why the GPU canvas was dropped during this session (device lost or a GPU error).
     pub lost: Option<String>,
+    /// Present mode and frame latency ("fifo, latency 2"; launch overrides marked, see the
+    /// app's `presentation`). Empty in hosts that don't set it.
+    pub present: String,
 }
 
 impl GpuInfo {

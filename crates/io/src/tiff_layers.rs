@@ -93,6 +93,7 @@ pub(crate) fn import_layered(name: &str, img: &Image, layers: &[u8]) -> Result<I
         ChannelLayout::Gray | ChannelLayout::GrayA => (PsdMode::Grayscale, 1),
         ChannelLayout::Rgb | ChannelLayout::Rgba => (PsdMode::Rgb, 3),
         ChannelLayout::Cmyk | ChannelLayout::CmykA => (PsdMode::Cmyk, 4),
+        ChannelLayout::Lab | ChannelLayout::LabA => (PsdMode::Lab, 3),
     };
     let depth = match img.sample_type() {
         CSample::U8 => 8,

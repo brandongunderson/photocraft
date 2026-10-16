@@ -265,7 +265,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         vec![(ButtonRole::Default, "Yes", Some(Key::Y), 84.0, Answer::Save), (ButtonRole::Alternate, "No", Some(Key::N), 84.0, Answer::Discard), cancel]
     };
     let mut answer = ctx.input_mut(|i| buttons.iter().find(|b| b.2.is_some_and(|k| i.consume_key(egui::Modifiers::NONE, k))).map(|b| b.4));
-    let labels: Vec<String> = buttons.iter().map(|b| button_label(mac, b.1, b.2)).collect();
+    let labels = button_labels(mac, &buttons.iter().map(|b| (b.1, b.2)).collect::<Vec<_>>());
     let row: Vec<DialogButton> = buttons.iter().zip(&labels).map(|(b, label)| DialogButton::new(b.0, label, b.3)).collect();
     let modal = egui::Modal::new(egui::Id::new("discard-prompt")).show(ctx, |ui| {
         ui.set_max_width(420.0);
@@ -361,17 +361,30 @@ enum Answer {
 }
 
 /// macOS keeps the plain button wording even though the keyboard shortcuts still work.
+#[cfg(test)]
 fn button_label(mac: bool, label: &str, key: Option<Key>) -> String {
-    if mac { tl!(label).to_string() } else { key.map_or_else(|| tl!(label).to_string(), |k| mnemonic(label, k)) }
+    button_labels(mac, &[(label, key)]).into_iter().next().unwrap_or_default()
 }
 
-/// "(S)ave": the key in parentheses, or appended ("Guardar (S)") when the translation doesn't start with it.
-fn mnemonic(label: &str, key: Key) -> String {
-    let (label, k) = (tl!(label), key.name());
-    match label.split_at_checked(1) {
-        Some((first, rest)) if first.eq_ignore_ascii_case(k) => format!("({first}){rest}"),
-        _ => format!("{label} ({k})"),
-    }
+/// The labels of one dialog's buttons, each with its key in the same style: "(Y)es" when every
+/// translation starts with its key, otherwise appended to all ("Ja (Y)", "Nein (N)") (#5564).
+fn button_labels(mac: bool, buttons: &[(&str, Option<Key>)]) -> Vec<String> {
+    let starts_with_key = |label: &str, k: Key| label.split_at_checked(1).is_some_and(|(first, _)| first.eq_ignore_ascii_case(k.name()));
+    let inline = buttons.iter().all(|&(label, key)| key.is_none_or(|k| starts_with_key(tl!(label), k)));
+    buttons
+        .iter()
+        .map(|&(label, key)| {
+            let text = tl!(label);
+            match key {
+                None => text.to_string(),
+                Some(_) if mac => text.to_string(),
+                Some(k) => match text.split_at_checked(1) {
+                    Some((first, rest)) if inline => format!("({first}){rest}"),
+                    _ => format!("{text} ({})", k.name()),
+                },
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -529,9 +542,9 @@ mod tests {
 
     #[test]
     fn mnemonic_labels_bracket_the_key() {
-        assert_eq!(mnemonic("Don't Save", Key::D), "(D)on't Save");
-        assert_eq!(mnemonic("Guardar", Key::S), "Guardar (S)");
-        assert_eq!(mnemonic("保存", Key::S), "保存 (S)");
+        assert_eq!(button_label(false, "Don't Save", Some(Key::D)), "(D)on't Save");
+        assert_eq!(button_label(false, "Guardar", Some(Key::S)), "Guardar (S)");
+        assert_eq!(button_label(false, "保存", Some(Key::S)), "保存 (S)");
     }
 
     type Prompted = egui_kittest::Harness<'static, PhotocraftApp>;
@@ -666,6 +679,19 @@ mod tests {
         assert_eq!(button_label(true, "Cancel", Some(Key::C)), tl!("Cancel"));
         assert_eq!(button_label(false, "Don't Save", Some(Key::D)), "(D)on't Save");
         assert_eq!(button_label(false, "Cancel", Some(Key::C)), "(C)ancel");
+    }
+
+    /// German "Ja" doesn't start with Y, so every button appends its key rather than mixing
+    /// "Ja (Y)" with "(N)ein" (#5564).
+    #[test]
+    fn one_dialog_shows_every_key_in_the_same_style() {
+        let buttons = [("Yes", Some(Key::Y)), ("No", Some(Key::N)), ("Cancel", Some(Key::C))];
+        assert_eq!(button_labels(false, &buttons), ["(Y)es", "(N)o", "(C)ancel"]);
+        let german = crate::i18n::Lang::from_code("de").unwrap();
+        crate::i18n::with_language(german, || {
+            assert_eq!(button_labels(false, &buttons), ["Ja (Y)", "Nein (N)", "Abbrechen (C)"]);
+            assert_eq!(button_labels(true, &buttons), ["Ja", "Nein", "Abbrechen"]);
+        });
     }
 
     #[test]

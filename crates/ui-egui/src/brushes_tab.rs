@@ -885,6 +885,15 @@ pub fn preset_list(ui: &mut egui::Ui, presets: &[BrushPreset], current: Option<&
     let show = (st.show_name, st.show_stroke, st.show_tip);
     let collapsed = &st.collapsed;
     egui::ScrollArea::vertical().id_salt(layout.id).max_height(layout.max_height).auto_shrink([false, true]).show(ui, |ui| {
+        // A preset, group or folder dragged to the list's top or bottom edge (or past it) scrolls
+        // the list, as the Layers panel's rows do, so it can be dropped on rows out of view (#5741).
+        let dragging = egui::DragAndDrop::has_payload_of_type::<BrushDrag>(ui.ctx()) && ui.input(|i| i.pointer.primary_down());
+        let pointer = ui.ctx().pointer_interact_pos();
+        let delta = crate::panels::layer_drag_edge_scroll(pointer, ui.clip_rect(), dragging, ui.input(|i| i.stable_dt));
+        if delta != 0.0 {
+            ui.scroll_with_delta(vec2(0.0, delta));
+            ui.ctx().request_repaint();
+        }
         ui.spacing_mut().item_spacing.y = 1.0;
         for (label, items) in grouped_presets(presets) {
             let items: Vec<&BrushPreset> =

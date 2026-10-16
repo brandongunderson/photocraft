@@ -1,6 +1,6 @@
 # Where PhotoCraft falls short of Photoshop
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (AI plugins migrated to the generic API; dedicated core model and algorithm adapters removed; native-panel extension API v1, self-contained desktop packages, Background Removal and AI Upscale comparison previews added; G1: CMYK Hue/Saturation and Color Balance keep the black ink; G1: CMYK Posterize on the stored values, psd-tools oracle floor 242/309; G1: CMYK adjustment layers composite on the document's inks, Photoshop-oracle floor 165/258; G1: CMYK Brightness/Contrast on the inks, CMYK Threshold's luma; G1: modern Brightness/Contrast's brightness curve matches Photoshop, Photoshop-oracle floor 151/258; G1: Lab documents composite on their stored L, a, b, Photoshop-oracle floor 152/258; G1: Levels on whole levels at every step, Photoshop-oracle floor 146/258, psd-tools 238/309; G1: 32-bit Brightness/Contrast legacy, Channel Mixer, Photo Filter and Black & White tint unclipped as in Photoshop, Photoshop-oracle floor 149/258; G1: mask feathers blur with their exact variance, psd-tools oracle floor 240/309; G1: Threshold splits on Photoshop's luminosity, psd-tools oracle floor 241/309; G1: pass-through clipping base with an adjustment renders isolated, psd-tools oracle floor 240/309; G1: 16-bit Posterize as Photoshop bins it, psd-tools oracle floor 241/309; G1: Gradient Map driven by the W3C luminosity, Photoshop-oracle floor 147/258; G7: Field Blur's on-canvas pins, #3373; G4: Hue Jitter amount track, #3825 partial; G4: minimum field interaction, #3825 partial; G1: CMYK Invert, Posterize and Threshold on the inks, 16-bit Lab Invert; Photoshop-oracle floor 145/258; G11: `.atn` import maps 112 events: Select and Mask, Filter Gallery Spatter, Ripple, Crystallize, Pattern Fill layers, mask targeting, Step Backward, nudges in points, Bitmap mode; G5: Free Transform H/V skew fields; G9: toolbar tool shortcut editing; refreshed against main: G2, G5, G7, G9, G10, G13, G14, G17 items that landed; G10: DPX read and write, #1049; G4: checkbox-only Brush Settings rows; G11: Load/Save Actions `.atn` landed, AUTO-219-2 partial; G5: hold-a-key spring-loaded tools landed, #2672; G1: #2465 fixed; stale missing-tool rows corrected: Color Replacement, Red Eye and Add/Delete Anchor Point are live tools, so only Art History Brush is missing; no estimate changed) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (G1: smart filter masks show on PSD open, Photoshop-oracle floor 188/258; G10: DPX read and write, #1049, Cineon read; AI plugins migrated to the generic API; dedicated core model and algorithm adapters removed; native-panel extension API v1, self-contained desktop packages, Background Removal and AI Upscale comparison previews added; G1: CMYK Hue/Saturation and Color Balance keep the black ink; G1: CMYK Posterize on the stored values, psd-tools oracle floor 242/309; G1: CMYK adjustment layers composite on the document's inks, Photoshop-oracle floor 165/258; G1: CMYK Brightness/Contrast on the inks, CMYK Threshold's luma; G1: modern Brightness/Contrast's brightness curve matches Photoshop, Photoshop-oracle floor 151/258; G1: Lab documents composite on their stored L, a, b, Photoshop-oracle floor 152/258; G1: Levels on whole levels at every step, Photoshop-oracle floor 146/258, psd-tools 238/309; G1: 32-bit Brightness/Contrast legacy, Channel Mixer, Photo Filter and Black & White tint unclipped as in Photoshop, Photoshop-oracle floor 149/258; G1: mask feathers blur with their exact variance, psd-tools oracle floor 240/309; G1: Threshold splits on Photoshop's luminosity, psd-tools oracle floor 241/309; G1: pass-through clipping base with an adjustment renders isolated, psd-tools oracle floor 240/309; G1: 16-bit Posterize as Photoshop bins it, psd-tools oracle floor 241/309; G1: Gradient Map driven by the W3C luminosity, Photoshop-oracle floor 147/258; G7: Field Blur's on-canvas pins, #3373; G4: Hue Jitter amount track, #3825 partial; G4: minimum field interaction, #3825 partial; G1: CMYK Invert, Posterize and Threshold on the inks, 16-bit Lab Invert; Photoshop-oracle floor 145/258; G11: `.atn` import maps 112 events: Select and Mask, Filter Gallery Spatter, Ripple, Crystallize, Pattern Fill layers, mask targeting, Step Backward, nudges in points, Bitmap mode; G5: Free Transform H/V skew fields; G9: toolbar tool shortcut editing; refreshed against main: G2, G5, G7, G9, G10, G13, G14, G17 items that landed; G10: DPX read and write, #1049; G4: checkbox-only Brush Settings rows; G11: Load/Save Actions `.atn` landed, AUTO-219-2 partial; G5: hold-a-key spring-loaded tools landed, #2672; G1: #2465 fixed; stale missing-tool rows corrected: Color Replacement, Red Eye and Add/Delete Anchor Point are live tools, so only Art History Brush is missing; no estimate changed) · **Target:** Adobe Photoshop 2026
 
 Every known shortfall against Photoshop 2026 (27.11.0), one entry each, ranked by user impact
 on the way to beta. This is the work list agents pick from: take the highest-ranked entry that
@@ -43,7 +43,7 @@ what an agent can't finish alone.
 - **Missing:** PSDs we write are not always accepted by Photoshop, and Photoshop-authored files
   don't always render as Photoshop renders them.
 - **Evidence:** corpus floors (`crates/io/tests/corpus.rs`, scorecard): Photoshop-authored
-  oracles 185/258 (72%; CMYK and Lab adjustment layers, 32-bit unclipped adjustments, Levels, Threshold, Posterize and mask feathers 2026-10-13; Gradient Map luminosity 2026-10-13; CMYK Invert, Posterize and Threshold on the inks 2026-10-12), io corpus 148/170 (87%), psd-tools 249/309 (81%); round trips ~100%
+  oracles 188/258 (73%; smart filter masks 2026-10-14; CMYK and Lab adjustment layers, 32-bit unclipped adjustments, Levels, Threshold, Posterize and mask feathers 2026-10-13; Gradient Map luminosity 2026-10-13; CMYK Invert, Posterize and Threshold on the inks 2026-10-12), io corpus 148/170 (87%), psd-tools 249/309 (81%); round trips ~100%
   within the corpus. Smart-filter re-render matches 5/30. User reports: a PSD with text layers
   re-saved unmodified would not reopen (#2374, closed 2026-10-10), Photoshop 26.6 cannot reopen our files (#1281), "PSD not
   opening in Photoshop" (#2469), a CS2-era smart object unavailable (#2465, fixed 2026-10-12), PSB smart object
@@ -129,6 +129,10 @@ what an agent can't finish alone.
   tuning retains the fitted look and applies user gains afterwards. Three D5100 NEFs
   establish a guarded 4928 × 3264 image area. This is an estimated rendering, not a
   measured D5100 colour calibration; [validation](nikon-nef-development.md).
+- **Progress (2026-10-13):** the D90's image area (4288 × 2848 at (10, 10) in a
+  4352 × 2868 plane) is measured by aligning the decoded plane with the camera's own
+  JPEG, so a D90 NEF opens on the camera's frame instead of the uncropped sensor plane;
+  `crates/raw/src/cameras.rs` (`IMAGE_AREAS`).
 - **Estimate:** 120–200 h.
 
 ### G15. AI and generative features
@@ -226,12 +230,15 @@ what an agent can't finish alone.
 ## File-format gaps
 
 ### G10. Missing and partial file formats
-- **Missing:** JPEG Options dialog (FILE-215-19), Photoshop PDF read and write and multi-page PDF
-  (FILE-215-10, #2541), AVIF read (#463) and default-build AVIF write, JPEG XL, JPEG 2000 (#1047),
-  Cineon (DPX landed, #1049), DICOM, EPS/DCS, PCX, Pixar, IFF, WBMP, MPO/JPS, PICT, Scitex CT, Photoshop
+- **Missing:** JPEG Options dialog (FILE-215-19), Photoshop PDF read and its vector/text/multi-page
+  write (FILE-215-10, #2541; a single flattened page now saves via Save As / Save a Copy / CLI,
+  2026-10-11, #3401), AVIF read (#463) and default-build AVIF write, JPEG XL, JPEG 2000 (#1047),
+  Cineon write (read landed), DICOM, EPS/DCS, Pixar, IFF, WBMP, MPO/JPS, PICT, Scitex CT, Photoshop
   Raw; layered TIFF extra alpha channels (FILE-215-7); spot plates (FILE-215-17); .atn, .asl,
   .shc, .csh presets (FILE-215-15); C2PA (#1050).
 - **Detail:** [`file-format-parity.md`](file-format-parity.md).
+- **Progress (2026-10-13):** Cineon (`.cin`) 10-bit gray/RGB frames open read-only, sharing the
+  DPX header/unpacking (`crates/codecs/src/codecs/dpx.rs`); writing is still open.
 - **Estimate:** 120–220 h.
 
 ## Hardware gaps
@@ -277,6 +284,8 @@ what an agent can't finish alone.
 | 2026-10-15 | minor | Migrated both AI plugins to the general API; removed typed host adapters and fixed model/runtime registries; plugin dependencies remain package-owned; estimates unchanged |
 | 2026-10-15 | minor | Self-contained Windows x64 plugin packages: bundled AI engine/models, managed install/update/remove, native-code review, integrity validation and recovery; estimates unchanged |
 | 2026-10-14 | minor | Native-panel extension API v1: installation, bounded WASM events, explicit editing grants and a Rust starter; Photoshop compatibility and broader host APIs remain open; estimates unchanged |
+| 2026-10-14 | minor | G1: a PSD smart object's filter mask shows when the file opens (Photoshop stores the filtered pixels unmasked); export stores them that way too; Photoshop-oracle floor 185 → 188 of 258 |
+| 2026-10-13 | minor | G14: D90 image area measured (4288 × 2848 at (10, 10)); gap remains open |
 | 2026-10-14 | minor | Corpus floors raised to the measured results of the CMYK, Lab, 32-bit, Levels, Threshold, Posterize, feather and pass-through fixes landed together: Photoshop-authored 165 → 185 of 258, io 146 → 148 of 170, psd-tools 242 → 249 of 309 |
 | 2026-10-13 | minor | G1: CMYK Hue/Saturation and Color Balance work on C, M and Y as inverted RGB with black kept, as Photoshop does; cmyk hue-saturation 100% → 0.4–0.7% bad pixels, color-balance 74% → 25%; floor unchanged |
 | 2026-10-13 | minor | G1: CMYK Posterize works on the stored values (1 − ink); psd-tools posterize_cmyk passes; psd-tools floor → 242 of 309 |
@@ -301,6 +310,7 @@ what an agent can't finish alone.
 | 2026-10-12 | minor | G1: #2465 (CS2 `PlLd`-only smart objects) marked fixed |
 | 2026-10-12 | minor | G1: CMYK Invert, Posterize and Threshold work on the inks, 16-bit Lab Invert keeps greys neutral; Photoshop-oracle floor 133 → 145 of 258 (145 already passed on main) |
 | 2026-10-12 | minor | G5: spring-loaded tool letters done (#2672) |
+| 2026-10-13 | minor | G10: Cineon read landed (10-bit gray/RGB, shares the DPX path); Cineon write remains open |
 | 2026-10-12 | minor | G10: DPX read and write (#1049); Cineon remains open |
 | 2026-10-12 | minor | G4: checkbox-only Brush Settings rows preserve the open controls and Smoothing settings (#4283); no readiness percentage or estimate changed |
 | 2026-10-12 | minor | G11: Load/Save Actions `.atn` landed (AUTO-219-2 partial); remaining panel work listed |
@@ -312,6 +322,7 @@ what an agent can't finish alone.
 | 2026-10-11 | minor | G13: Czech dynamic UI text localized; engine messages and native review remain open |
 | 2026-10-11 | minor | G8: triple/quadruple/five-click type selection done (TYPE-218-8, #3493); Type evidence recounted |
 | 2026-10-11 | minor | G8: Character panel OpenType buttons landed (TYPE-218-5, #3752); Numerals and Stylistic Sets submenus still missing |
+| 2026-10-11 | minor | G10: one-page flattened PDF write shipped (io::pdf, #3401); FILE-215-10 now partial |
 | 2026-10-10 | minor | G2: recorded Tilt-Shift computation/filtered-proxy measurements and limits; gap and estimate remain open |
 | 2026-10-10 | minor | Checked against the alpha gate (no alpha blockers); #2374 marked closed |
 | 2026-10-10 | major | First version, from the full re-measure against Photoshop 2026 27.11.0 and the open issues |

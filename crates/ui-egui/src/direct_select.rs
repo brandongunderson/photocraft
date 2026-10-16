@@ -94,6 +94,11 @@ pub enum Edit {
 }
 
 impl Edit {
+    /// The drag's end with ⇧ held: moving anchors locks to multiples of 45°, as in Photoshop (#5475).
+    fn constrain(&self, start: [f64; 2], p: [f64; 2], shift: bool) -> [f64; 2] {
+        if shift && matches!(self, Edit::Anchors(_)) { crate::stroke_constraint::snap45(start, p) } else { p }
+    }
+
     /// The edit for a drag from `start` to `end`, as a command and its params (without target).
     fn command(&self, start: [f64; 2], end: [f64; 2]) -> (&'static str, Value) {
         let d = [end[0] - start[0], end[1] - start[1]];
@@ -238,7 +243,7 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: Modifiers) -> bool 
             let ds = &mut app.ui.direct_selection;
             match &mut ds.drag {
                 Some(Drag::Edit { base, edit, start, end, preview, .. }) => {
-                    *end = [x, y];
+                    *end = edit.constrain(*start, [x, y], mods.shift);
                     *preview = edit.preview(base, *start, *end);
                 }
                 Some(Drag::Marquee { end, .. }) => *end = [x, y],
@@ -248,7 +253,8 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: Modifiers) -> bool 
         }
         ToolEvent::Up { x, y } => match app.ui.direct_selection.drag.take() {
             Some(Drag::Edit { target, base, edit, start, .. }) => {
-                release(app, target, &base, &edit, start, [x, y]);
+                let end = edit.constrain(start, [x, y], mods.shift);
+                release(app, target, &base, &edit, start, end);
                 app.ui.direct_selection.coalesce = None;
                 true
             }

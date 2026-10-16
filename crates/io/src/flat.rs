@@ -206,6 +206,7 @@ pub(crate) fn image_to_document(name: &str, img: &Image) -> Result<ImportResult,
         ChannelLayout::Gray | ChannelLayout::GrayA => (ColorMode::Grayscale, ChannelLayout::GrayA),
         ChannelLayout::Rgb | ChannelLayout::Rgba => (ColorMode::Rgb, ChannelLayout::Rgba),
         ChannelLayout::Cmyk | ChannelLayout::CmykA => (ColorMode::Cmyk, ChannelLayout::CmykA),
+        ChannelLayout::Lab | ChannelLayout::LabA => (ColorMode::Lab, ChannelLayout::LabA),
     };
     let (depth, csample) = match img.sample_type() {
         CSample::U8 => (SampleType::U8, CSample::U8),
@@ -249,6 +250,7 @@ pub(crate) fn image_surface(img: &Image, target_layout: ChannelLayout, csample: 
     let mode = match target_layout {
         ChannelLayout::Gray | ChannelLayout::GrayA => ColorMode::Grayscale,
         ChannelLayout::Cmyk | ChannelLayout::CmykA => ColorMode::Cmyk,
+        ChannelLayout::Lab | ChannelLayout::LabA => ColorMode::Lab,
         _ => ColorMode::Rgb,
     };
     let depth = match csample {
@@ -301,6 +303,8 @@ pub(crate) fn layout_for(mode: ColorMode, alpha: bool) -> ChannelLayout {
         (ColorMode::Grayscale, true) => ChannelLayout::GrayA,
         (ColorMode::Cmyk, false) => ChannelLayout::Cmyk,
         (ColorMode::Cmyk, true) => ChannelLayout::CmykA,
+        (ColorMode::Lab, false) => ChannelLayout::Lab,
+        (ColorMode::Lab, true) => ChannelLayout::LabA,
         (_, false) => ChannelLayout::Rgb,
         (_, true) => ChannelLayout::Rgba,
     }
@@ -316,18 +320,19 @@ pub(crate) fn csample(s: SampleType) -> CSample {
 
 /// Renders the document to a flat codec image (native pixels when possible).
 pub fn document_to_image(doc: &Document, warnings: &mut Vec<String>) -> Result<Image, IoError> {
-    document_to_image_for(doc, warnings, true)
+    document_to_image_for(doc, warnings, true, false)
 }
 
-fn document_to_image_for(doc: &Document, warnings: &mut Vec<String>, cmyk_target: bool) -> Result<Image, IoError> {
+/// `cmyk_target` / `lab_target`: the format stores CMYK / Lab pixels.
+fn document_to_image_for(doc: &Document, warnings: &mut Vec<String>, cmyk_target: bool, lab_target: bool) -> Result<Image, IoError> {
     let (w, h) = (doc.size.width, doc.size.height);
     let canvas = doc.bounds();
     let fmt = doc.pixel_format();
     let n = (w as usize) * (h as usize);
-    // Lab has no flat-format layout here: Lab documents always go through the composite, which
-    // flattens nothing when there is a single plain layer.
+    // A Lab document keeps its pixels only for a format that stores Lab (TIFF); for the others it
+    // goes through the sRGB composite, which flattens nothing when there is a single plain layer.
     let single = single_layer(doc);
-    let native = single.filter(|_| fmt.mode != ColorMode::Lab);
+    let native = single.filter(|_| fmt.mode != ColorMode::Lab || lab_target);
     let mut icc = doc.icc_profile.as_ref().map(|i| i.to_vec());
     let img = if let Some(s) = native {
         // Native path: keep model and depth. The surface's encoded samples are the codec's raw
@@ -526,7 +531,8 @@ pub(crate) fn export_flat_with(doc: &Document, format: Format, opts: &ExportOpti
     }
     let mut warnings = Vec::new();
     let cmyk_target = format.caps().layouts.iter().any(|layout| layout.is_cmyk());
-    let mut img = document_to_image_for(doc, &mut warnings, cmyk_target)?;
+    let lab_target = format.caps().layouts.iter().any(|layout| layout.is_lab());
+    let mut img = document_to_image_for(doc, &mut warnings, cmyk_target, lab_target)?;
     ctl.check().map_err(|_| IoError::Cancelled)?;
     ctl.progress(composite_share(format));
     if opts.xmp == XmpEmbed::None {

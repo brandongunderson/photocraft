@@ -4137,6 +4137,31 @@ navigator	Zoom	Zoom
 # View › Guides › right-click a guide
 	Edit Selected Guides	Editar guías seleccionadas
 	Clear Selected Guides	Borrar guías seleccionadas
+	Delete this set	Eliminar este conjunto
+	New Set…	Nuevo conjunto…
+	PhotoCraft Defaults	Valores por defecto de PhotoCraft
+	Save a list of these shortcuts as a web page	Guardar una lista de estos métodos abreviados como página web
+	Save the changes to this set	Guardar los cambios en este conjunto
+	Save these shortcuts as a .kys file	Guardar estos métodos abreviados como archivo .kys
+	Save these shortcuts as a new set	Guardar estos métodos abreviados como un conjunto nuevo
+	Set deleted.	Conjunto eliminado.
+	Set saved.	Conjunto guardado.
+	Set:	Conjunto:
+	Summarize…	Resumir…
+	There are too many sets: delete one first.	Hay demasiados conjuntos: elimine uno primero.
+	set name	nombre del conjunto
+	{set} (modified)	{set} (modificado)
+	Accept and Go to Conflict	Aceptar e ir al conflicto
+	Changes undone.	Cambios deshechos.
+	Choose a new shortcut for this command, or leave it without one.	Elija un nuevo método abreviado para este comando o déjelo sin ninguno.
+	Put this command's shortcuts back as they were	Restaurar los métodos abreviados de este comando como estaban
+	Take the shortcut from the other command and select it	Quitar el método abreviado al otro comando y seleccionarlo
+	Undo Changes	Deshacer cambios
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} está reservado por el sistema y no se puede asignar.
+	Low-Latency Drawing (vsync off, applies at next launch)	Dibujo de baja latencia (sin sincronización vertical, se aplica al volver a iniciar)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Transformación libre aún se está aplicando; inténtelo de nuevo cuando termine.
+	The transform couldn't be applied.	No se pudo aplicar la transformación.
 
 # Native-panel extensions
 	Manage Extensions…	Administrar extensiones…

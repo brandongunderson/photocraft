@@ -4296,6 +4296,31 @@ shape	Appearance	Aspetto
 # View › Guides › right-click a guide
 	Edit Selected Guides	Modifica guide selezionate
 	Clear Selected Guides	Cancella guide selezionate
+	Delete this set	Elimina questo set
+	New Set…	Nuovo set…
+	PhotoCraft Defaults	Predefiniti di PhotoCraft
+	Save a list of these shortcuts as a web page	Salva un elenco di queste scorciatoie come pagina web
+	Save the changes to this set	Salva le modifiche in questo set
+	Save these shortcuts as a .kys file	Salva queste scorciatoie come file .kys
+	Save these shortcuts as a new set	Salva queste scorciatoie come nuovo set
+	Set deleted.	Set eliminato.
+	Set saved.	Set salvato.
+	Set:	Set:
+	Summarize…	Riepiloga…
+	There are too many sets: delete one first.	Ci sono troppi set: eliminane prima uno.
+	set name	nome del set
+	{set} (modified)	{set} (modificato)
+	Accept and Go to Conflict	Accetta e vai al conflitto
+	Changes undone.	Modifiche annullate.
+	Choose a new shortcut for this command, or leave it without one.	Scegli una nuova scorciatoia per questo comando o lascialo senza.
+	Put this command's shortcuts back as they were	Ripristina le scorciatoie di questo comando com'erano
+	Take the shortcut from the other command and select it	Togli la scorciatoia all'altro comando e selezionalo
+	Undo Changes	Annulla modifiche
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} è riservata dal sistema e non può essere assegnata.
+	Low-Latency Drawing (vsync off, applies at next launch)	Disegno a bassa latenza (senza vsync, si applica al prossimo avvio)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Trasformazione libera è ancora in corso di applicazione; riprova quando è terminata.
+	The transform couldn't be applied.	Impossibile applicare la trasformazione.
 
 # Native-panel extensions
 	Manage Extensions…	Gestisci estensioni…

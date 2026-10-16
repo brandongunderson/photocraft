@@ -3144,6 +3144,32 @@ curves	Smooth	Сгладить
 # View › Guides › right-click a guide
 	Edit Selected Guides	Изменить выбранные направляющие
 	Clear Selected Guides	Удалить выбранные направляющие
+	Delete this set	Удалить этот набор
+	New Set…	Новый набор…
+	PhotoCraft Defaults	Стандартные PhotoCraft
+	Save a list of these shortcuts as a web page	Сохранить список этих комбинаций как веб-страницу
+	Save the changes to this set	Сохранить изменения в этом наборе
+	Save these shortcuts as a .kys file	Сохранить эти комбинации как файл .kys
+	Save these shortcuts as a new set	Сохранить эти комбинации как новый набор
+	Set deleted.	Набор удалён.
+	Set saved.	Набор сохранён.
+	Set:	Набор:
+	Summarize…	Сводка…
+	There are too many sets: delete one first.	Слишком много наборов: сначала удалите один.
+	set name	имя набора
+	{set} (modified)	{set} (изменён)
+	Random	Случайно
+	Accept and Go to Conflict	Принять и перейти к конфликту
+	Changes undone.	Изменения отменены.
+	Choose a new shortcut for this command, or leave it without one.	Выберите новую комбинацию для этой команды или оставьте её без комбинации.
+	Put this command's shortcuts back as they were	Вернуть комбинации этой команды
+	Take the shortcut from the other command and select it	Снять комбинацию с другой команды и выбрать её
+	Undo Changes	Отменить изменения
+	{shortcut} is reserved by the system and can't be assigned.	Комбинация {shortcut} зарезервирована системой и не может быть назначена.
+	Low-Latency Drawing (vsync off, applies at next launch)	Рисование с малой задержкой (без вертикальной синхронизации, после перезапуска)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Свободное трансформирование ещё применяется; повторите попытку, когда оно завершится.
+	The transform couldn't be applied.	Не удалось применить трансформирование.
 
 # Native-panel extensions
 	Manage Extensions…	Управление расширениями…

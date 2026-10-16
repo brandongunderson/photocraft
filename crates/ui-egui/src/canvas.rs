@@ -1676,7 +1676,7 @@ fn gpu_budget(app: &mut PhotocraftApp, gpu: &crate::gpu_canvas::GpuCanvas, idx: 
         return;
     }
     let Some(st) = app.session.documents().get(idx) else { return };
-    let pixels = st.history.pixel_bytes(&st.doc) as u64;
+    let pixels = st.memory_bytes() as u64;
     let budget = crate::gpu_canvas::memory_budget(allowance, pixels, crate::gpu_canvas::physical_memory());
     gpu.set_memory_budget(budget);
     app.perf.gpu_budget_mb = budget >> 20;
@@ -1924,14 +1924,22 @@ fn ensure_adjust_proxy(app: &mut PhotocraftApp, idx: usize, zoom: f32) -> Option
 
 /// If a live adjustment preview is active on a large document, composite it on the proxy and upload
 /// it under its own GPU key. Returns (factor, gpu key, dimensions) when the proxy should be drawn.
-fn ensure_proxy_preview(app: &mut PhotocraftApp, idx: usize) -> Option<(u32, u64, [u32; 2])> {
+/// `zoom` is the view's (physical screen pixels per document pixel).
+fn ensure_proxy_preview(app: &mut PhotocraftApp, idx: usize, zoom: f32) -> Option<(u32, u64, [u32; 2])> {
     let (layer, params) = app.live_adjust.clone()?;
     let (doc_id, revision, doc) = {
         let st = app.session.documents().get(idx)?;
         (st.doc.id, st.revision, st.doc.clone())
     };
     // Low-resolution previews off: k is 1 and the canvas shows `display_doc` (full size).
-    let k = crate::proxy::preview_factor(&doc, crate::proxy::reduced_previews(app));
+    let mut k = crate::proxy::preview_factor(&doc, crate::proxy::reduced_previews(app));
+    // Zoomed in, a proxy coarser than the screen showed the drag in k-pixel blocks (#5764): when
+    // the wgpu compositor draws the full-size document, use a proxy only as coarse as the screen
+    // (none at 50 % and closer). Otherwise the full size would be a CPU composite per change.
+    let fine = crate::proxy::view_factor(k, zoom);
+    if fine < k && app.gpu.as_ref().is_some_and(|g| g.supports(&doc)) {
+        k = fine;
+    }
     if k <= 1 {
         return None;
     }
@@ -2962,7 +2970,7 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
         if app.gpu.is_some()
             && gpu_ok
             && let Some((k, key, preview_size)) =
-                ensure_adjust_proxy(app, idx, view.zoom).or_else(|| ensure_filter_preview(app, idx, &ctx)).or_else(|| ensure_proxy_preview(app, idx))
+                ensure_adjust_proxy(app, idx, view.zoom).or_else(|| ensure_filter_preview(app, idx, &ctx)).or_else(|| ensure_proxy_preview(app, idx, view.zoom))
         {
             on_gpu = true;
             app.navigator_gpu.remove(&doc.id);
@@ -3195,12 +3203,14 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
     let bars_id = egui::Id::new(("pc-canvas-bars-hover", idx));
     let over_bars = ctx.data(|d| d.get_temp::<bool>(bars_id)).unwrap_or(false);
     let nav_hovered = response.hovered() || free_hover || over_bars;
-    let wheel = crate::wheel_nav::read(
+    // Interface › Enable Animations off: the wheel moves the canvas without a glide (#5721).
+    let wheel = crate::wheel_nav::read_with(
         &ctx,
         app.session.prefs().general.zoom_with_scroll_wheel,
         app.session.prefs().enhanced_controls.zoom_with_trackpad_pinch,
         response.id.with("wheel"),
         nav_hovered,
+        app.session.prefs().interface.enable_animations,
     );
     if nav_hovered {
         let pointer = ui.input(|i| i.pointer.hover_pos());
@@ -3302,7 +3312,10 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
             primary && app.ui.dialogs.last().is_some_and(|d| crate::select_mask_view::owns(&d.fields) && crate::select_mask_view::brush_on(&d.fields));
         // Field Blur's pins are placed and dragged on the image (`blur_pins`).
         let pinning = primary && app.ui.dialogs.last().is_some_and(|d| crate::blur_pins::owns(&d.fields));
-        let hand = app.ui.tool == Tool::Hand && !picking && !range_picking && !refine_brushing && !pinning;
+        // Layer Style on a Drop or Inner Shadow page: a drag on the image moves the shadow (#5701).
+        let shadow_drag =
+            !picking && app.ui.dialogs.last().is_some_and(|d| d.kind == crate::state::DialogKind::LayerStyle && crate::layer_style::drags_shadow(&d.fields));
+        let hand = app.ui.tool == Tool::Hand && !picking && !range_picking && !refine_brushing && !pinning && !shadow_drag;
         if let Some(d) = crate::dialogs::pan_delta(&ctx, rect, hand) {
             let d = xf.unmap_vec(d) / (view.zoom / ppp);
             view.center[0] -= d.x;
@@ -3310,6 +3323,15 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
             ctx.set_cursor_icon(crate::tool_cursor::hand(&ctx, true));
         } else if free_hover && (space_pan || hand) {
             ctx.set_cursor_icon(crate::tool_cursor::hand(&ctx, false));
+        } else if shadow_drag && !middle && crate::dialogs::free_pointer_over(&ctx, rect).is_some() {
+            ctx.set_cursor_icon(egui::CursorIcon::Move);
+            if let Some(p) = crate::dialogs::free_press(&ctx, rect) {
+                let (start, origin) = ctx.input(|i| (i.pointer.primary_pressed(), i.pointer.press_origin().unwrap_or(p)));
+                let total = xf.unmap_vec(p - origin) / (view.zoom / ppp);
+                if let Some(d) = app.ui.dialogs.last_mut() {
+                    crate::layer_style::drag_shadow(&mut d.fields, start, [f64::from(total.x), f64::from(total.y)]);
+                }
+            }
         } else if picking && let Some(p) = crate::dialogs::free_pointer_over(&ctx, rect) {
             if app.session.prefs().cursors.other == photocraft_engine::prefs::OtherCursor::Precise {
                 ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
@@ -3820,8 +3842,10 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
             // corner badge, as Photoshop's corner radius cursor.
             ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
             crate::icons::cursor_badge(&ctx, "scan", p);
-        } else if let Some((r, p, c)) =
-            response.hover_pos().and_then(|p| transform_controls_rect(app, &xf).and_then(|r| transform_controls_cursor(r, p).map(|c| (r, p, c))))
+        } else if let Some((r, p, c)) = response
+            .hover_pos()
+            .filter(|_| !transform_controls_several(app))
+            .and_then(|p| transform_controls_rect(app, &xf).and_then(|r| transform_controls_cursor(r, p).map(|c| (r, p, c))))
         {
             // The Move tool draws handles without opening a Free Transform session.
             // Give them their resize/rotate cursors before the first pointer press (#2871).
@@ -3991,7 +4015,9 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
                 {
                     egui::CursorIcon::Crosshair
                 }
-                Tool::Move => egui::CursorIcon::Move,
+                // Photoshop's Move tool keeps the standard arrow pointer (#5646): the movable
+                // layer under it is marked by the hover outline, not by a different cursor.
+                Tool::Move => egui::CursorIcon::Default,
                 // Dragging is handled with the pan itself, above.
                 Tool::Hand => crate::tool_cursor::hand(ui.ctx(), false),
                 Tool::RotateView => crate::rotate_view::cursor(response.dragged()),
@@ -4653,23 +4679,36 @@ pub(crate) fn layer_edges_rect(app: &PhotocraftApp, idx: usize) -> Option<photoc
     Some(b.translate(dx, dy))
 }
 
-/// Move tool › Show Transform Controls: the box Free Transform would open on the active layer.
-fn transform_controls_rect(app: &PhotocraftApp, xf: &ViewXform) -> Option<Rect> {
-    // A corner radius drag hides the box, as in Photoshop.
+/// The layers Move › Show Transform Controls frames: every selected layer but the Background.
+/// A corner radius drag hides the box, as in Photoshop.
+fn transform_controls_layers(app: &PhotocraftApp) -> Vec<&photocraft_doc::Layer> {
     if app.ui.tool != Tool::Move
         || !app.ui.tool_options.move_show_transform
         || app.ui.transform.is_some()
         || app.drag.is_some()
         || app.ui.corner_radius.is_some()
     {
-        return None;
+        return Vec::new();
     }
+    let Some(st) = app.session.active() else { return Vec::new() };
+    st.selected_layers().into_iter().filter_map(|id| st.doc.layer(id)).filter(|l| !crate::doc_props_ui::is_background(&st.doc, l)).collect()
+}
+
+/// Several layers are selected: Show Transform Controls frames them all, as Photoshop does, but
+/// Free Transform works on one layer, so the frame has no handles to scale or rotate them.
+fn transform_controls_several(app: &PhotocraftApp) -> bool {
+    transform_controls_layers(app).len() > 1
+}
+
+/// Move tool › Show Transform Controls: the boxes Free Transform would open on the selected
+/// layers, joined into one.
+fn transform_controls_rect(app: &PhotocraftApp, xf: &ViewXform) -> Option<Rect> {
     let st = app.session.active()?;
-    let l = st.active_layer.and_then(|id| st.doc.layer(id))?;
-    if crate::doc_props_ui::is_background(&st.doc, l) {
-        return None;
-    }
-    let b = photocraft_engine::transform_cmds::transform_frame(&st.doc, l);
+    let b = transform_controls_layers(app)
+        .into_iter()
+        .map(|l| photocraft_engine::transform_cmds::transform_frame(&st.doc, l))
+        .filter(|b| !b.is_empty())
+        .reduce(|a, b| a.union(&b))?;
     let (dx, dy) = crate::move_ui::floating_offset(app).unwrap_or((0, 0));
     let b = b.translate(dx, dy);
     if b.is_empty() {
@@ -4726,6 +4765,9 @@ fn transform_controls_hit(r: Rect, p: Pos2) -> bool {
 
 /// Enter the existing Free Transform session when a Move-tool transform control is pressed.
 fn begin_transform_controls_at(app: &mut PhotocraftApp, ctx: &egui::Context, xf: &ViewXform, p: Pos2) -> bool {
+    if transform_controls_several(app) {
+        return false;
+    }
     let Some(r) = transform_controls_rect(app, xf) else { return false };
     if !transform_controls_hit(r, p) {
         return false;
@@ -4739,11 +4781,21 @@ fn begin_transform_controls_at(app: &mut PhotocraftApp, ctx: &egui::Context, xf:
     }
 }
 
-/// Move tool › Show Transform Controls: the active layer's bounding box with its eight handles.
+/// Move tool › Show Transform Controls: the selected layers' bounding box, with its eight handles
+/// for one layer, and the outline of every selected shape layer, as in Photoshop.
 fn draw_transform_controls(app: &mut PhotocraftApp, painter: &egui::Painter, xf: &ViewXform) {
     let Some(r) = transform_controls_rect(app, xf) else { return };
     let accent = crate::theme::Tokens::get(painter.ctx()).accent;
+    let to_scr = |q: [f64; 2]| xf.to_screen(q[0] as f32, q[1] as f32);
+    for l in transform_controls_layers(app) {
+        if let LayerContent::Shape(sh) = &l.content {
+            crate::vector_ui::draw_outline(painter, &sh.path, &to_scr, accent);
+        }
+    }
     painter.rect_stroke(r, 0.0, Stroke::new(1.0, accent), egui::StrokeKind::Middle);
+    if transform_controls_several(app) {
+        return;
+    }
     for p in [r.left_top(), r.center_top(), r.right_top(), r.right_center(), r.right_bottom(), r.center_bottom(), r.left_bottom(), r.left_center()] {
         let h = Rect::from_center_size(p, vec2(7.0, 7.0));
         painter.rect_filled(h, 0.0, Color32::WHITE);
@@ -8084,6 +8136,37 @@ mod tests {
 mod transform_controls_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn several_selected_layers_share_one_frame_without_handles() {
+        // As in Photoshop: Show Transform Controls frames every selected layer. Free Transform
+        // works on one layer, so the shared frame doesn't start it.
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.session.execute("file.new", json!({"width": 200, "height": 200})).unwrap();
+        app.session.execute("shape.create", json!({"kind": "rect", "rect": [20, 30, 40, 40], "fill": "#ff0000"})).unwrap();
+        let a = app.session.active().unwrap().active_layer.unwrap();
+        app.session.execute("shape.create", json!({"kind": "rect", "rect": [100, 120, 50, 30], "fill": "#ff0000"})).unwrap();
+        app.sync_views();
+        app.ui.tool = Tool::Move;
+        app.ui.tool_options.move_show_transform = true;
+        let xf =
+            ViewXform { rect: Rect::from_min_size(Pos2::ZERO, vec2(200.0, 200.0)), zoom: 1.0, center: [100.0, 100.0], flip: false, rotation: 0.0, aspect: 1.0 };
+        let one = transform_controls_rect(&app, &xf).unwrap();
+        assert!(!transform_controls_several(&app));
+        app.session.execute("layer.select", json!({"layer": a.0, "mode": "add"})).unwrap();
+        assert!(transform_controls_several(&app));
+        let both = transform_controls_rect(&app, &xf).unwrap();
+        assert!(both.contains_rect(one) && both.width() > one.width() && both.height() > one.height(), "{both:?} frames both");
+        let (lt, rb) = (xf.to_doc(both.left_top()), xf.to_doc(both.right_bottom()));
+        assert!((lt[0] - 20.0).abs() < 1e-3 && (lt[1] - 30.0).abs() < 1e-3 && (rb[0] - 150.0).abs() < 1e-3 && (rb[1] - 150.0).abs() < 1e-3, "{lt:?} {rb:?}");
+        let ctx = egui::Context::default();
+        assert!(!begin_transform_controls_at(&mut app, &ctx, &xf, both.right_bottom()));
+        assert!(app.ui.transform.is_none());
+        // The Background never joins the frame.
+        let bg = app.session.active().unwrap().doc.layers[0].id;
+        app.session.execute("layer.select", json!({"layer": bg.0, "mode": "add"})).unwrap();
+        assert_eq!(transform_controls_layers(&app).len(), 2);
+    }
 
     #[test]
     fn move_transform_controls_start_free_transform_for_vector_shapes() {

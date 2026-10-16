@@ -983,13 +983,31 @@ fn tga_default_bits_follow_the_alpha_channels() {
 }
 
 #[test]
+fn a_lab_document_is_written_as_a_lab_tiff_and_opens_as_lab() {
+    // #4936: TIFF stores CIE L*a*b* (CIELab): a Lab document with one layer keeps its pixels.
+    for depth in [SampleType::U8, SampleType::U16] {
+        let d = single(ColorMode::Lab, depth, false);
+        let r = export(&d, "tif", &ExportOptions::default()).unwrap();
+        assert!(r.warnings.iter().all(|w| !w.contains("sRGB") && !w.contains("flattened")), "{depth:?}: {:?}", r.warnings);
+        let back = import("x.tif", &r.bytes).unwrap().document;
+        assert_eq!((back.mode, back.depth), (ColorMode::Lab, depth));
+        pixels_eq(&d, &back, if depth == SampleType::U8 { 0.0 } else { 1.5 / 65535.0 });
+    }
+    // Other formats still go through sRGB.
+    let r = export(&single(ColorMode::Lab, SampleType::U8, false), "png", &ExportOptions::default()).unwrap();
+    assert!(r.warnings.iter().any(|w| w.contains("sRGB")), "{:?}", r.warnings);
+}
+
+#[test]
 fn a_lab_document_with_one_layer_is_not_reported_as_flattened() {
-    // Lab always goes through the sRGB composite, but a lone layer loses nothing to it.
+    // A lone layer loses nothing: TIFF keeps it as Lab, the others go through the sRGB composite.
     let d = single(ColorMode::Lab, SampleType::U8, false);
     for ext in ["tif", "png", "jpg"] {
         let r = export(&d, ext, &ExportOptions::default()).unwrap();
         assert!(r.warnings.iter().all(|w| !w.contains("flattened")), "{ext}: {:?}", r.warnings);
-        assert!(r.warnings.iter().any(|w| w.contains("Lab composite written as sRGB")), "{ext}: {:?}", r.warnings);
+        if ext != "tif" {
+            assert!(r.warnings.iter().any(|w| w.contains("Lab composite written as sRGB")), "{ext}: {:?}", r.warnings);
+        }
     }
     // Two layers are flattened, and say so.
     let mut two = single(ColorMode::Lab, SampleType::U8, false);

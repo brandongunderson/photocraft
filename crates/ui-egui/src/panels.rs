@@ -546,10 +546,18 @@ fn color_chips(app: &mut PhotocraftApp, ui: &mut egui::Ui, two_columns: bool) {
     }
     s.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Swap colours (X)")));
     if s.on_hover_text(tl!("Swap colours (X)")).clicked() {
-        let _ = app.run("tools.swapColors", json!({}));
+        chip_command(app, "tools.swapColors");
     }
     if d.is_some_and(|d| d.on_hover_text(tl!("Default colours (D)")).clicked()) {
-        let _ = app.run("tools.defaultColors", json!({}));
+        chip_command(app, "tools.defaultColors");
+    }
+}
+
+/// Run Switch Colors or Default Colors from the chips. As in Photoshop, characters highlighted
+/// in the type layer being edited take the new foreground colour, like picking one (#5690).
+fn chip_command(app: &mut PhotocraftApp, id: &str) {
+    if app.run(id, json!({})).is_ok() {
+        crate::type_tool::foreground_changed(app);
     }
 }
 
@@ -1391,6 +1399,9 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     Tool::Move => {
                         // The Studio themes keep Photoshop's Auto-Select toggle too (#1275).
                         widgets::checkbox(ui, &mut app.ui.tool_options.move_auto_select, tl!("Auto-Select:"));
+                        // And Show Transform Controls (#5740): without it the box could not be
+                        // turned on outside the Pro themes.
+                        widgets::checkbox(ui, &mut app.ui.tool_options.move_show_transform, tl!("Show Transform Controls"));
                         hint(ui, tl!("Drag to move the active layer"));
                     }
                     Tool::Eyedropper => crate::eyedropper_ui::options(app, ui),
@@ -1507,8 +1518,9 @@ const LAYER_PCT_W: f32 = 66.0 + widgets::POPUP_ARROW_W;
 
 /// The `layer.setProps` edit of a Layers panel Opacity or Fill (`key`) field at `pct` percent. A
 /// drag of the pop-up slider (`drag`) coalesces into one history step, as in Photoshop.
-fn pct_action(l: &Layer, key: &str, pct: f32, drag: Option<u64>) -> (String, Value) {
-    let mut p = json!({"layer": l.id.0, key: pct / 100.0});
+fn pct_action(target: &Value, key: &str, pct: f32, drag: Option<u64>) -> (String, Value) {
+    let mut p = target.clone();
+    p[key] = json!(pct / 100.0);
     if let Some(n) = drag {
         p["coalesce"] = json!(format!("layer-{key}-slider:{n}"));
     }
@@ -1786,6 +1798,13 @@ fn info_panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         .hover_doc
         .map(|p| (p[0].floor() as i32, p[1].floor() as i32))
         .filter(|(x, y)| *x >= 0 && *y >= 0 && *x < size.width as i32 && *y < size.height as i32);
+    // While a guide is dragged (#5728), the Info panel shows its position in one axis only, even
+    // when the pointer is outside the canvas (ruler drags do not update `hover_doc` there).
+    let (guide_x, guide_y) = match app.guide_drag {
+        Some(d) if d.vertical => (Some(d.pos), None),
+        Some(d) => (None, Some(d.pos)),
+        None => (None, None),
+    };
     // The readout averages the Eyedropper's Sample Size, as in Photoshop (#1649).
     let sample_size = app.ui.tool_options.eyedropper_size;
     let rgba = pos.and_then(|(x, y)| {
@@ -1824,8 +1843,8 @@ fn info_panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     ui.columns(2, |cols| {
         let dash = || "—".to_string();
         // Measured from the rulers' zero point (#2955).
-        row(&mut cols[0], "X:", pos.map_or_else(dash, |p| fx(p.0 as f64 - origin[0])));
-        row(&mut cols[0], "Y:", pos.map_or_else(dash, |p| fy(p.1 as f64 - origin[1])));
+        row(&mut cols[0], "X:", guide_x.map(|p| fx(p - origin[0])).or_else(|| pos.map(|p| fx(p.0 as f64 - origin[0]))).unwrap_or_else(dash));
+        row(&mut cols[0], "Y:", guide_y.map(|p| fy(p - origin[1])).or_else(|| pos.map(|p| fy(p.1 as f64 - origin[1]))).unwrap_or_else(dash));
         row(&mut cols[1], "W:", sel.map_or_else(dash, |r| fx(r.width() as f64)));
         row(&mut cols[1], "H:", sel.map_or_else(dash, |r| fy(r.height() as f64)));
     });
@@ -2141,13 +2160,17 @@ fn hsb_sliders(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
 /// any is set, and locks all otherwise. Toggling only "lock all" would leave the Background's
 /// transparency lock (still showing as locked), and a second click would lock its pixels,
 /// shutting out the Eraser and every other paint tool (#76).
-fn simple_lock_toggle(background: bool, l: &Layer) -> (String, Value) {
+/// The Basic layout's lock toggle: the active layer's state decides, and every target follows it
+/// (`targets`: `{"layer": id}` or `{"layers": [ids]}`).
+fn simple_lock_toggle(background: bool, l: &Layer, targets: &Value) -> (String, Value) {
     if background {
         return ("layer.new.layerFromBackground".into(), json!({}));
     }
     let locks =
         if l.locks.any() { json!({"transparency": false, "pixels": false, "position": false, "artboard": false, "all": false}) } else { json!({"all": true}) };
-    ("layer.setProps".into(), json!({"layer": l.id.0, "locks": locks}))
+    let mut p = targets.clone();
+    p["locks"] = locks;
+    ("layer.setProps".into(), p)
 }
 
 /// The Layers panel's blend modes: Photoshop's, plus the layer's own Paint.NET mode when it has one
@@ -2163,7 +2186,7 @@ fn blend_options(groups: bool, current: BlendMode) -> Vec<(BlendMode, &'static s
 /// list downward (reveals rows above) and negative upward (reveals rows below).
 /// The speed ramps with proximity to the edge and clamps to the maximum speed when
 /// dragged outside, using elapsed time instead of assuming a particular refresh rate.
-fn layer_drag_edge_scroll(pointer: Option<Pos2>, viewport: Rect, dragging: bool, dt: f32) -> f32 {
+pub(crate) fn layer_drag_edge_scroll(pointer: Option<Pos2>, viewport: Rect, dragging: bool, dt: f32) -> f32 {
     if !dragging || viewport.width() <= 0.0 || viewport.height() <= 0.0 || dt.is_nan() || dt <= 0.0 {
         return 0.0;
     }
@@ -2213,8 +2236,21 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         ui.add_space(4.0);
     }
     if let Some(l) = active_layer {
-        // Photoshop greys blend mode, Opacity and Fill for the Background layer.
+        // With several layers selected, blend mode, Opacity, Fill and the locks change every one
+        // of them, as in Photoshop; the controls show the active layer's values.
+        // The Background stays out of a several-layer change until Photoshop's behaviour is
+        // confirmed (#5856): Opacity, Fill or a blend mode would turn it into Layer 0.
+        let ids: Vec<LayerId> = if selection.len() > 1 && selection.contains(&l.id) {
+            selection.iter().copied().filter(|id| *id == l.id || !doc.layer(*id).is_some_and(|x| crate::doc_props_ui::is_background(&doc, x))).collect()
+        } else {
+            vec![l.id]
+        };
+        let targets = if ids.len() > 1 { json!({"layers": ids.iter().map(|id| id.0).collect::<Vec<_>>()}) } else { json!({"layer": l.id.0}) };
+        // Photoshop greys blend mode, Opacity and Fill for the Background layer. (With the
+        // Background among several selected, what Photoshop does awaits a check: #5856.)
         let bg = crate::doc_props_ui::is_background(&doc, l);
+        // Pass Through is a group's mode: offered only when every target is a group.
+        let all_groups = ids.iter().all(|id| doc.layer(*id).is_some_and(|x| x.is_group()));
         ui.horizontal(|ui| {
             ui.add_enabled_ui(!bg, |ui| {
                 let mut m = l.blend;
@@ -2224,13 +2260,15 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 let opacity_label = if t.pro { tl!("Opacity:") } else { tl!("Opacity") };
                 let (blend_width, show_opacity_label) =
                     opacity_row_layout(ui.available_width(), body_text_width(ui, opacity_label), ui.spacing().item_spacing.x);
-                let (chosen, hovered) = widgets::dropdown_wheel_hovered(ui, "blend", &mut m, &blend_options(l.is_group(), l.blend), blend_width);
+                let (chosen, hovered) = widgets::dropdown_wheel_hovered(ui, "blend", &mut m, &blend_options(all_groups, l.blend), blend_width);
                 // One step per choice: a click, an arrow key or each wheel notch (#1747).
                 for m in &chosen {
-                    actions.push(("layer.setProps".into(), json!({"layer": l.id.0, "blend": m.label()})));
+                    let mut p = targets.clone();
+                    p["blend"] = json!(m.label());
+                    actions.push(("layer.setProps".into(), p));
                 }
                 // Hovering a mode previews it on the canvas (#970).
-                crate::blend_preview::hover(app, l.id, hovered.filter(|_| chosen.is_empty()));
+                crate::blend_preview::hover(app, &ids, hovered.filter(|_| chosen.is_empty()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let mut o = l.opacity * 100.0;
                     let field = widgets::popup_value_field(ui, opacity_label, &mut o, 0.0..=100.0, "%", LAYER_PCT_W);
@@ -2241,7 +2279,7 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         widgets::PopupFieldResponse::default()
                     };
                     if field.changed || scrub.changed {
-                        actions.push(pct_action(l, "opacity", o, scrub.drag.or(field.drag)));
+                        actions.push(pct_action(&targets, "opacity", o, scrub.drag.or(field.drag)));
                     }
                 });
             });
@@ -2277,7 +2315,9 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         // Lock Image Pixels includes Lock Transparent Pixels, which waits for it (#4892).
                         let enabled = key != "transparency" || !lk.pixels;
                         if ui.add_enabled_ui(enabled, |ui| icons::button(ui, icon, 20.0, on, tip)).inner.clicked() {
-                            actions.push(("layer.setProps".into(), json!({"layer": l.id.0, "locks": { key: !on }})));
+                            let mut p = targets.clone();
+                            p["locks"] = json!({ key: !on });
+                            actions.push(("layer.setProps".into(), p));
                         }
                     }
                 });
@@ -2285,7 +2325,7 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             if !t.pro {
                 let locked = l.locks.any();
                 if icons::button(ui, if locked { "lock" } else { "lock-open" }, 22.0, locked, tl!("Lock layer")).clicked() {
-                    actions.push(simple_lock_toggle(bg, l));
+                    actions.push(simple_lock_toggle(crate::doc_props_ui::is_background(&doc, l), l, &targets));
                 }
             }
             ui.add_enabled_ui(!bg, |ui| {
@@ -2294,7 +2334,7 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     let field = widgets::popup_value_field(ui, fill_label, &mut f, 0.0..=100.0, "%", LAYER_PCT_W);
                     let scrub = scrub_pct_label(ui, fill_label, &mut f, ui.available_width());
                     if field.changed || scrub.changed {
-                        actions.push(pct_action(l, "fill", f, scrub.drag.or(field.drag)));
+                        actions.push(pct_action(&targets, "fill", f, scrub.drag.or(field.drag)));
                     }
                 })
             });
@@ -2309,7 +2349,8 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let fill = ui.available_height() > footer + 60.0;
     let rows_h = if fill { ui.available_height() - footer } else { f32::INFINITY };
     egui::ScrollArea::vertical()
-        .id_salt("layer-rows")
+        // Keep each document's position independent, even when tab indices change (#5522).
+        .id_salt(("layer-rows", doc.id.0))
         .max_height(rows_h)
         .min_scrolled_height(if fill { rows_h } else { 0.0 })
         .auto_shrink([false, !fill])
@@ -2539,6 +2580,11 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         }
     });
     for (id, p) in actions {
+        // A row click commits even when it selects the layer already being edited (#5584).
+        // Finish before selection changes so the existing type session keeps its own target.
+        if id == "layer.select" && app.ui.text_edit.is_some() {
+            crate::type_tool::commit(app);
+        }
         if id == "ui.maskTarget" {
             app.ui.mask_target = p.as_bool().unwrap_or(false);
             app.ui.vector_mask_target = false;
@@ -2853,7 +2899,7 @@ fn layer_row(
     if let Some(&(_, lock)) = indicators.iter().find(|(k, _)| *k == crate::layer_row_ui::Indicator::Lock)
         && ui.interact(lock, ui.id().with(("row-lock", l.id.0)), Sense::click()).clicked()
     {
-        actions.push(simple_lock_toggle(doc.is_background(l.id), l));
+        actions.push(simple_lock_toggle(doc.is_background(l.id), l, &json!({"layer": l.id.0})));
     }
     let name_color = if l.visible { t.text } else { t.text_faint };
     let font = if selected && !t.pro { theme::medium(13.0) } else { egui::FontId::proportional(if t.pro { 12.0 } else { 13.0 }) };
@@ -3115,6 +3161,8 @@ fn history(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             }
             let icon = match e.as_str() {
                 s if s.contains("Brush") || s.contains("Eraser") => "brush",
+                // The Layers panel's controls (layer.setProps).
+                "Opacity Change" | "Fill Opacity Change" | "Blending Change" => "layers",
                 s if s.contains("Layer") => "layers",
                 s if s.contains("Select") || s.contains("Marquee") || s.contains("Deselect") || s.contains("Lasso") => "square-dashed",
                 s if s.contains("Fill") => "paint-bucket",
@@ -4304,6 +4352,64 @@ mod color_tests {
         }
     }
 
+    /// While characters are highlighted in a type layer being edited, the Switch Colors and
+    /// Default Colors buttons recolour them with the new foreground (#5690); without a selection
+    /// they only change the tool colours, as before.
+    #[test]
+    fn swap_and_default_colors_recolour_selected_type() {
+        use egui_kittest::kittest::Queryable;
+        use photocraft_doc::LayerId;
+        let rgb = |app: &PhotocraftApp, id: LayerId, ci: usize| {
+            let doc = &app.session.active().unwrap().doc;
+            let photocraft_doc::LayerContent::Text(t) = &doc.layer(id).unwrap().content else { panic!("not a type layer") };
+            let b = t.text.char_indices().nth(ci).map_or(t.text.len(), |(b, _)| b);
+            let mut at = 0;
+            for r in t.char_runs() {
+                if b < at + r.len {
+                    return r.style.color.to_rgba8();
+                }
+                at += r.len;
+            }
+            [0; 4]
+        };
+        for selected in [true, false] {
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
+            let made = app.run("type.create", json!({"text": "Hello world", "size": 40, "x": 50, "y": 150, "color": "#000000"})).unwrap();
+            let id = LayerId(made["layer"].as_u64().unwrap());
+            app.run("tools.setColors", json!({"foreground": "#ff0000", "background": "#0000ff"})).unwrap();
+            let anchor = if selected { 6 } else { 11 };
+            app.ui.text_edit = Some(crate::state::TextEdit {
+                layer: id.0,
+                caret: 11,
+                anchor,
+                session: "s".into(),
+                created: false,
+                mask: false,
+                dragging: false,
+                resize: None,
+                preedit: None,
+            });
+            let mut h =
+                egui_kittest::Harness::builder().with_size(vec2(80.0, 120.0)).build_ui_state(|ui, app: &mut PhotocraftApp| color_chips(app, ui, false), app);
+            PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Studio);
+            h.run_steps(2);
+            h.get_by_label("Swap colours (X)").click();
+            h.run_steps(2);
+            assert_eq!(h.state().session.tools.foreground, [0.0, 0.0, 1.0, 1.0]);
+            assert_eq!(h.state().session.tools.background, [1.0, 0.0, 0.0, 1.0]);
+            let blue = if selected { [0, 0, 255, 255] } else { [0, 0, 0, 255] };
+            assert_eq!(rgb(h.state(), id, 0), [0, 0, 0, 255], "unselected characters keep their colour");
+            assert_eq!((rgb(h.state(), id, 6), rgb(h.state(), id, 10)), (blue, blue), "selected: {selected}");
+            // Default Colors: the selection takes black, the new foreground.
+            h.state_mut().run("tools.setColors", json!({"foreground": "#00ff00"})).unwrap();
+            h.get_by_label("Default colours (D)").click();
+            h.run_steps(2);
+            assert_eq!(h.state().session.tools.foreground, [0.0, 0.0, 0.0, 1.0]);
+            assert_eq!(rgb(h.state(), id, 6), [0, 0, 0, 255], "selected: {selected}");
+        }
+    }
+
     /// The Studio layout (chips stacked, icons below) fits the height the toolbar reserves for
     /// the chips, so the two-column check does not change with the theme.
     #[test]
@@ -4910,7 +5016,7 @@ mod lock_tests {
     fn click_lock(app: &mut PhotocraftApp) {
         let st = app.session.active().unwrap();
         let l = st.active_layer.and_then(|id| st.doc.layer(id)).unwrap();
-        let (cmd, p) = simple_lock_toggle(crate::doc_props_ui::is_background(&st.doc, l), l);
+        let (cmd, p) = simple_lock_toggle(crate::doc_props_ui::is_background(&st.doc, l), l, &json!({"layer": l.id.0}));
         app.run(&cmd, p).unwrap();
     }
 
@@ -6241,6 +6347,114 @@ mod properties_target_regressions {
 #[cfg(test)]
 #[path = "history_panel_select_tests.rs"]
 mod history_panel_select_tests;
+#[cfg(test)]
+mod layer_click_type_commit_tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    fn harness(kind: theme::ThemeKind) -> (Harness<'static, PhotocraftApp>, LayerId, LayerId) {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let text = LayerId(app.run("type.create", json!({"text": "Before", "size": 24, "x": 20, "y": 80})).unwrap()["layer"].as_u64().unwrap());
+        app.run("layer.setProps", json!({"layer": text.0, "name": "Edited type"})).unwrap();
+        let other = LayerId(app.run("layer.new.layer", json!({"name": "Other pixels"})).unwrap()["layer"].as_u64().unwrap());
+        app.run("layer.select", json!({"layer": text.0})).unwrap();
+        crate::type_tool::edit_active(&mut app).unwrap();
+        let session = app.ui.text_edit.as_ref().unwrap().session.clone();
+        app.run("type.edit", json!({"layer": text.0, "text": "Preserved edit", "coalesce": session})).unwrap();
+        let mut ready = false;
+        let mut h = Harness::builder().with_size(vec2(360.0, 650.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            move |ui, app: &mut PhotocraftApp| {
+                if !ready {
+                    PhotocraftApp::setup_context(ui.ctx(), kind);
+                    ready = true;
+                    return;
+                }
+                layers(app, ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        (h, text, other)
+    }
+
+    fn click(h: &mut Harness<'_, PhotocraftApp>, at: Pos2, modifiers: egui::Modifiers) {
+        h.event(egui::Event::ModifiersChanged(modifiers));
+        h.hover_at(at);
+        h.run_steps(1);
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers });
+            h.run_steps(1);
+        }
+    }
+
+    fn preserved(app: &PhotocraftApp, id: LayerId) {
+        let layer = app.session.active().unwrap().doc.layer(id).unwrap();
+        let LayerContent::Text(text) = &layer.content else { panic!("type must remain editable") };
+        assert_eq!(text.text, "Preserved edit");
+    }
+
+    #[test]
+    fn layer_name_and_thumbnail_clicks_commit_same_or_other_type_selection() {
+        for kind in theme::ThemeKind::ALL {
+            for same in [true, false] {
+                for thumbnail in [true, false] {
+                    let (mut h, text, other) = harness(kind);
+                    let label = if same { "Edited type" } else { "Other pixels" };
+                    let row = h.get_by_label(label).rect();
+                    let at = pos2(row.left() + if thumbnail { 43.0 } else { 120.0 }, row.center().y);
+                    click(&mut h, at, egui::Modifiers::NONE);
+                    assert!(h.state().ui.text_edit.is_none(), "{kind:?}, same={same}, thumbnail={thumbnail}");
+                    assert_eq!(h.state().session.active().unwrap().active_layer, Some(if same { text } else { other }));
+                    preserved(h.state(), text);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn layer_click_commits_without_breaking_modifier_selection_or_double_click_editing() {
+        for kind in theme::ThemeKind::ALL {
+            let (mut h, text, other) = harness(kind);
+            let row = h.get_by_label("Other pixels").rect();
+            click(&mut h, pos2(row.left() + 120.0, row.center().y), egui::Modifiers { command: true, ..Default::default() });
+            assert!(h.state().ui.text_edit.is_none());
+            let selected = h.state().session.active().unwrap().selected_layers();
+            assert!(selected.contains(&text) && selected.contains(&other));
+            preserved(h.state(), text);
+
+            let (mut h, text, _) = harness(kind);
+            let row = h.get_by_label("Edited type").rect();
+            let thumb = pos2(row.left() + 43.0, row.center().y);
+            click(&mut h, thumb, egui::Modifiers::NONE);
+            assert!(h.state().ui.text_edit.is_none());
+            click(&mut h, thumb, egui::Modifiers::NONE);
+            assert_eq!(h.state().ui.text_edit.as_ref().map(|ed| ed.layer), Some(text.0));
+            preserved(h.state(), text);
+        }
+    }
+
+    #[test]
+    #[ignore = "offscreen visual evidence for #5584"]
+    fn layer_click_synthetic_visual_evidence() {
+        let (h, text, _) = harness(theme::ThemeKind::ProMedium);
+        let mut app = h.into_state();
+        app.ui.tool = Tool::Type;
+        let mut h = Harness::builder().with_size(vec2(1280.0, 900.0)).with_step_dt(1.0 / 60.0).with_max_steps(64).wgpu().build_eframe(move |cc| {
+            PhotocraftApp::setup_context(&cc.egui_ctx, theme::ThemeKind::ProMedium);
+            app
+        });
+        h.run_steps(4);
+        assert!(h.state().ui.text_edit.is_some());
+        h.render().unwrap().save("5584-before.png").unwrap();
+        let row = h.get_by_label("Other pixels").rect();
+        click(&mut h, pos2(row.left() + 120.0, row.center().y), egui::Modifiers::NONE);
+        assert!(h.state().ui.text_edit.is_none());
+        preserved(h.state(), text);
+        h.run_steps(4);
+        h.render().unwrap().save("5584-after.png").unwrap();
+    }
+}
 
 #[cfg(test)]
 mod sampler_readout_tests {

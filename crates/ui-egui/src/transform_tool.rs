@@ -1435,11 +1435,46 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) ->
                 } else {
                     apply_mode_drag(s, g, [x, y], mode, type_layer, mods);
                 }
+                round_to_pixel_grid(app);
             }
         }
     }
     crate::snap_ui::retain_transform_lines(app, mods);
     true
+}
+
+/// Preferences › Tools › Snap Vector Tools and Transforms to Pixel Grid (#5751): while a shape
+/// layer or a path is moved or scaled (the box still an upright rectangle), its edges stay on
+/// whole pixels, whatever the tool. Rounding the pointer alone left the edges off by the grab
+/// offset, and a proportional scale off by its ratio: a shape dragged to 540 px came out 539.6.
+/// Rotated, skewed and distorted boxes are left as dragged.
+fn round_to_pixel_grid(app: &mut PhotocraftApp) {
+    if !app.session.prefs().tools.snap_vector_tools_and_transforms_to_pixel_grid {
+        return;
+    }
+    let Some(t) = app.ui.transform.as_ref() else { return };
+    if t.selection || t.warp.is_some() || t.content_aware.is_some() || t.target.is_some() {
+        return;
+    }
+    let vector =
+        t.path.is_some() || app.session.active().and_then(|st| st.doc.layer(LayerId(t.layer))).is_some_and(|l| matches!(l.content, LayerContent::Shape(_)));
+    if !vector || !upright(&t.quad) {
+        return;
+    }
+    let q = t.quad.map(|p| p.map(f64::round));
+    // A box narrower than a pixel keeps its size rather than collapsing.
+    if (q[1][0] - q[0][0]).abs() < 1.0 || (q[3][1] - q[0][1]).abs() < 1.0 || q.iter().flatten().any(|v| !v.is_finite()) {
+        return;
+    }
+    if let Some(s) = app.ui.transform.as_mut() {
+        s.quad = q;
+    }
+}
+
+/// Whether corners clockwise from top-left form an axis-aligned rectangle (flips included).
+fn upright(q: &[[f64; 2]; 4]) -> bool {
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    near(q[0][1], q[1][1]) && near(q[2][1], q[3][1]) && near(q[0][0], q[3][0]) && near(q[1][0], q[2][0])
 }
 
 /// The same effective modifiers drive the geometry and decide whether Ctrl is a distortion
@@ -1717,8 +1752,7 @@ pub(crate) fn apply_drag(s: &mut TransformSession, g: Gesture, p: [f64; 2], mods
             let Some(inv) = h.inverse() else { return };
             let (u, v) = inv.apply(p[0], p[1]);
             let (pu, pv) = inv.apply(g.pivot0[0], g.pivot0[1]);
-            // Moving edges/corner in unit space: [u0, v0, u1, v1] starting as [0, 0, 1, 1].
-            let mut r = [0.0f64, 0.0, 1.0, 1.0];
+            // Which sides of the unit box move: (u = 0, u = 1) and (v = 0, v = 1).
             let (mu, mv) = match g.hit {
                 Hit::Corner(0) => ((true, false), (true, false)),
                 Hit::Corner(1) => ((false, true), (true, false)),
@@ -1729,33 +1763,21 @@ pub(crate) fn apply_drag(s: &mut TransformSession, g: Gesture, p: [f64; 2], mods
                 Hit::Edge(2) => ((false, false), (false, true)),
                 _ => ((true, false), (false, false)),
             };
-            if mu.0 {
-                r[0] = u;
-            }
-            if mu.1 {
-                r[2] = u;
-            }
-            if mv.0 {
-                r[1] = v;
-            }
-            if mv.1 {
-                r[3] = v;
-            }
-            // ⌥: symmetric about the reference point.
-            if mods.alt {
-                if mu.0 {
-                    r[2] = 2.0 * pu - r[0];
+            // Each axis scales by a factor `k` about an anchor: the opposite side, or with ⌥ the
+            // reference point, wherever it was set (#1329). The dragged handle follows the cursor.
+            let axis = |moving: (bool, bool), at: f64, pivot: f64| -> (f64, f64) {
+                if !moving.0 && !moving.1 {
+                    return (0.5, 1.0);
                 }
-                if mu.1 {
-                    r[0] = 2.0 * pu - r[2];
-                }
-                if mv.0 {
-                    r[3] = 2.0 * pv - r[1];
-                }
-                if mv.1 {
-                    r[1] = 2.0 * pv - r[3];
-                }
-            }
+                let handle = if moving.0 { 0.0 } else { 1.0 };
+                let anchor = if mods.alt { pivot } else { 1.0 - handle };
+                let d = handle - anchor;
+                // A reference point on the dragged side leaves nothing to scale against.
+                let k = if d.abs() > 1e-9 { (at - anchor) / d } else { 1.0 };
+                (anchor, if k.is_finite() { k } else { 1.0 })
+            };
+            let (mut au, mut ku) = axis(mu, u, pu);
+            let (mut av, mut kv) = axis(mv, v, pv);
             // Corners and edges scale proportionally by default; ⇧ frees them (the legacy
             // preference swaps the two for corners and always stretches edges, `legacy_mods`).
             let corner = matches!(g.hit, Hit::Corner(_));
@@ -1765,41 +1787,16 @@ pub(crate) fn apply_drag(s: &mut TransformSession, g: Gesture, p: [f64; 2], mods
                 // corners), so the opposite edge's handle stays put. Past the opposite edge only
                 // the dragged axis flips.
                 if mu.0 || mu.1 {
-                    let k = (r[2] - r[0]).abs();
-                    let c = if mods.alt { pv } else { 0.5 };
-                    r[1] = c - k / 2.0;
-                    r[3] = c + k / 2.0;
+                    (av, kv) = (if mods.alt { pv } else { 0.5 }, ku.abs());
                 } else {
-                    let k = (r[3] - r[1]).abs();
-                    let c = if mods.alt { pu } else { 0.5 };
-                    r[0] = c - k / 2.0;
-                    r[2] = c + k / 2.0;
+                    (au, ku) = (if mods.alt { pu } else { 0.5 }, kv.abs());
                 }
             }
             if corner && !mods.shift {
-                let (sx, sy) = (r[2] - r[0], r[3] - r[1]);
-                let k = if sx.abs() > sy.abs() { sx.abs() } else { sy.abs() };
-                let (nx, ny) = (k * sx.signum(), k * sy.signum());
-                let (ax, ay) = if mods.alt { (pu, pv) } else { (if mu.0 { r[2] } else { r[0] }, if mv.0 { r[3] } else { r[1] }) };
-                let fx = if mods.alt {
-                    0.5
-                } else if mu.0 {
-                    1.0
-                } else {
-                    0.0
-                };
-                let fy = if mods.alt {
-                    0.5
-                } else if mv.0 {
-                    1.0
-                } else {
-                    0.0
-                };
-                r[0] = ax - nx * fx;
-                r[2] = r[0] + nx;
-                r[1] = ay - ny * fy;
-                r[3] = r[1] + ny;
+                let k = ku.abs().max(kv.abs());
+                (ku, kv) = (k * ku.signum(), k * kv.signum());
             }
+            let r = [au - au * ku, av - av * kv, au + (1.0 - au) * ku, av + (1.0 - av) * kv];
             let map = |a: f64, b: f64| {
                 let (x, y) = h.apply(a, b);
                 [x, y]
@@ -3755,6 +3752,37 @@ mod tests {
         assert!(close(s.quad, corners([-50.0, 0.0, 150.0, 50.0])), "{:?}", s.quad);
     }
 
+    /// A reference point moved off the centre (⌥-click) is the centre of ⌥-scaling too, not just
+    /// of rotation: it stays put and the box scales away from it.
+    #[test]
+    fn alt_scales_about_a_moved_reference_point() {
+        let alt = egui::Modifiers::ALT;
+        // Reference point on the top-left corner: the bottom-right corner to (200, 100) doubles
+        // the box, top-left fixed (not centred on the reference point).
+        let mut s = session();
+        s.pivot = [0.0, 0.0];
+        drag(&mut s, [100.0, 50.0], [200.0, 100.0], alt);
+        assert!(close(s.quad, corners([0.0, 0.0, 200.0, 100.0])), "{:?}", s.quad);
+        assert!(near(s.pivot, [0.0, 0.0]), "{:?}", s.pivot);
+        // Reference point at (25, 25): the right edge to x = 175 is 2× about x = 25, and
+        // proportionally 2× about y = 25 too.
+        let mut s = session();
+        s.pivot = [25.0, 25.0];
+        drag(&mut s, [100.0, 25.0], [175.0, 25.0], alt);
+        assert!(close(s.quad, corners([-25.0, -25.0, 175.0, 75.0])), "{:?}", s.quad);
+        // ⌥⇧: that edge's axis only.
+        let mut s = session();
+        s.pivot = [25.0, 25.0];
+        drag(&mut s, [100.0, 25.0], [175.0, 25.0], egui::Modifiers { alt: true, shift: true, ..Default::default() });
+        assert!(close(s.quad, corners([-25.0, 0.0, 175.0, 50.0])), "{:?}", s.quad);
+        // Reference point in line with the dragged corner horizontally: that axis has nothing to
+        // scale against and stays, the other doubles about it.
+        let mut s = session();
+        s.pivot = [100.0, 50.0];
+        drag(&mut s, [100.0, 0.0], [150.0, -50.0], egui::Modifiers { alt: true, shift: true, ..Default::default() });
+        assert!(close(s.quad, corners([0.0, -50.0, 100.0, 50.0])), "{:?}", s.quad);
+    }
+
     fn near(a: [f64; 2], b: [f64; 2]) -> bool {
         (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6
     }
@@ -4922,6 +4950,32 @@ mod tests {
         begin_warp(&mut app, &ctx).unwrap();
         leave_warp(&mut app);
         assert!(app.ui.transform.as_ref().unwrap().warp.is_none());
+    }
+
+    #[test]
+    fn a_thin_layer_scaled_then_warped_commits_the_curve() {
+        // #5793: a 3 px column stretched wide, switched to Warp and pulled down in the middle.
+        // The commit came out straight: the warp's grid was one cell across the 3 source pixels.
+        let mut app = app_with_square(128, photocraft_geom::Rect::new(40, 20, 43, 60));
+        let ctx = egui::Context::default();
+        begin(&mut app, &ctx).unwrap();
+        scale_about_pivot(&mut app, 30.0, 1.0);
+        enter_warp(&mut app, &ctx);
+        warp_pointer(&mut app, ToolEvent::Down { x: 41.5, y: 40.0, pressure: 1.0 }, 2.0, egui::Modifiers::NONE);
+        warp_pointer(&mut app, ToolEvent::Move { x: 41.5, y: 70.0, pressure: 1.0 }, 2.0, egui::Modifiers::NONE);
+        warp_pointer(&mut app, ToolEvent::Up { x: 41.5, y: 70.0 }, 2.0, egui::Modifiers::NONE);
+        commit(&mut app);
+        assert!(app.ui.transform.is_none(), "{}", app.ui.status);
+        let st = app.session.active().unwrap();
+        let s = st.doc.layer(st.active_layer.unwrap()).unwrap().surface().unwrap();
+        let alpha = |x: i32, y: i32| {
+            let mut p = [0.0f32; 4];
+            s.read_pixel(x, y, &mut p);
+            p[3]
+        };
+        // The middle sags below the band's old bottom edge (y 60); the ends stay put.
+        assert!(alpha(41, 70) > 0.99, "middle {}", alpha(41, 70));
+        assert!(alpha(15, 70) < 0.01 && alpha(15, 40) > 0.99, "end {} {}", alpha(15, 70), alpha(15, 40));
     }
 
     fn warping_square() -> PhotocraftApp {

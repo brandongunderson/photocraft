@@ -4248,6 +4248,31 @@ shape	Appearance	Izgled
 # View › Guides › right-click a guide
 	Edit Selected Guides	Uredi izabrane vodilje
 	Clear Selected Guides	Ukloni izabrane vodilje
+	Delete this set	Obriši ovaj skup
+	New Set…	Novi skup…
+	PhotoCraft Defaults	Podrazumevano za PhotoCraft
+	Save a list of these shortcuts as a web page	Sačuvaj listu ovih prečica kao veb stranicu
+	Save the changes to this set	Sačuvaj izmene u ovom skupu
+	Save these shortcuts as a .kys file	Sačuvaj ove prečice kao .kys datoteku
+	Save these shortcuts as a new set	Sačuvaj ove prečice kao novi skup
+	Set deleted.	Skup je obrisan.
+	Set saved.	Skup je sačuvan.
+	Set:	Skup:
+	Summarize…	Rezime…
+	There are too many sets: delete one first.	Previše skupova: prvo obrišite jedan.
+	set name	ime skupa
+	{set} (modified)	{set} (izmenjen)
+	Accept and Go to Conflict	Prihvati i idi na sukob
+	Changes undone.	Izmene su poništene.
+	Choose a new shortcut for this command, or leave it without one.	Izaberite novu prečicu za ovu komandu ili je ostavite bez prečice.
+	Put this command's shortcuts back as they were	Vrati prečice ove komande kakve su bile
+	Take the shortcut from the other command and select it	Uzmi prečicu drugoj komandi i izaberi je
+	Undo Changes	Poništi izmene
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} je rezervisana od strane sistema i ne može se dodeliti.
+	Low-Latency Drawing (vsync off, applies at next launch)	Crtanje sa malim kašnjenjem (bez vsync-a, primenjuje se pri sledećem pokretanju)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Slobodna transformacija se još primenjuje; pokušajte ponovo kad se završi.
+	The transform couldn't be applied.	Transformacija nije mogla da se primeni.
 
 # Native-panel extensions
 	Manage Extensions…	Управљање проширењима…

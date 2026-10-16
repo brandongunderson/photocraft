@@ -3179,6 +3179,32 @@ curves	Smooth	Lisser
 # View › Guides › right-click a guide
 	Edit Selected Guides	Modifier les repères sélectionnés
 	Clear Selected Guides	Effacer les repères sélectionnés
+	Delete this set	Supprimer ce jeu
+	New Set…	Nouveau jeu…
+	PhotoCraft Defaults	Valeurs par défaut de PhotoCraft
+	Save a list of these shortcuts as a web page	Enregistrer la liste de ces raccourcis en page web
+	Save the changes to this set	Enregistrer les modifications de ce jeu
+	Save these shortcuts as a .kys file	Enregistrer ces raccourcis dans un fichier .kys
+	Save these shortcuts as a new set	Enregistrer ces raccourcis comme nouveau jeu
+	Set deleted.	Jeu supprimé.
+	Set saved.	Jeu enregistré.
+	Set:	Jeu :
+	Summarize…	Résumer…
+	There are too many sets: delete one first.	Il y a trop de jeux : supprimez-en un d’abord.
+	set name	nom du jeu
+	{set} (modified)	{set} (modifié)
+	Random	Aléatoire
+	Accept and Go to Conflict	Accepter et aller au conflit
+	Changes undone.	Modifications annulées.
+	Choose a new shortcut for this command, or leave it without one.	Choisissez un nouveau raccourci pour cette commande ou laissez-la sans raccourci.
+	Put this command's shortcuts back as they were	Rétablir les raccourcis de cette commande
+	Take the shortcut from the other command and select it	Retirer le raccourci de l’autre commande et la sélectionner
+	Undo Changes	Annuler les modifications
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} est réservé par le système et ne peut pas être attribué.
+	Low-Latency Drawing (vsync off, applies at next launch)	Dessin à faible latence (sans synchronisation verticale, au prochain lancement)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	La transformation manuelle est encore en cours d'application ; réessayez quand elle sera terminée.
+	The transform couldn't be applied.	Impossible d'appliquer la transformation.
 
 # Native-panel extensions
 	Manage Extensions…	Gérer les extensions…

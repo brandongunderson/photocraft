@@ -49,7 +49,7 @@ use std::sync::Arc;
 
 use photocraft_color::{PixelFormat, SampleType};
 use photocraft_compose::effects::FieldKind;
-use photocraft_doc::{DocId, Document, Layer, LayerContent, LayerId, Pattern};
+use photocraft_doc::{DocId, Document, LayerContent, LayerId, Pattern};
 use photocraft_geom::{Rect, TILE_SIZE, TileCoord};
 use photocraft_raster::{Surface, Tile};
 
@@ -303,8 +303,8 @@ struct FxEntry {
     shape_key: u64,
     /// Tiles the shape was rendered from (content, mask): damage is their difference.
     tiles: [Option<fx::Tiles>; 2],
-    /// Groups: a clone pinning the tile pointers `shape_key` hashes.
-    _pin: Option<Layer>,
+    /// Groups: the tiles `shape_key` hashes, by address only (see [`fx::Tiles`]).
+    _pin: Vec<std::sync::Weak<Tile>>,
     /// The shape on the CPU (distance fields are computed from it) and on the GPU.
     shape_cpu: Vec<f32>,
     shape: Tex,
@@ -1719,7 +1719,7 @@ impl Compositor {
         let layer = f.layer;
         let canvas = doc.bounds();
         let is_group = matches!(layer.content, LayerContent::Group(_));
-        let shape_key = if is_group { fx::group_key(layer, &doc.global_light) } else { fx::shape_key(layer, canvas) };
+        let shape_key = if is_group { fx::group_key(layer, &doc.global_light, &mut |_| {}) } else { fx::shape_key(layer, canvas) };
         let (content_src, mask_src) = if is_group { (None, None) } else { fx::shape_sources(layer) };
         let frame = self.frame;
         let (rw, rh) = (region.width(), region.height());
@@ -1767,7 +1767,13 @@ impl Compositor {
                     region,
                     shape_key,
                     tiles: [None, None],
-                    _pin: is_group.then(|| layer.clone()),
+                    _pin: if is_group {
+                        let mut pin = Vec::new();
+                        fx::group_key(layer, &doc.global_light, &mut |t| pin.push(Arc::downgrade(t)));
+                        pin
+                    } else {
+                        Vec::new()
+                    },
                     shape_cpu: vec![0.0; n],
                     shape,
                     fields: HashMap::new(),

@@ -886,6 +886,45 @@ pub fn mask_from_item(item: &FilterEffectsItem, sample: SampleType, stack: &Filt
     Ok(Some(LayerMask { surface, enabled: stack.mask_enabled, linked: stack.mask_linked, density: 1.0, feather: 0.0 }))
 }
 
+/// The unfiltered placed pixels of an `FEid` item (the inverse of [`feid_item`]), in `fmt`: colour
+/// channels from slot 0, transparency from the last slot (opaque without it). `None` when the
+/// item has no colour planes, its depth isn't `fmt`'s, or a plane doesn't decode.
+pub fn unfiltered_from_item(item: &FilterEffectsItem, fmt: PixelFormat) -> Option<Surface> {
+    let depth = u16::try_from(item.depth).ok()?;
+    if u32::from(crate::pixels::psd_depth(fmt.sample)) != item.depth || !fmt.alpha {
+        return None;
+    }
+    let (w, h) = item.rect.size().ok()?;
+    let n = w.checked_mul(h)?;
+    let cc = fmt.mode.color_channels();
+    let mut planes = Vec::with_capacity(cc + 1);
+    for slot in (0..cc).chain(std::iter::once(item.slots.len().saturating_sub(1))) {
+        planes.push(match item.slots.get(slot).and_then(Option::as_ref) {
+            Some(p) => Some(p.decode(w, h, depth).ok()?),
+            None if slot < cc => return None,
+            None => None,
+        });
+    }
+    let refs: Vec<Option<&[u8]>> = planes.iter().map(|p| p.as_deref()).collect();
+    let mut fill = vec![crate::pixels::zero_sample(fmt.sample); cc];
+    // Without a transparency plane the pixels are opaque (a native-endian full sample).
+    fill.push(match fmt.sample {
+        SampleType::U8 => vec![u8::MAX],
+        SampleType::U16 => u16::MAX.to_ne_bytes().to_vec(),
+        SampleType::F32 => 1.0f32.to_ne_bytes().to_vec(),
+    });
+    let mut invert = vec![fmt.mode == ColorMode::Cmyk; cc];
+    invert.push(false);
+    let mut bytes = crate::pixels::interleave(&refs, &fill, n, fmt.sample, &invert);
+    if fmt.mode == ColorMode::Lab && fmt.sample == SampleType::U16 {
+        crate::pixels::lab16_chroma(&mut bytes, cc + 1, true);
+    }
+    let mut surface = Surface::new(fmt);
+    surface.write_interleaved(GeomRect::new(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom), &bytes);
+    surface.prune();
+    Some(surface)
+}
+
 /// An `FEid` item for a smart object with filters: the unfiltered placed pixels Photoshop
 /// filters from (colour channels from slot 0, transparency in the last slot; in the document's
 /// pixel format, CMYK inverted as in layer channels) and the filter mask over `bounds` (white

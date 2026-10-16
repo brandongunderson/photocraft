@@ -239,6 +239,29 @@ option, not part of the plugin's own runtime and not required for installation/u
 
 ## CI and release gate
 
+The host's regular workspace tests exercise the frozen panel-1/filter-1 compatibility corpus
+and the capability/authority validators. Its CI also checks generated schema snapshots and
+builds the Layer Organizer and Document Inspector examples in fresh directories outside the
+checkout, then explicitly runs their four actual-package integration tests:
+
+```sh
+cargo test -p photocraft-plugin-api --locked --features schema
+python scripts/plugins/test-platform-examples.py
+```
+
+The Python helper uses the current Python executable for each exported project's build,
+omits existing build outputs, and points the host at only those newly built packages. Missing
+packages or failed host tests fail the run. It requires the `wasm32-unknown-unknown` Rust target;
+pass `--offline` when dependencies are already cached. Panel API 2 remains experimental; these
+tests do not establish a support window for future host releases.
+For a local host built without optional HEIF support, pass `--host-features=`; CI retains the
+default `heif` selection.
+
+Full native package qualification remains separate. The pinned Windows artifacts and optional
+Vulkan cases require the [native compatibility runner](../tests/plugin-compatibility/README.md)
+before advertising those targets as qualified. The ordinary CI sequence above does not download
+models, run that native corpus or certify every independently published plugin.
+
 A provider-independent CI sequence, inside each starter/project:
 
 ```sh

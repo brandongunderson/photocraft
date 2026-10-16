@@ -326,6 +326,28 @@ fn arrow_keys_nudge_the_selected_anchors() {
     assert_eq!(work(&app), before);
 }
 
+/// #5475: ⇧ during an anchor drag locks it to 45°, whether it's held from the press or added later.
+#[test]
+fn shift_locks_an_anchor_drag_to_45_degrees() {
+    let mut app = app(Tool::DirectSelection);
+    with_path(&mut app);
+    tool_event(&mut app, ToolEvent::Down { x: 40.0, y: 40.0, pressure: 1.0 }, Modifiers::NONE);
+    tool_event(&mut app, ToolEvent::Move { x: 70.0, y: 44.0, pressure: 1.0 }, Modifiers::SHIFT);
+    let Some(Drag::Edit { preview: Some(p), .. }) = &app.ui.direct_selection.drag else { panic!("dragging") };
+    assert_eq!(p.subpaths[0].knots[0].anchor, Point::new(70.0, 40.0), "the preview is locked too");
+    tool_event(&mut app, ToolEvent::Up { x: 100.0, y: 47.0 }, Modifiers::SHIFT);
+    assert_eq!(anchor(&app, 0), Point::new(100.0, 40.0));
+
+    // Diagonal, and without ⇧ the drag stays free.
+    // (⇧ at the press would deselect the anchor, so it comes once the drag is under way.)
+    tool_event(&mut app, ToolEvent::Down { x: 100.0, y: 40.0, pressure: 1.0 }, Modifiers::NONE);
+    tool_event(&mut app, ToolEvent::Up { x: 131.0, y: 69.0 }, Modifiers::SHIFT);
+    let a = anchor(&app, 0);
+    assert!((a.x - 130.0).abs() < 1e-9 && (a.y - 70.0).abs() < 1e-9, "{a:?}");
+    drag(&mut app, [130.0, 70.0], [140.0, 73.0], Modifiers::NONE);
+    assert_eq!(anchor(&app, 0), Point::new(140.0, 73.0));
+}
+
 #[test]
 fn the_curvature_pen_drags_an_anchor_of_the_active_path_without_a_modifier() {
     // As in Photoshop: with no path being drawn, pressing an anchor and dragging moves it.

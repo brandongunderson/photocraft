@@ -3965,6 +3965,31 @@ layerLabel	No Color	Sem cor
 # View › Guides › right-click a guide
 	Edit Selected Guides	Editar guias selecionadas
 	Clear Selected Guides	Limpar guias selecionadas
+	Delete this set	Excluir este conjunto
+	New Set…	Novo conjunto…
+	PhotoCraft Defaults	Padrões do PhotoCraft
+	Save a list of these shortcuts as a web page	Salvar uma lista destes atalhos como página da web
+	Save the changes to this set	Salvar as alterações neste conjunto
+	Save these shortcuts as a .kys file	Salvar estes atalhos como arquivo .kys
+	Save these shortcuts as a new set	Salvar estes atalhos como um novo conjunto
+	Set deleted.	Conjunto excluído.
+	Set saved.	Conjunto salvo.
+	Set:	Conjunto:
+	Summarize…	Resumir…
+	There are too many sets: delete one first.	Há conjuntos demais: exclua um primeiro.
+	set name	nome do conjunto
+	{set} (modified)	{set} (modificado)
+	Accept and Go to Conflict	Aceitar e ir para o conflito
+	Changes undone.	Alterações desfeitas.
+	Choose a new shortcut for this command, or leave it without one.	Escolha um novo atalho para este comando ou deixe-o sem atalho.
+	Put this command's shortcuts back as they were	Restaurar os atalhos deste comando como estavam
+	Take the shortcut from the other command and select it	Tirar o atalho do outro comando e selecioná-lo
+	Undo Changes	Desfazer alterações
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} é reservado pelo sistema e não pode ser atribuído.
+	Low-Latency Drawing (vsync off, applies at next launch)	Desenho de baixa latência (sem sincronização vertical, aplicado na próxima inicialização)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	A Transformação livre ainda está sendo aplicada; tente novamente quando terminar.
+	The transform couldn't be applied.	Não foi possível aplicar a transformação.
 
 # Native-panel extensions
 	Manage Extensions…	Gerenciar extensões…

@@ -198,6 +198,13 @@ const SNAP_IDLE_TIMEOUT: f64 = 0.5;
 /// accumulator per viewport. `hovered` gates accumulation: only the viewport receiving
 /// navigation may add raw input to the snap residual.
 pub fn read(ctx: &Context, zoom_with_wheel: bool, pinch_zooms: bool, owner: Id, hovered: bool) -> Option<Wheel> {
+    read_with(ctx, zoom_with_wheel, pinch_zooms, owner, hovered, true)
+}
+
+/// [`read`], choosing how a plain wheel scroll pans: `smooth` glides it over a few frames (egui's
+/// smoothed delta); off, as with Interface › Enable Animations off, the view moves the whole notch
+/// in the frame the wheel turns and stops there (#5721), as scroll areas already do.
+pub fn read_with(ctx: &Context, zoom_with_wheel: bool, pinch_zooms: bool, owner: Id, hovered: bool, smooth: bool) -> Option<Wheel> {
     let notch = ctx.options(|o| o.input_options.line_scroll_speed);
 
     // --- Modifier tracking (always runs for all callers) ---
@@ -316,6 +323,8 @@ pub fn read(ctx: &Context, zoom_with_wheel: bool, pinch_zooms: bool, owner: Id, 
                 d.remove::<f64>(snap_time_id(owner));
             });
         }
+        // Unsmoothed, a plain scroll pans by this frame's own wheel events (none: no tail).
+        let scroll = if smooth || alt || shift { scroll } else { raw };
         classify(Input { scroll, raw, zoom_delta, alt, shift, zoom_with_wheel, pinch_zooms, notch })
     }
 }
@@ -368,6 +377,42 @@ mod tests {
 
     fn near(a: Vec2, b: Vec2) -> bool {
         (a - b).length() < 0.01
+    }
+
+    /// #5721: with smoothing off a wheel notch pans the whole notch in the frame it arrives and
+    /// nothing after; smoothed (the default) it glides, reaching the same total over later frames.
+    #[test]
+    fn unsmoothed_wheel_pans_at_once_without_a_glide() {
+        let pans = |smooth: bool| -> Vec<Vec2> {
+            let owner = Id::new("test-unsmoothed");
+            let ctx = Context::default();
+            configure(&ctx);
+            (0..30)
+                .map(|n| {
+                    let events = if n == 0 { vec![wheel(Vec2::new(0.0, -1.0), Modifiers::NONE)] } else { Vec::new() };
+                    let raw = RawInput { time: Some(f64::from(n) / 60.0), predicted_dt: 1.0 / 60.0, events, ..Default::default() };
+                    let mut pan = Vec2::ZERO;
+                    let mut out = ctx.run_ui(raw, |ui| {
+                        if let Some(Wheel::Pan(d)) = read_with(ui.ctx(), false, true, owner, true, smooth) {
+                            pan = d;
+                        }
+                    });
+                    out.textures_delta.clear();
+                    pan
+                })
+                .collect()
+        };
+        let notch = {
+            let ctx = Context::default();
+            configure(&ctx);
+            ctx.options(|o| o.input_options.line_scroll_speed)
+        };
+        let direct = pans(false);
+        assert!(near(direct[0], Vec2::new(0.0, -notch)), "the whole notch at once: {:?}", direct[0]);
+        assert!(direct[1..].iter().all(|p| *p == Vec2::ZERO), "no glide after it");
+        let smooth = pans(true);
+        assert!(smooth[0].y.abs() < notch - 0.5, "smoothed, the first frame moves only part of it: {:?}", smooth[0]);
+        assert!(smooth[1..].iter().any(|p| p.y != 0.0), "and the rest follows");
     }
 
     #[test]

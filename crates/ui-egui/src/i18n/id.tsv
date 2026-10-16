@@ -3166,6 +3166,32 @@ curves	Smooth	Haluskan
 # View › Guides › right-click a guide
 	Edit Selected Guides	Edit Panduan Terpilih
 	Clear Selected Guides	Hapus Panduan Terpilih
+	Delete this set	Hapus set ini
+	New Set…	Set Baru…
+	PhotoCraft Defaults	Bawaan PhotoCraft
+	Save a list of these shortcuts as a web page	Simpan daftar pintasan ini sebagai halaman web
+	Save the changes to this set	Simpan perubahan ke set ini
+	Save these shortcuts as a .kys file	Simpan pintasan ini sebagai file .kys
+	Save these shortcuts as a new set	Simpan pintasan ini sebagai set baru
+	Set deleted.	Set dihapus.
+	Set saved.	Set disimpan.
+	Set:	Set:
+	Summarize…	Ringkas…
+	There are too many sets: delete one first.	Terlalu banyak set: hapus satu terlebih dahulu.
+	set name	nama set
+	{set} (modified)	{set} (diubah)
+	Random	Acak
+	Accept and Go to Conflict	Terima dan Buka Konflik
+	Changes undone.	Perubahan dibatalkan.
+	Choose a new shortcut for this command, or leave it without one.	Pilih pintasan baru untuk perintah ini, atau biarkan tanpa pintasan.
+	Put this command's shortcuts back as they were	Kembalikan pintasan perintah ini seperti semula
+	Take the shortcut from the other command and select it	Ambil pintasan dari perintah lain dan pilih perintah itu
+	Undo Changes	Batalkan Perubahan
+	{shortcut} is reserved by the system and can't be assigned.	{shortcut} dicadangkan oleh sistem dan tidak dapat ditetapkan.
+	Low-Latency Drawing (vsync off, applies at next launch)	Menggambar latensi rendah (tanpa vsync, berlaku saat peluncuran berikutnya)
+# Free Transform: a new layer while the box is open (#5859)
+	Free Transform is still being applied; try again when it has finished.	Transformasi Bebas masih diterapkan; coba lagi setelah selesai.
+	The transform couldn't be applied.	Transformasi tidak dapat diterapkan.
 
 # Native-panel extensions
 	Manage Extensions…	Kelola ekstensi…

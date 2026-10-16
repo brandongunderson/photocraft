@@ -403,12 +403,26 @@ impl Ctx<'_> {
                 Some(p) if !stack.filters.is_empty() => self.filter_mask(&p.placed, &stack, &name),
                 _ => None,
             };
+            // Photoshop stores the filtered pixels without the filter mask and mixes the unfiltered
+            // ones (`FEid`) back in through it; our smart objects hold the mixed result.
+            let stored = self.record_surface(rec, &name);
+            let shown = stack.enabled && stack.filters.iter().any(|f| f.visible);
+            let cache = match (&placed, filter_mask.as_ref().filter(|m| m.enabled && shown)) {
+                (Some(p), Some(m)) => {
+                    let unfiltered = self.filter_effects.iter().find(|i| i.id == p.placed).and_then(|i| crate::smart_map::unfiltered_from_item(i, self.fmt));
+                    match unfiltered {
+                        Some(u) => photocraft_compose::filter_mask::mix(&u, &stored, m),
+                        None => stored,
+                    }
+                }
+                _ => stored,
+            };
             LayerContent::Smart(SmartObject {
                 contents_id,
                 source: SmartSource::Linked { path: id },
                 transform,
                 smart_filters: stack.filters,
-                cache: Some(self.record_surface(rec, &name)),
+                cache: Some(cache),
                 psd_raw: principal(k),
                 filters_enabled: stack.enabled,
                 filter_mask,
@@ -737,6 +751,32 @@ pub fn psd_to_document(file: &PsdFile) -> (Document, Vec<String>) {
 /// [`psd_to_document`] for a background open: checks `ctl` per layer record and reports
 /// progress. `None` when cancelled.
 pub fn psd_to_document_with(file: &PsdFile, ctl: &photocraft_raster::Interrupt) -> Option<(Document, Vec<String>)> {
+    psd_to_document_decoded(file, ctl, None)
+}
+
+/// Whether the import reads the merged composite: for a flattened or multichannel file (it *is*
+/// the image), a file without layers, or extra alpha/spot channels behind the colour ones.
+pub(crate) fn merged_needed(file: &PsdFile) -> bool {
+    let h = &file.header;
+    let mode = doc_mode(h.color_mode).unwrap_or(ColorMode::Rgb);
+    // A layered mode is its own pixel format, so these are the document's colour channels.
+    let layered = matches!(mode, ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Lab) && h.depth != 1;
+    !layered || file.layers().is_empty() || usize::from(h.channels) > mode.color_channels() + usize::from(file.merged_has_alpha())
+}
+
+/// A damaged merged preview need not prevent opening independently stored layers (#6152).
+/// Other modes are imported flattened, so their merged image cannot be discarded.
+pub(crate) fn can_recover_layers(file: &PsdFile) -> bool {
+    matches!(file.header.color_mode, PsdMode::Grayscale | PsdMode::Rgb | PsdMode::Cmyk | PsdMode::Lab) && file.header.depth != 1 && !file.layers().is_empty()
+}
+
+/// [`psd_to_document_with`] with the merged image already decoded (by
+/// [`PsdFile::from_bytes_and_merged`] with [`merged_needed`]), so it is not decoded again.
+pub(crate) fn psd_to_document_decoded(
+    file: &PsdFile,
+    ctl: &photocraft_raster::Interrupt,
+    decoded: Option<photocraft_psd::Result<Vec<u8>>>,
+) -> Option<(Document, Vec<String>)> {
     let h = &file.header;
     let mut warnings = Vec::new();
     let mode = doc_mode(h.color_mode).unwrap_or_else(|| {
@@ -859,18 +899,23 @@ pub fn psd_to_document_with(file: &PsdFile, ctl: &photocraft_raster::Interrupt) 
     // multichannel file (it *is* the image), or extra alpha/spot channels behind the colour
     // ones. A normal layered Photoshop save carries a merged composite nobody reads - roughly
     // half the file's bytes, decoded and thrown away on every open before this.
-    let extra = usize::from(h.channels) > cc + usize::from(file.merged_has_alpha());
-    let merged = if !layered || file.layers().is_empty() || extra {
-        let m = file.decode_merged();
+    let merged = if merged_needed(file) {
+        let m = decoded.unwrap_or_else(|| file.decode_merged());
         if ctl.cancelled() {
             return None;
         }
         ctl.progress(0.1);
         if let Err(e) = &m {
             cx.warn(format!("merged image could not be decoded: {e}"));
+            if can_recover_layers(file) {
+                cx.warn("extra alpha/spot channels in the merged image could not be recovered");
+            }
         }
         Some(m)
     } else {
+        if let Some(Err(e)) = decoded {
+            cx.warn(format!("merged image could not be decoded; opened the available layers instead: {e}"));
+        }
         None
     };
 

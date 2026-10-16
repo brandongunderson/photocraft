@@ -93,9 +93,25 @@ fn close_ring() -> Vec<Vec2> {
 }
 
 /// Can this pass show an OS cursor bitmap? eframe's immediate viewports and its web integration
-/// don't upload cursor images; every desktop root viewport does (winit custom cursors).
+/// don't upload cursor images; every desktop root viewport does (winit custom cursors). Wayland at
+/// any scale but 1 doesn't either: winit sizes the bitmap there with a `wp_viewport` destination
+/// that some compositors ignore on cursor surfaces (Hyprland 0.56; Mutter before GNOME 48). They
+/// show it one bitmap pixel per logical pixel, so at 1.25 a brush outline was 1.25× too large and
+/// its centre sat 0.2 × its half-width right of and below the pointer, which is where the brush
+/// painted. Nothing tells the app which compositor does what, so the outline is painted instead.
 fn native(ctx: &egui::Context) -> bool {
-    cfg!(not(target_arch = "wasm32")) && ctx.viewport_id() == egui::ViewportId::ROOT
+    cfg!(not(target_arch = "wasm32")) && ctx.viewport_id() == egui::ViewportId::ROOT && !scaled_wayland(ctx)
+}
+
+/// Mark this window as a Wayland surface (or not), for [`native`]; the shell calls it every pass.
+pub(crate) fn set_wayland(ctx: &egui::Context, wayland: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("photocraft-cursor-wayland"), wayland));
+}
+
+/// A Wayland window whose scale is not 1, where winit's cursor bitmaps are unreliable.
+fn scaled_wayland(ctx: &egui::Context) -> bool {
+    let wayland = cfg!(target_os = "linux") && ctx.data(|d| d.get_temp::<bool>(egui::Id::new("photocraft-cursor-wayland"))).unwrap_or(false);
+    wayland && ctx.native_pixels_per_point().unwrap_or_else(|| ctx.pixels_per_point() / ctx.zoom_factor()) != 1.0
 }
 
 /// Bitmap pixels per egui point. winit takes an `NSCursor` image's dimensions as logical points on

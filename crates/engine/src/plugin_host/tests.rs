@@ -646,3 +646,53 @@ fn contributed_native_tasks_use_background_job_dispatch_and_preserve_state_on_wo
         assert!(Arc::ptr_eq(&current.parts, &floating.parts), "{route}");
     }
 }
+
+#[test]
+fn contributed_shortcuts_use_the_headless_registry_and_round_trip_through_kys() {
+    let command = "org.example.platform.action";
+    let other = "org.example.platform.other";
+    let mut value = descriptor(OWNER, &[]);
+    value["contributes"] = json!({"commands":[
+        {"id":command,"label":"Neutral Action","event":"apply"},
+        {"id":other,"label":"Other Action","event":"apply"}
+    ]});
+    let mut s = Session::new();
+    install(&mut s, &value, &json!({}), false).unwrap();
+
+    s.execute("edit.keyboardShortcuts", json!({"set":{(command):"Cmd+C"}})).unwrap();
+    assert_eq!(s.prefs().shortcut("edit.copy", Some("Cmd+C")), None);
+    s.execute("edit.keyboardShortcuts", json!({"set":{(other):"Cmd+C"}})).unwrap();
+    assert_eq!(s.prefs().shortcut(command, None), None, "moving a key clears its previous plugin owner");
+
+    let main = "Cmd+Shift+F9";
+    let alternate = "F8";
+    let listed = s.execute("edit.keyboardShortcuts", json!({"set":{(command):main},"alternates":{(command):[alternate]},"list":true})).unwrap();
+    let row = listed["commands"].as_array().unwrap().iter().find(|row| row["id"] == command).unwrap();
+    assert_eq!(row["label"], "Neutral Action");
+    assert_eq!(row["menu"][0], "Plugins");
+    assert_eq!(row["shortcut"], main);
+    assert_eq!(row["alternates"], json!([alternate]));
+
+    let exported = s.execute("edit.keyboardShortcuts", json!({"exportKys":true,"summarize":true})).unwrap();
+    let xml = exported["kys"].as_str().unwrap().to_owned();
+    assert!(xml.contains(command));
+    assert!(exported["html"].as_str().unwrap().contains("Neutral Action"));
+    s.execute("edit.keyboardShortcuts", json!({"reset":true})).unwrap();
+    let imported = s.execute("edit.keyboardShortcuts", json!({"importKys":xml})).unwrap();
+    assert!(imported["import"]["set"].get(command).is_some());
+    assert!(!imported["import"]["unknown"].as_array().unwrap().iter().any(|label| label == "Neutral Action" || label == "Other Action"));
+    assert_eq!(s.prefs().shortcut(command, None), Some(main));
+    assert_eq!(s.prefs().alternates(command, Some(main)), [alternate]);
+
+    let before = s.prefs().clone();
+    assert!(s.execute("edit.keyboardShortcuts", json!({"set":{"org.example.missing":"F9"}})).is_err());
+    assert_eq!(s.prefs(), &before);
+    let reserved = ["Cmd+Tab", "Alt+F4"].into_iter().find(|key| crate::prefs::reserved_shortcut(key)).unwrap();
+    assert!(s.execute("edit.keyboardShortcuts", json!({"set":{(command):reserved}})).is_err());
+    assert_eq!(s.prefs(), &before);
+
+    s.execute("extension.remove", json!({"id":OWNER})).unwrap();
+    assert!(s.execute("edit.keyboardShortcuts", json!({"set":{(command):"F9"}})).is_err());
+    let listed = s.execute("edit.keyboardShortcuts", json!({"list":true})).unwrap();
+    assert!(!listed["commands"].as_array().unwrap().iter().any(|row| row["id"] == command));
+}

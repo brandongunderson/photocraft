@@ -161,7 +161,11 @@ mod tests {
         assert!(response.to_string().contains("Contributed command ran"), "{response}");
         assert!(app.ui.dialogs.is_empty());
         let set = crate::kys_import::KysSet {
-            commands: vec![crate::kys_import::KysCommand { name: "Organize layer names".into(), shortcuts: vec!["Ctrl+Shift+F9".into()] }],
+            commands: vec![crate::kys_import::KysCommand {
+                name: "Organize layer names".into(),
+                shortcuts: vec!["Ctrl+Shift+F9".into()],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         assert!(crate::kys_import::plan(&app, &set).set.contains_key(command_id));

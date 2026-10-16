@@ -759,14 +759,20 @@ pub fn text_field_ex(ui: &mut Ui, id: egui::Id, text: &mut String, hint: &str, w
         ui.painter().rect_stroke(rect, t.radius_sm, Stroke::new(1.0, t.field_border), StrokeKind::Inside);
     }
     let font = if mono { theme::mono(12.0) } else { egui::FontId::proportional(12.5) };
-    let mut edit = egui::TextEdit::singleline(text).id(id).hint_text(hint).frame(egui::Frame::NONE).font(font);
+    let inner = rect.shrink2(TEXT_FIELD_PAD);
+    // TextEdit draws its text at the top of its rect; fill the box and centre the line in it, so
+    // the text sits on the field's middle like a dropdown's or value field's.
+    let mut edit =
+        egui::TextEdit::singleline(text).id(id).hint_text(hint).frame(egui::Frame::NONE).font(font).min_size(inner.size()).vertical_align(egui::Align::Center);
     if let Some(limit) = char_limit {
         edit = edit.char_limit(limit);
     }
     // A child Ui keeps the field's selection colour local: `Visuals::selection` also fills selected
     // list rows and slider trails, which must keep the theme's.
     let layout = egui::Layout::centered_and_justified(egui::Direction::TopDown);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(TEXT_FIELD_PAD)).layout(layout));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(layout));
+    // The theme's 24 pt interact height would make the edit taller than the box's inside.
+    child.spacing_mut().interact_size.y = inner.height();
     child.style_mut().visuals.selection.bg_fill = t.field_selection();
     child.add(edit)
 }
@@ -818,6 +824,9 @@ fn number_edit(
     let mut resp = ui.add(
         egui::DragValue::new(value)
             .range(range.clone())
+            // Only edits are clamped (below): showing a value past the range, such as a type layer
+            // scaled to 2400 pt in a 1296 pt field, must not change it (#5717).
+            .clamp_existing_to_range(false)
             // A warp is an absolute-position jump. The scoped scrub below removes that jump.
             .speed(if wrapped_drag { 0.0 } else { speed })
             .custom_formatter(move |v, _| match decimals {
@@ -838,7 +847,12 @@ fn number_edit(
             }),
     );
     if wrap_drag {
-        crate::scrub_wrap::update(ui, &resp, value, before, range, speed, wrapping);
+        crate::scrub_wrap::update(ui, &resp, value, before, range.clone(), speed, wrapping);
+    }
+    let (lo, hi) = (*range.start(), *range.end());
+    // `f32::clamp` panics on a reversed or NaN range, which `DragValue::range` accepts.
+    if *value != before && lo <= hi {
+        *value = value.clamp(lo, hi);
     }
     resp.flags.set(egui::response::Flags::CHANGED, *value != before);
     resp
@@ -2272,6 +2286,29 @@ mod tests {
         h.key_press(egui::Key::Enter);
         h.run();
         assert_eq!(*h.state(), (25.0, 3));
+    }
+
+    /// #5717: a value past the range shows as it is without reporting a change; an edit is clamped.
+    #[test]
+    fn value_field_keeps_a_shown_value_past_its_range_and_clamps_edits() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut h = Harness::builder().with_size(egui::vec2(300.0, 100.0)).build_ui_state(
+            |ui, (v, changes): &mut (f32, u32)| {
+                if super::value_field(ui, v, 0.1..=1296.0, "pt", 90.0).changed() {
+                    *changes += 1;
+                }
+            },
+            (2400.0, 0),
+        );
+        h.run_steps(3);
+        assert_eq!(*h.state(), (2400.0, 0), "showing it changes nothing");
+        h.get_by_role(egui::accesskit::Role::SpinButton).click();
+        h.run();
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text("5000".into()));
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert_eq!(h.state().0, 1296.0, "a typed value is clamped");
     }
 
     #[test]

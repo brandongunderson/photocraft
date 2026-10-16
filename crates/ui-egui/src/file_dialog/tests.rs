@@ -329,8 +329,21 @@ fn scripts_browse_lists_only_script_files() {
     assert!(matches!(
         open.borrow().first().map(|(r, _)| r),
         Some(FileDialogRequest::Open { multiple: false, extensions: Some(exts), .. })
-            if exts.iter().map(String::as_str).collect::<Vec<_>>() == ["psjs", "ccjs", "jsx", "js", "jsxbin", "json", "txt"]
+            if exts.iter().map(String::as_str).collect::<Vec<_>>() == ["psjs", "ccjs", "jsx", "js", "jsxbin", "json", "txt", "pcdroplet"]
     ));
+}
+
+#[test]
+fn scripts_browse_extendscript_picks_report_the_error() {
+    // Photoshop scripts stay in the picker (matching its filter) and choosing one shows why it won't run.
+    let (mut app, open, _) = app();
+    let ctx = egui::Context::default();
+    menus::invoke(&mut app, &ctx, "file.scripts.browse", json!({})).unwrap();
+    app.poll_file_dialog(&ctx, None);
+    answer(&open, Some(FileDialogAnswer::Contents("resize.jsx".into(), b"alert('hi');".to_vec())));
+    app.poll_file_dialog(&ctx, None);
+    assert!(app.ui.status_error);
+    assert!(app.ui.status.contains("not Photoshop ExtendScript"), "{}", app.ui.status);
 }
 
 #[test]
