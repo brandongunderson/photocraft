@@ -12,7 +12,7 @@ use photocraft_geom::Rect;
 use photocraft_raster::{Interrupt, Surface};
 use serde::{Deserialize, Serialize};
 
-use crate::resample::{Resample, resize_surface};
+use crate::resample::{Resample, resize_surface_in_canvas};
 
 /// 3×3 projective matrix, row-major: `[x', y', w'] = H · [x, y, 1]`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -291,7 +291,30 @@ fn warp(
     // Bilinear samples the source directly, as Photoshop's does (exact at 50 % without a prefilter).
     if interp == Interp::Bicubic && scale < 0.999 && scale > 0.0 {
         let f = scale.max(1.0 / 64.0);
-        reduced = resize_surface(src, f, f, Resample::Bicubic);
+        // The warp sampler repeats the source rectangle's edge. The prefilter must do the same:
+        // sampling the transparent default here faded an opaque smart object's reduced preview.
+        // Share interior tiles and copy only clipped border tiles, so large cropped sources
+        // retain their sparse storage and do not need a full pixel copy before resampling.
+        let cropped;
+        let bounded = if src_rect.contains_rect(&src.content_bounds()) {
+            src
+        } else {
+            let mut bounded = Surface::with_default(src.format(), &src.default_pixel());
+            for (coord, tile) in src.tiles() {
+                let rect = coord.rect();
+                if src_rect.contains_rect(&rect) {
+                    bounded.put_tiles(std::iter::once((*coord, tile.clone())));
+                } else {
+                    let clipped = rect.intersect(&src_rect);
+                    if !clipped.is_empty() {
+                        bounded.try_write_region(clipped, &src.try_read_region(clipped)?)?;
+                    }
+                }
+            }
+            cropped = bounded;
+            &cropped
+        };
+        reduced = resize_surface_in_canvas(bounded, f, f, Resample::Bicubic, src_rect);
         src = &reduced;
         h = h.mul(&Homography([1.0 / f, 0.0, 0.0, 0.0, 1.0 / f, 0.0, 0.0, 0.0, 1.0]));
         src_rect = crate::resample::scaled_rect(src_rect, f, f);
@@ -573,6 +596,128 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn bicubic_downscale_preserves_opaque_source_edges_at_every_depth() {
+        use photocraft_color::{ColorMode, SampleType};
+
+        for sample in [SampleType::U8, SampleType::U16, SampleType::F32] {
+            for mode in [ColorMode::Rgb, ColorMode::Grayscale, ColorMode::Cmyk] {
+                let format = PixelFormat::new(mode, sample, true);
+                let colour = vec![1.0; format.channels()];
+                for rect in [Rect::new(0, 0, 32, 16), Rect::new(-16, -8, 16, 8)] {
+                    let mut src = Surface::new(format);
+                    src.fill_rect(rect, &colour);
+                    for scale in [0.5, 0.25, 0.125] {
+                        let h = Homography([scale, 0.0, 4.0, 0.0, scale, 4.0, 0.0, 0.0, 1.0]);
+                        let out = warp_surface(&src, rect, &h, Interp::Bicubic).unwrap();
+                        let expected = crate::resample::scaled_rect(rect, scale, scale).translate(4, 4);
+                        assert_eq!(out.content_bounds(), expected, "{mode:?}, {sample:?}, {rect:?}, scale {scale}");
+                        for y in expected.y0..expected.y1 {
+                            for x in expected.x0..expected.x1 {
+                                assert_eq!(out.pixel(x, y), colour, "{mode:?}, {sample:?}, {rect:?}, scale {scale}, ({x}, {y})");
+                            }
+                        }
+                        assert_eq!(out.pixel(expected.x0 - 1, expected.y0).last(), Some(&0.0));
+                        assert_eq!(out.pixel(expected.x1, expected.y1 - 1).last(), Some(&0.0));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bicubic_downscale_repeats_only_the_source_rect_edge() {
+        use photocraft_color::{ColorMode, SampleType};
+
+        for sample in [SampleType::U8, SampleType::U16, SampleType::F32] {
+            let mut src = Surface::new(PixelFormat::new(ColorMode::Rgb, sample, true));
+            src.fill_rect(Rect::new(-32, -32, 64, 64), &[1.0, 0.0, 0.0, 1.0]);
+            let rect = Rect::new(-16, -8, 16, 8);
+            src.fill_rect(rect, &[0.0, 1.0, 0.0, 1.0]);
+            let h = Homography([0.25, 0.0, 4.0, 0.0, 0.25, 4.0, 0.0, 0.0, 1.0]);
+            let out = warp_surface(&src, rect, &h, Interp::Bicubic).unwrap();
+            let expected = Rect::new(0, 2, 8, 6);
+            assert_eq!(out.content_bounds(), expected, "{sample:?}");
+            for y in expected.y0..expected.y1 {
+                for x in expected.x0..expected.x1 {
+                    assert_eq!(out.pixel(x, y), vec![0.0, 1.0, 0.0, 1.0], "{sample:?}, ({x}, {y})");
+                }
+            }
+            // Empty pixels inside the source rectangle remain transparent.
+            src.fill_rect(rect, &[0.0; 4]);
+            assert!(warp_surface(&src, rect, &h, Interp::Bicubic).unwrap().content_bounds().is_empty(), "{sample:?}");
+
+            // Crops away from the resampling grid match a source with the excluded pixels removed.
+            let rect = Rect::new(-13, -5, 19, 11);
+            src.fill_rect(rect, &[0.0, 0.5, 0.75, 0.5]);
+            let cropped = crate::resample::crop_surface(&src, rect);
+            for h in [h, Homography([0.5, 0.03125, 4.0, 0.0, 0.25, 4.0, 0.0, 0.0, 1.0])] {
+                let actual = warp_surface(&src, rect, &h, Interp::Bicubic).unwrap();
+                let expected = warp_surface(&cropped, rect, &h, Interp::Bicubic).unwrap();
+                let area = actual.content_bounds().union(&expected.content_bounds());
+                assert_eq!(actual.read_region(area), expected.read_region(area), "{sample:?}, {h:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn bicubic_downscale_keeps_transparency_inside_the_source_rect() {
+        use photocraft_color::{ColorMode, SampleType};
+
+        for sample in [SampleType::U8, SampleType::U16, SampleType::F32] {
+            let mut src = Surface::new(PixelFormat::new(ColorMode::Rgb, sample, true));
+            let rect = Rect::new(0, 0, 64, 64);
+            src.fill_rect(Rect::new(16, 16, 48, 48), &[0.25, 0.5, 0.75, 0.5]);
+            for (sx, sy) in [(0.25, 0.25), (0.5, 0.25)] {
+                let h = Homography([sx, 0.0, 4.0, 0.0, sy, 4.0, 0.0, 0.0, 1.0]);
+                let out = warp_surface(&src, rect, &h, Interp::Bicubic).unwrap();
+                assert_eq!(out.pixel(4, 4).last(), Some(&0.0), "{sample:?}, ({sx}, {sy})");
+                let center = out.pixel((32.0 * sx) as i32 + 4, (32.0 * sy) as i32 + 4);
+                let expected = src.pixel(32, 32);
+                for (actual, expected) in center.iter().zip(expected) {
+                    assert!((actual - expected).abs() < 1.0 / 255.0, "{sample:?}, ({sx}, {sy}): {center:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bicubic_cropped_downscale_matches_a_clean_multitile_source() {
+        use photocraft_color::{ColorMode, SampleType};
+
+        for sample in [SampleType::U8, SampleType::U16, SampleType::F32] {
+            let format = PixelFormat::new(ColorMode::Rgb, sample, true);
+            let rect = Rect::new(-13, -5, 787, 595);
+            let mut source = Surface::new(format);
+            source.fill_rect(Rect::new(-32, -32, 832, 640), &[1.0, 0.0, 0.0, 1.0]);
+            source.fill_rect(rect, &[0.0; 4]);
+            source.fill_rect(Rect::new(100, 100, 700, 500), &[0.25, 0.5, 0.75, 0.5]);
+            let mut clean = Surface::new(format);
+            clean.fill_rect(Rect::new(100, 100, 700, 500), &[0.25, 0.5, 0.75, 0.5]);
+            let h = Homography([0.25, 0.0, 4.0, 0.0, 0.25, 4.0, 0.0, 0.0, 1.0]);
+            let actual = warp_surface(&source, rect, &h, Interp::Bicubic).unwrap();
+            let expected = warp_surface(&clean, rect, &h, Interp::Bicubic).unwrap();
+            let area = actual.content_bounds().union(&expected.content_bounds());
+            assert_eq!(actual.read_region(area), expected.read_region(area), "{sample:?}");
+            assert_eq!(source.pixel(-20, -20), vec![1.0, 0.0, 0.0, 1.0], "cropping leaves the source intact");
+        }
+    }
+
+    #[test]
+    fn bicubic_cropped_downscale_keeps_huge_default_margins_sparse() {
+        let rect = Rect::new(0, 0, 100_000, 100_000);
+        let mut source = rgba();
+        source.fill_rect(Rect::new(16, 16, 32, 32), &[0.0, 1.0, 0.0, 1.0]);
+        let clean = source.clone();
+        source.fill_rect(Rect::new(200_000, 200_000, 200_016, 200_016), &[1.0, 0.0, 0.0, 1.0]);
+        let h = Homography([0.25, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 1.0]);
+        let clip = Rect::new(0, 0, 16, 16);
+        let actual = warp_surface_clipped(&source, rect, &h, Interp::Bicubic, clip).unwrap();
+        let expected = warp_surface_clipped(&clean, rect, &h, Interp::Bicubic, clip).unwrap();
+        assert_eq!(actual.read_region(clip), expected.read_region(clip));
+        assert!(actual.tile_count() <= 1);
     }
 
     /// Photoshop 27.11's Free Transform, Bicubic, 200 % about the centre of a 64 px image whose left
