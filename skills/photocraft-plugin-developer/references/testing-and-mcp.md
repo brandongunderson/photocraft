@@ -58,6 +58,8 @@ dispatching returned operations. Check each JSON report and exit status.
 Its clean build requires an explicit `PHOTOCRAFT_PLUGIN_CARGO` executable and
 `PHOTOCRAFT_PLUGIN_BUILD_PATH` containing the required build tools. Outputs must be
 fresh destinations. For other layouts, use the plugin's own build scripts and `pack`.
+Use an absolute Cargo launcher path that preserves its `cargo` filename; resolving a rustup
+proxy symlink to `rustup` changes how the executable interprets its arguments.
 The developer tool may be supplied as a binary; plugins do not link to host source.
 
 ## MCP discovery and limits
@@ -118,9 +120,8 @@ quarantine recovery. Check `extension.commands` for scheduler limits and `extens
 for status. These are trusted host/control calls, outside guest command grants. Managed
 migrations must leave the old code/data selected after failure; test explicit rollback and
 source/destination lease contention. Preserve external caches and verify independent packaging.
-Phase milestones evolve one current PhotoCraft Plugin API. Old panel version 1 is rejected;
-test its migration to the current API in the plugin's own project. Keep filter/native transport
-fixtures distinct. Native admission estimates are not OS hard limits.
+Keep panel, filter and native transport fixtures distinct. Native admission estimates are
+not OS hard limits.
 
 ## Release-update acceptance
 

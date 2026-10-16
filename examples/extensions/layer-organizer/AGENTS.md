@@ -18,9 +18,9 @@ Rebuild embedded manifests and keep the stable ID for updates to an existing plu
 ## Experimental current API contract
 
 This is the PhotoCraft Plugin API, package format 2, and import-free core WASM with `pce_*` exports.
-It requests `host.document.read` and `host.document.edit`; it does not need legacy
+It requests `host.document.read` and `host.document.edit`; it does not need
 `documentRead` summary access or broad engine command grants. Capability availability
-is not authority. Older panel-1-only hosts reject the current authoring API.
+is not authority.
 
 Read snapshots through `documents.layers.read` and consume the `host_response`
 continuation. Treat document/layer handles as opaque, scoped, revision-bound values.

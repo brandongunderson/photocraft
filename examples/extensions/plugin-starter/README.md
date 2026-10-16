@@ -3,8 +3,7 @@
 Copy this folder to start an independent plugin project. It builds a single
 `Hello-PhotoCraft.pcext`: ordinary core WebAssembly with an embedded manifest.
 It implements the PhotoCraft Plugin API directly, with no dependency on the editor
-workspace or an external SDK. The manifest/export discriminator is 2; obsolete
-panel API 1 modules must be rebuilt for the current host.
+workspace or an external SDK. The manifest/export wire discriminator is 1.
 PhotoCraft draws the native panel from `manifest.json` and runs the guest only
 when a declared button is clicked.
 

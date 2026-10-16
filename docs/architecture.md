@@ -1,6 +1,6 @@
 # PhotoCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-16 · **Change:** minor (standalone typed plugin SDK and manifest generation; lazy plugin activation, persistent workers, fair scheduling, generation leases and managed-state rollback; dedicated core model and algorithm adapters removed; general image plugin package v2 and owned native/WASM processors; workspace size and test counts recounted; current-state summary added; the design plan below is kept, with its deviations listed) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-16 · **Change:** minor (standalone typed plugin SDK and manifest generation; lazy plugin activation, persistent workers, fair scheduling, generation leases and managed-state rollback; generic plugin-owned processing; general image plugin package v2 and owned native/WASM processors; workspace size and test counts recounted; current-state summary added; the design plan below is kept, with its deviations listed) · **Target:** Adobe Photoshop 2026
 
 ## Current state (2026-10-10)
 
@@ -600,7 +600,7 @@ Each phase ends with a demoable build and green CI on all targets. Phases 8–10
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-14 | minor | Native-panel extension API v1: installation, bounded WASM events, explicit editing grants and a Rust starter; Photoshop compatibility and broader host APIs remain open; estimates unchanged |
+| 2026-10-14 | minor | PhotoCraft Plugin API: installation, bounded WASM events, explicit editing grants and a Rust starter; Photoshop compatibility and broader host APIs remain open; estimates unchanged |
 | 2026-10-13 | minor | Workspace size and `#[test]` counts recounted (393k → 539k lines, 5,460 → 8,040 tests); other current-state figures unchanged |
 | 2026-10-10 | minor | Current-state summary and deviations from the plan; status line; broken link to `photoshop-parity.md` repointed to `target-app-parity.md` |
 | 2026-09-30 | major | Design plan v1 |

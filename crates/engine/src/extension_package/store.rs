@@ -13,7 +13,21 @@ pub(crate) struct StoreGuard {
     _file: File,
 }
 
+impl Drop for StoreGuard {
+    fn drop(&mut self) {
+        // A concurrent Unix fork may inherit this open file description until exec closes
+        // it. Closing only our descriptor can leave its flock alive after this guard ends.
+        // Unlock the owned lease explicitly; independently opened guards keep their locks.
+        let _ = self._file.unlock();
+    }
+}
+
 impl StoreGuard {
+    #[cfg(all(test, unix))]
+    pub(super) fn duplicate_descriptor_for_test(&self) -> std::io::Result<File> {
+        self._file.try_clone()
+    }
+
     pub(crate) fn read(root: &Path) -> Result<Self> {
         Self::acquire(root, false)
     }

@@ -62,8 +62,8 @@ Report exact artifact/source paths, tested host/platform, checks, and limitation
 
 ## Optional typed SDK authoring
 
-This existing project keeps its supported wire versions and needs no SDK migration.
-For a new API-2 project, `photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
+This project implements the filter ABI. For a new panel project using the PhotoCraft Plugin API,
+`photocraft-plugin new AUTHORING_JSON FRESH_PROJECT` supplies
 private API/SDK 0.1 sources, locks, licenses and a local guide. Edit `authoring.json`
 and the handler; generated manifests/bindings belong in Cargo `OUT_DIR`. Keep local
 SDK dependencies inside that project and retain its release hash index. Do not link

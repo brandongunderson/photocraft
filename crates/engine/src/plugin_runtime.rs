@@ -778,7 +778,7 @@ fn main(){
     }
 
     fn persistent_package(worker: &[u8], version: &str) -> Vec<u8> {
-        let manifest = json!({"apiVersion":2,"id":"org.example.lifecycle","name":"Worker lifecycle","version":version,
+        let manifest = json!({"apiVersion":1,"id":"org.example.lifecycle","name":"Worker lifecycle","version":version,
             "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
             "permissions":{"commands":["plugin.runTask","plugin.processImage"]},"panel":{"buttons":[{"id":"run","label":"Run"}]}})
         .to_string();
@@ -786,7 +786,7 @@ fn main(){
         let module = wat::parse_str(format!(
             r#"(module (memory (export "memory") 2)
             (data (i32.const 16) "{escaped}") (data (i32.const 2048) "{{}}")
-            (func (export "pce_api_version") (result i32) i32.const 2)
+            (func (export "pce_api_version") (result i32) i32.const 1)
             (func (export "pce_manifest") (result i64) i64.const {})
             (func (export "pce_alloc") (param i32) (result i32) i32.const 4096)
             (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,

@@ -19,12 +19,11 @@ Changing embedded JSON requires rebuilding. Preserve ABI helpers and license fil
 
 ## Current API boundaries
 
-The panel uses the PhotoCraft Plugin API (`pce_*`, discriminator 2), the bundled
+The panel uses the PhotoCraft Plugin API (`pce_*`, discriminator 1), the bundled
 filter ABI 1 (`pc_*`), package format 2, and worker protocol 1. The handler parses
 typed host event metadata and declares `host.commands.invoke` plus its exact command
 grant. Additive envelope fields are allowed; incompatible protocol versions fail.
-See `docs/plugin-api.md` in the matching source/kit. Obsolete panel modules must
-be rebuilt; do not restore a compatibility adapter in the editor. WASM guests are import-free; no WASI, filesystem/network,
+See `docs/plugin-api.md` in the matching source/kit. WASM guests are import-free; no WASI, filesystem/network,
 arbitrary drawing, or persistent instance state is provided. Native controls are
 number/int/bool/choice fields and buttons. Do not infer proposed package/worker APIs.
 

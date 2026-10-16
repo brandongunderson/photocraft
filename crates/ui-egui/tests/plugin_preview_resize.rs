@@ -13,7 +13,7 @@ fn portable_package() -> Vec<u8> {
     let mut zip = ZipWriter::new();
     let info = json!({"packageVersion":2,"module":"plugin.pcext","filters":[{"module":"filters/channel-gain.wasm"}]});
     zip.add("package.json", &serde_json::to_vec(&info).unwrap()).unwrap();
-    zip.add("plugin.pcext", include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel-v2.wasm")).unwrap();
+    zip.add("plugin.pcext", include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel.wasm")).unwrap();
     zip.add("filters/channel-gain.wasm", include_bytes!("../../../tests/plugin-compatibility/frozen/channel-gain-filter-v1.wasm")).unwrap();
     zip.add("LICENSE", include_bytes!("../../../tests/plugin-compatibility/licenses/LICENSE")).unwrap();
     zip.add("THIRD-PARTY-NOTICES.md", include_bytes!("../../../tests/plugin-compatibility/licenses/THIRD-PARTY-NOTICES.md")).unwrap();

@@ -1,4 +1,4 @@
-//! End-to-end qualification of actual independently compiled API-2 WASM packages.
+//! End-to-end qualification of independently compiled PhotoCraft plugin packages.
 //!
 //! Build both examples first, then explicitly run this ignored artifact suite:
 //! `cargo test -p photocraft-engine --test plugin_platform_examples -- --ignored`.
@@ -51,7 +51,7 @@ fn restarted(projects: &[&str]) -> (tempfile::TempDir, Session, PathBuf) {
     assert!(session.extensions.load_errors.is_empty(), "{:?}", session.extensions.load_errors);
     assert_eq!(session.extensions.installed.len(), projects.len());
     for installed in session.extensions.installed.values() {
-        assert_eq!(installed.extension.manifest.api_version, 2);
+        assert_eq!(installed.extension.manifest.api_version, photocraft_plugin_api::PANEL_API_VERSION);
         assert!(installed.native.is_none(), "the independent panel packages need no native runtime");
         assert!(installed.filters.is_empty());
     }

@@ -118,7 +118,7 @@ mod tests {
     use serde_json::json;
 
     fn request(state: serde_json::Value) -> Vec<u8> {
-        serde_json::to_vec(&json!({"apiVersion":2,"host":{"version":1,"capabilities":[]},"event":"info","values":{},"state":state})).unwrap()
+        serde_json::to_vec(&json!({"apiVersion":1,"host":{"version":1,"capabilities":[]},"event":"info","values":{},"state":state})).unwrap()
     }
 
     #[test]

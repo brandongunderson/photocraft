@@ -26,18 +26,18 @@ pub fn all() -> Vec<(&'static str, Schema)> {
         field.insert("unevaluatedProperties".into(), serde_json::Value::Bool(false));
     }
     vec![
-        ("panel-v2.schema.json", descriptor()),
-        ("panel-v2-response.schema.json", panel_response()),
-        ("host-api-v1.schema.json", host_api()),
-        ("panel-v2-event.schema.json", schema_for!(crate::EventRequest)),
-        ("authoring-v1.schema.json", authoring),
-        ("package-v2.schema.json", schema_for!(crate::PackageV2)),
-        ("layers-read-v1.schema.json", schema_for!(crate::LayersRead)),
-        ("layers-edit-v1.schema.json", schema_for!(crate::LayersEdit)),
-        ("layers-snapshot-v1.schema.json", schema_for!(crate::LayersSnapshot)),
-        ("layers-edited-v1.schema.json", schema_for!(crate::LayersEdited)),
-        ("worker-v2.schema.json", schema_for!(crate::WorkerV2Descriptor)),
-        ("worker-v2-host-frame.schema.json", schema_for!(crate::HostWorkerFrame)),
-        ("worker-v2-guest-frame.schema.json", schema_for!(crate::WorkerHostFrame)),
+        ("panel.schema.json", descriptor()),
+        ("panel-response.schema.json", panel_response()),
+        ("host-api.schema.json", host_api()),
+        ("panel-event.schema.json", schema_for!(crate::EventRequest)),
+        ("authoring.schema.json", authoring),
+        ("package.schema.json", schema_for!(crate::PackageV2)),
+        ("layers-read.schema.json", schema_for!(crate::LayersRead)),
+        ("layers-edit.schema.json", schema_for!(crate::LayersEdit)),
+        ("layers-snapshot.schema.json", schema_for!(crate::LayersSnapshot)),
+        ("layers-edited.schema.json", schema_for!(crate::LayersEdited)),
+        ("worker.schema.json", schema_for!(crate::WorkerV2Descriptor)),
+        ("worker-host-frame.schema.json", schema_for!(crate::HostWorkerFrame)),
+        ("worker-guest-frame.schema.json", schema_for!(crate::WorkerHostFrame)),
     ]
 }

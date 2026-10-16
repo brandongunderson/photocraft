@@ -40,6 +40,7 @@ pub struct Installed {
 
 #[derive(Default)]
 pub struct ExtensionHost {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) updates: crate::extension_update_cmds::UpdateState,
     pub(crate) platform: crate::plugin_host::Platform,
     pub installed: BTreeMap<String, Installed>,

@@ -12,7 +12,7 @@ fn extension_bytes() -> Vec<u8> {
 }
 
 fn extension_bytes_for(id: &str) -> Vec<u8> {
-    let manifest = json!({"apiVersion":2,"id":id,"name":"Preview fixture","version":"1.0.0",
+    let manifest = json!({"apiVersion":1,"id":id,"name":"Preview fixture","version":"1.0.0",
         "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
         "permissions":{"commands":["plugin.processImage"]},"panel":{"buttons":[{"id":"process","label":"Preview"}]}})
     .to_string();
@@ -22,7 +22,7 @@ fn extension_bytes_for(id: &str) -> Vec<u8> {
         r#"(module
         (memory (export "memory") 4 512)
         (data (i32.const 32) "{quote}")
-        (func (export "pce_api_version") (result i32) i32.const 2)
+        (func (export "pce_api_version") (result i32) i32.const 1)
         (func (export "pce_manifest") (result i64) i64.const {packed})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const 0)

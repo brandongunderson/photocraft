@@ -4,12 +4,13 @@ use serde_json::Value;
 
 use crate::{ApiError, ErrorCode, HostApi, MAX_RESPONSE_BYTES, MAX_STATE_BYTES, NegotiatedCapabilities, Result, json_size};
 
-/// Additional event-envelope fields may be ignored by old guests. Descriptors and effects
+/// Guests may ignore additional event-envelope fields. Descriptors and effects
 /// remain strict. Unknown events must be handled without inventing new host authority.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct EventRequest {
+    #[cfg_attr(feature = "schema", schemars(range(min = 1, max = 1)))]
     pub api_version: u32,
     pub host: HostApi,
     #[serde(default)]
@@ -29,6 +30,7 @@ pub struct EventRequest {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Compatibility {
+    #[cfg_attr(feature = "schema", schemars(range(min = 1, max = 1)))]
     pub panel_api: u32,
     pub host_api: u16,
     pub negotiated: NegotiatedCapabilities,

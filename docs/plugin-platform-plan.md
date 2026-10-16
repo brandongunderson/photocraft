@@ -29,7 +29,7 @@ The SDK is a development dependency, not a separately installed runtime service.
 
 ## 2. Existing contracts to preserve
 
-The implementation provides package format 2, the PhotoCraft Plugin API, standalone filter ABI 1 and native worker protocols 1 and 2. These are separate version dimensions. The Plugin API is the only supported panel contract (internal discriminator `2`); its obsolete version-1 adapter has been removed. Owned plugins migrate in their independent repositories. Package-v1 AI services have also been retired; this plan protects current contracts and retains repair guidance for retired installations.
+The implementation provides the PhotoCraft Plugin API, package format 2, standalone filter ABI 1 and native worker protocols 1 and 2. These contracts have separate wire markers. The Plugin API uses internal discriminator `1`; plugins remain independent projects and releases.
 
 | Existing area | Preserve |
 |---|---|
@@ -38,11 +38,11 @@ The implementation provides package format 2, the PhotoCraft Plugin API, standal
 | `crates/engine/src/extension_package.rs` | Safe archive paths, hashes, installation generations, staged publication, repair and ownership checks. |
 | `crates/engine/src/plugin_image_cmds.rs` | Owning-installation processor resolution and generic image processing. |
 | `crates/engine/src/plugin_task_cmds.rs` | Owned native maintenance jobs without an open document. |
-| `crates/engine/src/plugin_runtime.rs` | Legacy `--job`/`--task` workers, progress, cancellation and output validation. |
+| `crates/engine/src/plugin_runtime.rs` | Protocol 1 `--job`/`--task` workers, progress, cancellation and output validation. |
 | `crates/engine/src/plugin_preview.rs` | Source/revision validation, result revocation and safe Apply/Discard. |
 | `crates/ui-egui/src/extension_ui.rs` and submodules | Native panels, manager, review, comparison and shared controls. |
 
-Keep existing supported plugins and neutral starters working as delivered. Do not silently reinterpret old messages, increase their permissions or change the legacy 8-bit sRGB processing boundary. Existing panel command lists remain sequential; a new atomic editing API must have distinct semantics.
+Keep existing supported plugins and neutral starters working as delivered. Do not silently reinterpret old messages, increase their permissions or change the 8-bit sRGB PNG processing boundary. Existing panel command lists remain sequential; a new atomic editing API must have distinct semantics.
 
 ## 3. Supported extension categories
 
@@ -124,18 +124,10 @@ A request's identity comes from the host invocation context, never a guest-suppl
 
 ### 5.1 One production API
 
-This is a pre-release platform with only our own plugins. The implementation phases evolve
-one current public API; a completed milestone does not create a new API major. Do not publish
-parallel production APIs, duplicate SDKs or calendar legacy-support commitments before there
-is an external ecosystem that needs them. The SDK guide records current contracts and checks.
-
-PhotoCraft Plugin API is the only supported panel authoring contract. Its internal discriminator
-is `2`; obsolete version-1 panels must be rebuilt in their independent repositories. No panel
-adapter or synchronized runtime dependency is retained. Native worker protocol 1 remains a
-supported transport, independent of the public panel API. Package format 2 and filter ABI 1
-continue to serve their existing purposes. The opt-in worker-2
-transport changes actual process framing/lifetime, so it requires an explicit selector rather
-than guessing a protocol from an executable. These wire-format labels are not milestone APIs.
+PhotoCraft Plugin API is the panel authoring contract, with internal wire discriminator `1`.
+Package format 2, filter ABI 1 and native worker protocols 1/2 are separate contracts. A native
+worker's explicit protocol selector determines process framing and lifetime; the host never
+guesses its protocol from an executable.
 
 Add compatible capabilities and optional messages to this API during development. Introduce a
 new major only for a real breaking wire or behavior change that cannot be made safely additive.
@@ -216,7 +208,7 @@ Do not silently migrate a saved recipe to a different algorithm version. A plugi
 
 Add engine-owned tool sessions receiving normalized pointer, pressure, tilt, keyboard and modifier events. Output is bounded overlay primitives, cursor descriptions, previews or typed edit intents. A stroke commits as one transaction; cancellation/focus loss/document close aborts uncommitted work.
 
-Use the existing native input and brush infrastructure. Add one generic contributed-tool identity and provider adapter; adding a second plugin tool must not require another built-in enum variant or routing branch. Keep legacy WASM instances fresh; current API interactive sessions may use bounded persistent instances with per-event fuel, explicit reset and teardown. Heavy native work runs asynchronously. No arbitrary plugin callback executes in the UI drawing path, and no synchronous native round trip is required for every pointer sample. A slow provider is paused or loses interactive admission before it degrades the entire editor.
+Use the existing native input and brush infrastructure. Add one generic contributed-tool identity and provider adapter; adding a second plugin tool must not require another built-in enum variant or routing branch. Keep WASM event instances fresh; current API interactive sessions may use bounded persistent instances with per-event fuel, explicit reset and teardown. Heavy native work runs asynchronously. No arbitrary plugin callback executes in the UI drawing path, and no synchronous native round trip is required for every pointer sample. A slow provider is paused or loses interactive admission before it degrades the entire editor.
 
 ### 6.7 Formats, assets and integrations
 
@@ -289,7 +281,7 @@ Effort ranges below are initial engineering estimates for completed code, tests,
 | 1 Contracts and SDK | Publish API crate/schema; capability and contribution descriptors; one current API handshake/envelope; starter CLI/specification | New `crates/plugin-api`, guest SDK, `crates/plugins`, engine registry, `xtask/src/layers.rs` | Phase 0 | 3–5 weeks |
 | 2 Lifecycle and store | Lazy descriptors, supervisor, worker protocol 2, per-plugin scheduling, quotas, cross-process locks/leases and migration/rollback plumbing | `extension_package.rs`, proposed `engine/src/plugin_host/`, `jobs.rs`, startup | Phase 1 | 5–8 weeks |
 | 3 Commands documents events and views | Dynamic command registration; paged reads; atomic edit batches; event delivery; native view schema/docking; durable settings | `commands.rs`, proposed `plugin_host/{broker,contributions,documents,events}.rs`, `extension_ui/`, `state.rs`, automation | Phases 1–2 | 6–9 weeks |
-| 4 Image transport | Profile/depth-aware descriptors, regions, masks, generators' basic output, streaming blobs, cancellation and legacy PNG adapter | `plugin_image_cmds.rs`, `plugin_runtime.rs`, `plugins/`, raster/CMS adapters | Phases 1–2; integrate with Phase 3 | 5–9 weeks |
+| 4 Image transport | Profile/depth-aware descriptors, regions, masks, generators' basic output, streaming blobs, cancellation and PNG adapter | `plugin_image_cmds.rs`, `plugin_runtime.rs`, `plugins/`, raster/CMS adapters | Phases 1–2; integrate with Phase 3 | 5–9 weeks |
 | 5 Live effects and document persistence | Recipe references, render scheduling/cache, unknown data preservation, migrations, missing-plugin behavior and deterministic generators | `doc`, `compose`, `format`, `engine` smart/filter paths | Phases 3–4 | 6–10 weeks |
 | 6 Tools formats assets and appearance | Interactive tool/brush sessions; overlays; generic format providers; asset catalogs; theme/workspace contributions; neutral acceptance plugins | `engine`, `paint`, `io`, `ui-egui/{canvas,tool_*,dock,theme}.rs`, format adapters | Phases 3–5; format/asset work can begin earlier | 8–14 weeks |
 | 7 Trust and distribution | Verified native containment profiles; signing/update policy; permission diffs; rollback/revocation; offline developer tooling | Supervisor, package store, manager, SDK tooling, distribution service if selected | Phase 2; begins before broad beta | 4–7 weeks |
@@ -302,7 +294,7 @@ Security, compatibility and cross-platform tests begin with the first phase that
 | Phase | Gate required before proceeding or advertising the capability |
 |---|---|
 | 0 | Exact existing packages install, restart, process, cancel and Apply through the public APIs. Record source preservation, enabled state, known limits and installed dependency closure. Baselines run on a reproducible release build; resolve the recorded GNU `nanosleep64` link blocker or establish an explicitly supported alternative build before publishing release-performance claims. |
-| 1 | Current API binaries run unchanged; obsolete owned panels are rebuilt independently. Missing required capabilities fail clearly; missing optional ones take tested fallbacks. Generated schemas and bindings agree. Build a neutral plugin with editor/sibling sources absent. |
+| 1 | Current API binaries work independently. Missing required capabilities fail clearly; missing optional ones take tested fallbacks. Generated schemas and bindings agree. Build a neutral plugin with editor/sibling sources absent. |
 | 2 | Installing 1,000 dormant synthetic descriptors starts no workers. Two editor processes cannot delete or replace an in-use generation. Crash/full-disk/interrupted-migration tests preserve the prior working installation and managed data. |
 | 3 | Layer Organizer commits one Undo step or none; Document Inspector updates without polling the UI each frame. Revoked handles, event storms and stale document revisions are rejected. Dynamic commands work through UI and authorized headless entry points. |
 | 4 | Pixel/alpha/profile tests pass at 8/16/32f, grayscale/RGB/CMYK, masks, nonzero origins and region edges. Processing does not require a whole-image allocation. Unsupported formats are reported, not silently converted. Existing PNG workers remain unchanged. |
@@ -314,34 +306,20 @@ Security, compatibility and cross-platform tests begin with the first phase that
 ### Release milestones
 
 - **Foundation preview after Phase 3:** compatibility, SDK, commands, document edits, events and native views. Describe only these completed capabilities as supported.
-- **General editor extension beta after Phase 6 and the required Phase 7 trust gates:** demonstrate every category with independent neutral plugins. Existing AI packages remain useful regression fixtures rather than the definition of the platform.
+- **General editor extension beta after Phase 6 and the required Phase 7 trust gates:** demonstrate every category with independent neutral plugins. Neutral compatibility fixtures and independent plugin acceptance suites verify the platform.
 - **Stable platform release after Phase 8:** publish the support window, API/schema versions, target matrix, compatibility results and measured budgets. Future capabilities follow the same review and conformance process.
 
-## 9. First implementation slice
-
-Start with the following small, ordered changes. Each is a reviewable pull request when implementation is authorized.
-
-| Change | Exact scope | Required evidence |
-|---|---|---|
-| P01 Compatibility fixtures | Add immutable neutral fixtures for current panel/filter/package/native protocols. Keep independently released plugin fixtures and acceptance tests in their own repositories. Record hashes and licenses; fetch large permitted artifacts from a controlled test store rather than commit runtime/model binaries. | Exercise old bytes, not rebuilt current-source replacements; install/restart/cancel/Apply/repair all pass. |
-| P02 Standalone conformance tool | Extend the independent starter checks into a developer command that checks package shape, manifests, ABI, declared targets, dependency ownership and clean exported builds. Keep Python packaging helpers supported while adding a Rust developer-tool path. | A clean exported Image Gain project builds and packages without the editor, a sibling plugin, companion or hidden PATH dependency. |
-| P03 API and descriptor schema | Add `photocraft-plugin-api`, JSON schemas, typed capability IDs, structured errors and descriptor validation. Register its L0 layer. Document the current panel API without introducing a milestone package format. | Schema round trips, malformed inputs, generation consistency and layer/wasm checks pass. |
-| P04 Broker and command effects | Introduce host-injected principals, scoped handles, capability discovery and structured incompatibility errors. Preserve sequential command effects within the current API. | Cross-plugin/generation/automation authority tests and current compatibility fixtures pass. |
-| P05 One new vertical slice | Register a contributed Layer Organizer command and Document Inspector view; add single-document atomic edits plus the minimal layer-change event needed by those two plugins. | Both plugins are independent packages. Organizer changes several layers in one Undo step; Inspector reflects changes; injected failure commits nothing. |
-
-P05 is the first proof that the framework serves new editor functionality beyond image-processing jobs. Independent packages demonstrate that supported additive API changes do not force synchronized releases. The pre-release cleanup removes the obsolete panel adapter; owned panels must be rebuilt once for the current API.
-
-### First implementation slice (2026-10-15)
+## 9. Completed foundation
 
 P01–P05 now have concrete implementations. This is an additive foundation and two working
 extension categories, rather than completion of all categories in section 3.
 
 | Change | Implementation |
 |---|---|
-| P01 | [Immutable compatibility corpus](../tests/plugin-compatibility/README.md), pinned compiled neutral panel/filter, golden responses and the external neutral native archive hash. Explicit native tests fail when an artifact is absent or changed. |
+| P01 | [Compatibility corpus](../tests/plugin-compatibility/README.md), pinned compiled neutral panel/filter, golden responses and independently compiled neutral native worker bytes. Explicit native tests fail when an artifact is absent or changed. |
 | P02 | [Rust conformance tool](../apps/photocraft-plugin/README.md): package/ABI/target validation, local dependency ownership, clean exported builds, deterministic packaging and hashes. Existing Python helpers remain usable. |
 | P03 | Independent `photocraft-plugin-api` L0 contract crate, generated [JSON schemas](../schemas/plugins/), capability negotiation, contributions and structured errors. [PhotoCraft Plugin API](plugin-api.md) is the current pre-release authoring API; package format 2 remains its container. |
-| P04 | `engine/src/plugin_host/`: host-created principals, session/installation-scoped handles, revision checks, captured/current automation policies, capability discovery and sequential current-API command effects. The initial panel-1 adapter was removed in the pre-release cleanup. Startup and installation reject contributed command collisions. |
+| P04 | `engine/src/plugin_host/`: host-created principals, session/installation-scoped handles, revision checks, captured/current automation policies, capability discovery and sequential command effects. Startup and installation reject contributed command collisions. |
 | P05 | Dynamic command discovery/menu/palette/assigned-shortcut routing, bounded layer snapshots and atomic rename/visibility batches, coalesced document invalidations and native read-only inspectors. Independently built [Layer Organizer](../examples/extensions/layer-organizer/) and [Document Inspector](../examples/extensions/document-inspector/) packages exercise the real WASM boundary. |
 
 The first host slice supports one inspector and one matching document subscription per
@@ -416,7 +394,7 @@ Include 1/10/100/1,000 dormant-plugin runs, 20 model-heavy packages, multiple do
 
 Every capability family needs a neutral sample, schema documentation, negative cases and a compatibility fixture. Compile/run the guest artifacts in the actual host; pure handler tests are insufficient.
 
-- Preserve old package/panel/filter/native worker artifacts and behavior across supported host releases.
+- Preserve supported package, panel, filter and native worker artifacts across compatible host releases.
 - Test missing required/optional capabilities, permission changes, malformed messages, integer overflow, invalid handles, queue overflow, recursion, EOF, cancellation and plugin crashes.
 - Prove cross-plugin and cross-generation isolation for jobs, assets, documents, secrets references, callbacks and preview Apply.
 - Test one-step Undo/Redo, failed-transaction preservation, source changes, locks and stale results at several bit depths and profiles.

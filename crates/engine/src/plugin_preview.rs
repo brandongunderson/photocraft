@@ -55,6 +55,7 @@ struct PendingPreview {
 }
 
 impl PreviewStore {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn clear(&mut self) {
         self.previews.clear();
         self.pending.clear();

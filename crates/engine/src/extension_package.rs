@@ -487,7 +487,6 @@ fn check_info(info: &PackageInfo) -> Result<()> {
         return Err(error("unsupported package module (expected plugin.pcext)"));
     }
     match info.package_version {
-        1 => return Err(error("Version 1 native plugin packages are no longer supported. Install an updated version 2 package from the plugin publisher.")),
         2 => {
             if info.filters.len() > 16 {
                 return Err(error("a package may declare at most 16 filters"));
@@ -495,7 +494,7 @@ fn check_info(info: &PackageInfo) -> Result<()> {
             let mut names = BTreeSet::from(["package.json".to_owned(), "plugin.pcext".into(), "license".into(), "third-party-notices.md".into()]);
             if let Some(native) = &info.native {
                 if native.service != "plugin.processImage" {
-                    return Err(error("version 2 native service must be plugin.processImage"));
+                    return Err(error("native service must be plugin.processImage"));
                 }
                 if !matches!(
                     native.platform.as_str(),
@@ -1193,8 +1192,7 @@ fn install_guarded_with_publication(
         previous.as_ref().filter(|previous| previous.hash != record.hash).map(|previous| generation_lease(root, id, &previous.hash, true)).transpose()?;
     let destination_lease = generation_lease(root, id, &record.hash, true)?;
     let destination = generation(root, &record)?;
-    // Preserve an old ownership representation when reinstalling its exact immutable bytes.
-    // Legacy stores need no coordinated metadata rewrite or guest rebuild.
+    // Repairing identical payload bytes preserves their recorded ownership metadata.
     if destination.exists() {
         let marker = destination.join(OWNERSHIP);
         if let Ok(bytes) = read_bounded(&marker, MAX_RECORD)

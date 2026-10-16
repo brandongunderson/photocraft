@@ -10,7 +10,7 @@ use photocraft_format::zip::ZipWriter;
 use photocraft_plugins::extension::Extension;
 use serde_json::{Value, json};
 
-const PANEL: &[u8] = include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel-v2.wasm");
+const PANEL: &[u8] = include_bytes!("../../../tests/plugin-compatibility/frozen/image-gain-panel.wasm");
 const FILTER: &[u8] = include_bytes!("../../../tests/plugin-compatibility/frozen/channel-gain-filter-v1.wasm");
 const ID: &str = "org.example.image-gain";
 

@@ -142,8 +142,7 @@ Read `docs/plugin-development.md`, `docs/plugin-sdk.md`, `docs/plugin-api.md` an
 `docs/plugin-platform-plan.md` before changing the platform. Public SDK/API crates must
 build independently of engine/UI sources. New guests can use `photocraft-plugin new`
 with one `authoring.json`; generated manifests and bindings belong in Cargo `OUT_DIR`.
-Support one current PhotoCraft Plugin API. Its internal panel discriminator is `2`; reject old
-panel version `1` and migrate owned panels rather than retaining a second panel API. SDK use is
+Support one PhotoCraft Plugin API. Its internal wire discriminator is `1`. SDK use is
 optional. Extend the API until a genuine breaking change requires another major. Filter ABI 1,
 package format 2 and native worker protocols 1/2 are independent and remain supported.
 
@@ -162,10 +161,10 @@ design only; do not add a placeholder marketplace or a second installation/runti
 Discovery uses host-created cached descriptors. Panel activation reads only bounded panel
 code; scheduled jobs stream-verify the full closure before native execution or filter loading.
 Never hash model payloads or compile package filters during UI preparation. Compare the embedded
-panel descriptor with its cached authority. Older store records may use eager discovery only
-for a panel implementing the current API; never restore support for obsolete panel versions.
+panel descriptor with its cached authority. Store records without a cached descriptor may use
+eager discovery for a panel implementing the API.
 Worker protocol 2 is an explicit verified runtime/worker-v2.json opt-in; never probe or silently
-upgrade legacy executables. Each installation/generation owns its persistent process and data.
+change a worker's declared launch contract. Each installation/generation owns its persistent process and data.
 
 Use the bounded process-wide scheduler for native work. Scheduling/cancellation identities must
 include the private store, plugin, generation, activation epoch and private runtime instance; a same-named plugin in another
@@ -173,6 +172,8 @@ store must not supply resident credits or receive cancellation. Admission estima
 containment. Restricted native execution remains unavailable until Phase 7 verifies it per OS.
 
 An OS store lock serializes installation/publication; execution and idle workers retain per-generation leases.
+Explicitly unlock when the owning guard ends; a Unix subprocess may temporarily inherit a duplicate descriptor.
+Independent live leases must continue to block mutation.
 Never replace/delete lock files or activation tombstones. Managed-data migration requires an
 exclusive source-generation lease, stages a private snapshot, validates quotas and publishes the
 active code/state record last. Preserve one rollback pair and never touch external plugin caches.

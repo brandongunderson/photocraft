@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn source_changes_update_both_metadata_and_bindings() {
-        let value = json!({"formatVersion":1,"descriptor":{"apiVersion":2,"id":"org.example.generated","name":"Generated","version":"1",
+        let value = json!({"formatVersion":1,"descriptor":{"apiVersion":1,"id":"org.example.generated","name":"Generated","version":"1",
             "permissions":{"documentRead":false,"commands":[]},"panel":{"buttons":[{"id":"info","label":"Info"}]}},
             "package":{"packageVersion":2,"module":"plugin.pcext"}});
         let mut source = AuthoringManifest::parse(&serde_json::to_vec(&value).unwrap()).unwrap();

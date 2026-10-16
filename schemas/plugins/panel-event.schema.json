@@ -1,13 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EventRequest",
-  "description": "Additional event-envelope fields may be ignored by old guests. Descriptors and effects\nremain strict. Unknown events must be handled without inventing new host authority.",
+  "description": "Guests may ignore additional event-envelope fields. Descriptors and effects\nremain strict. Unknown events must be handled without inventing new host authority.",
   "type": "object",
   "properties": {
     "apiVersion": {
       "type": "integer",
       "format": "uint32",
-      "minimum": 0
+      "maximum": 1,
+      "minimum": 1
     },
     "compatibility": {
       "anyOf": [
@@ -144,7 +145,8 @@
         "panelApi": {
           "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 1,
+          "minimum": 1
         }
       },
       "required": [

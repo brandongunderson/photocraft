@@ -4,8 +4,8 @@ For independent plugins, start with the [plugin developer handbook](plugin-devel
 It covers separate panel/filter projects, neutral starters, API contracts, testing and releases.
 
 The optional [guest SDK](plugin-sdk.md) provides typed contracts and standalone project
-generation from one authoring manifest. Panels use one current PhotoCraft Plugin API;
-obsolete version-1 panels must be rebuilt. Filter, package and worker formats are separate contracts.
+generation from one authoring manifest. Panels use the PhotoCraft Plugin API.
+Filter, package and worker formats are separate contracts.
 See [store safety](plugin-safety.md#cooperative-store-locking) for native job leases,
 cross-process management contention and the remaining lifecycle work.
 This page covers development of the PhotoCraft host application.

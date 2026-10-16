@@ -2,22 +2,21 @@
 
 **Status:** current pre-release authoring contract, 2026-10-16, supplied by
 `photocraft-plugin-api 0.1.0`. Package format 2 carries this API; filter ABI 1 remains current.
-This is the only supported public plugin API. Old panels with internal version 1 are rejected
-and must be rebuilt for the current API. Filter ABI 1 and native worker protocols 1 and 2
+This is the public plugin API. Filter ABI 1 and native worker protocols 1 and 2
 are independent contracts. A separate [future package-format proposal](plugin-package-v3.md)
 describes possible packaging changes; it is not another implemented public API.
 
 The [guest SDK](plugin-sdk.md) now provides the typed event envelope, broker replies, layer
 requests/snapshots, bounded ABI exports and single-manifest authoring. These describe the
-existing implemented capability-v1 wire messages. [Worker 2](plugin-worker-v2.md) adds explicitly selected persistent transport;
+implemented capability messages. [Persistent native workers](plugin-worker-v2.md) add explicitly selected reusable transport;
 SDK completion does not imply completion of later host capabilities.
 
 ## Version boundaries
 
 The plugin's release version, contract crate version, package version, panel ABI, host metadata
-version and each capability version are independent. Authors currently set `apiVersion: 2`
-and export `pce_api_version() == 2`; these internal wire discriminators do not name separate
-product APIs. Other panel versions are unsupported. Evolve the API through compatible
+version and each capability version are independent. Authors currently set `apiVersion: 1`
+and export `pce_api_version() == 1`; these internal wire discriminators do not name separate
+product APIs. Evolve the API through compatible
 capabilities and optional fields; introduce another major only for a genuine breaking change.
 The API uses four export signatures, import-free WASM, a fresh instance per event, fuel/memory bounds and JSON
 transport. It does not introduce ambient filesystem, network, native or host-function imports.
@@ -34,7 +33,7 @@ optional capability requirements, contributions and plugin-owned release metadat
 
 ```json
 {
-  "apiVersion": 2,
+  "apiVersion": 1,
   "id": "org.example.layers",
   "name": "Layer Organizer",
   "version": "0.1.0",
@@ -94,8 +93,7 @@ larger descriptor counts return `unsupportedOperation`. Schema capacity is not a
 every host implements every count or capability. Inspect `extension.capabilities` for host limits.
 
 The descriptor is limited to 64 KiB before parsing. Unknown descriptor fields are errors.
-Empty capability and contribution collections may be omitted. An old panel descriptor is
-rejected with guidance to rebuild for the current API; there is no old-panel adapter.
+Empty capability and contribution collections may be omitted.
 
 ## Responses and broker boundary
 

@@ -87,7 +87,7 @@ For `native`, `service` is exactly `plugin.processImage`. `entry` is a safe rela
 path within the archive. The host must match the declared platform: `windows`, `linux` or
 `macos`, followed by `-x86_64` or `-aarch64`. Ship the executable and libraries appropriate to
 that OS/architecture; Windows entry names must end in `.exe`. Native code consent is required only when a native backend is present.
-V2 package installation requires a persistent desktop store; it is unavailable in the browser.
+Package installation requires a persistent desktop store; it is unavailable in the browser.
 
 There may be at most 16 filter entries, each naming a valid filter ABI module. The embedded
 filter manifest id selects the processor; it is not the module filename. Ids must be unique
@@ -96,8 +96,7 @@ installed into the global filter registry. Another installation may use the same
 without allowing this panel to execute it.
 
 The [package reference](plugin-native-packages.md) defines path, count, size, integrity and
-update rules. The earlier version-1 fixed-service packages are rejected and must be rebuilt; they are not
-the authoring route for a new independent image processor.
+update rules.
 
 ## Panel grant and request
 
@@ -243,6 +242,5 @@ compatible PhotoCraft source/API version.
 
 Keep generated models, build caches and distribution archives out of the source repository
 unless your distribution policy intentionally includes them. Include pinned downloads and
-license notices for dependencies you supply. V2 has no marketplace, signing infrastructure,
-automatic model downloads or automatic crash quarantine. Read [safety](plugin-safety.md)
-before publishing native code to users.
+license notices for dependencies you supply. Marketplace discovery and publisher signing
+remain planned. Read [safety](plugin-safety.md) before publishing native code to users.

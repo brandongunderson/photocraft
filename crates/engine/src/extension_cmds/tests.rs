@@ -1,7 +1,7 @@
 use super::*;
 
 fn manifest() -> Value {
-    json!({"apiVersion":2, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
+    json!({"apiVersion":1, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
         "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
         "permissions":{"commands":["image.adjustments.invert", "layer.new.layer"]},
         "panel":{"buttons":[{"id":"apply", "label":"Apply"}]}})
@@ -49,7 +49,7 @@ fn wasm(manifest: &Value, response: &Value) -> Vec<u8> {
         r#"(module
         (memory (export "memory") 12 512)
         (data (i32.const 32) "{}") (data (i32.const 65536) "{}")
-        (func (export "pce_api_version") (result i32) i32.const 2)
+        (func (export "pce_api_version") (result i32) i32.const 1)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 393216)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {})

@@ -1,10 +1,7 @@
 # Neutral plugin compatibility fixtures
 
-These tests exercise the current PhotoCraft Plugin API, filter ABI 1, package format 2 and
-native transport 1. The panel was explicitly migrated to the sole supported panel contract
-on 2026-10-16. Its internal manifest/export discriminator is 2; obsolete panel modules are
-not a compatibility requirement. The original Channel Gain filter and Image Gain worker
-bytes remain unchanged to check their separate transport contracts.
+These tests exercise the PhotoCraft Plugin API, filter ABI, package format and native
+job transport using compiled neutral examples.
 
 `frozen/` contains fixed compiled modules. Normal tests never rebuild guest source. A future
 explicit contract change requires a reviewed new fixture, provenance and catalog hashes.
@@ -13,11 +10,9 @@ Only neutral examples belong here. Independently released plugins keep their sou
 fixtures, package hashes, model details, notices and package acceptance tests in their own
 repositories.
 
-`catalog.json` pins the two committed WASM modules and original neutral Image Gain native
-executable. Its old archive hash is provenance only; that archive and its obsolete panel are
-not test inputs. `panel-golden.json` records the current panel's manifest, typed host event
-envelope and response. The
-Channel Gain filter is exercised at 8-bit, 16-bit and float depths. Original notices are under
+`catalog.json` pins the two committed WASM modules and the neutral Image Gain native
+executable. `panel-golden.json` records the panel's manifest, typed host event
+envelope and response. The Channel Gain filter is exercised at 8-bit, 16-bit and float depths. Notices are under
 `licenses/`. None of these tests invokes a guest compiler.
 
 ## Portable compatibility
@@ -29,11 +24,11 @@ cargo test -p photocraft-engine --test plugin_compatibility
 This self-contained target verifies fixed module bytes, panel responses, filter processing,
 installation, restart after removing the downloaded copy, persistent enable state, previews,
 Apply, one-step Undo/Redo, cancellation and repair of a corrupted installed module. The portable
-package is a synthetic wrapper around the current panel and original filter.
+package is a synthetic wrapper around the compiled panel and filter.
 
 ## Neutral native worker
 
-The original `Image-Gain-worker-windows-x86_64.exe` stays outside Git. Restore that exact
+`Image-Gain-worker-windows-x86_64.exe` stays outside Git. Restore that exact
 executable from a controlled artifact store. The runner verifies its pinned size and hashes; a missing
 or mismatched artifact fails an explicitly selected native test. Default Rust runs report
 the two native cases as **ignored**.
@@ -46,7 +41,7 @@ location under `extension-review/plugin-current-api-fixtures/`.
 ./scripts/plugins/test-compatibility.ps1 -ArtifactRoot C:/path/to/immutable-artifact-store
 ```
 
-Tests wrap the pinned worker bytes with the current compiled panel, original filter and
+Tests wrap the pinned worker bytes with the compiled panel, filter and
 neutral notices to create a temporary package. The runner exercises install/restart/cancel/
 repair, PNG processing, preview, Apply and Undo/Redo. The worker targets Windows x86-64;
 native cases reject another target. It needs no model download or inference runtime.

@@ -119,8 +119,9 @@ impl Manifest {
         let manifest: Self = serde_json::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;
         if manifest.api_version != photocraft_plugin_api::PANEL_API_VERSION {
             return Err(invalid(format!(
-                "unsupported panel apiVersion {}; expected 2 for the current PhotoCraft Plugin API. Rebuild or update this plugin",
-                manifest.api_version
+                "unsupported marker {} for the current PhotoCraft Plugin API; expected {}",
+                manifest.api_version,
+                photocraft_plugin_api::PANEL_API_VERSION
             )));
         }
         photocraft_plugin_api::Descriptor::parse(bytes).map_err(|e| invalid(e.to_string()))?;

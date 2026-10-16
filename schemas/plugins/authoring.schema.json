@@ -1,78 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Descriptor",
-  "description": "Complete independent descriptor for the current PhotoCraft Plugin API.",
+  "title": "AuthoringManifest",
   "type": "object",
   "properties": {
-    "apiVersion": {
+    "descriptor": {
+      "$ref": "#/$defs/Descriptor"
+    },
+    "formatVersion": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 2,
-      "minimum": 2
+      "maximum": 1,
+      "minimum": 1
     },
-    "author": {
-      "type": "string",
-      "default": "",
-      "maxLength": 128
-    },
-    "capabilities": {
-      "$ref": "#/$defs/Capabilities"
-    },
-    "contributes": {
-      "$ref": "#/$defs/Contributions"
-    },
-    "description": {
-      "type": "string",
-      "default": "",
-      "maxLength": 1024
-    },
-    "id": {
-      "type": "string",
-      "maxLength": 64,
-      "minLength": 1,
-      "pattern": "^[a-z0-9][a-z0-9._-]*$"
-    },
-    "name": {
-      "type": "string",
-      "maxLength": 64,
-      "minLength": 1
-    },
-    "panel": {
-      "$ref": "#/$defs/Panel"
-    },
-    "permissions": {
-      "$ref": "#/$defs/Permissions"
-    },
-    "repository": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "maxLength": 160
-    },
-    "updates": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/UpdateSource"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "version": {
-      "type": "string",
-      "maxLength": 32
+    "package": {
+      "$ref": "#/$defs/PackageV2"
     }
   },
   "additionalProperties": false,
   "required": [
-    "apiVersion",
-    "id",
-    "name",
-    "version",
-    "permissions",
-    "panel"
+    "formatVersion",
+    "descriptor",
+    "package"
   ],
   "$defs": {
     "Button": {
@@ -218,6 +166,81 @@
         }
       },
       "additionalProperties": false
+    },
+    "Descriptor": {
+      "description": "Complete independent descriptor for the current PhotoCraft Plugin API.",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 1,
+          "minimum": 1
+        },
+        "author": {
+          "type": "string",
+          "default": "",
+          "maxLength": 128
+        },
+        "capabilities": {
+          "$ref": "#/$defs/Capabilities"
+        },
+        "contributes": {
+          "$ref": "#/$defs/Contributions"
+        },
+        "description": {
+          "type": "string",
+          "default": "",
+          "maxLength": 1024
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1
+        },
+        "panel": {
+          "$ref": "#/$defs/Panel"
+        },
+        "permissions": {
+          "$ref": "#/$defs/Permissions"
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 160
+        },
+        "updates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UpdateSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 32
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "apiVersion",
+        "id",
+        "name",
+        "version",
+        "permissions",
+        "panel"
+      ]
     },
     "EventKind": {
       "type": "string",
@@ -372,6 +395,18 @@
       ],
       "unevaluatedProperties": false
     },
+    "FilterPayload": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "module"
+      ]
+    },
     "InspectorContribution": {
       "type": "object",
       "properties": {
@@ -397,6 +432,62 @@
         "id",
         "label",
         "event"
+      ]
+    },
+    "NativePayload": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "platform",
+        "entry"
+      ]
+    },
+    "PackageV2": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterPayload"
+          },
+          "maxItems": 16
+        },
+        "module": {
+          "type": "string"
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativePayload"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packageVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 2,
+          "minimum": 2
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "packageVersion",
+        "module"
       ]
     },
     "Panel": {

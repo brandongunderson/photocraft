@@ -21,12 +21,6 @@
           "service": "plugin.processImage"
         },
         "packageVersion": 2
-      },
-      "origin": {
-        "archiveName": "Image-Gain-windows-x86_64.pcplugin",
-        "archiveSha256": "207cbe7603dacc5acd07aa04e1f8bbf0b704aef2b61babe93b68884864e17fa2",
-        "member": "image-gain-worker.exe",
-        "note": "Provenance only; no obsolete panel module or archive is required by these tests."
       }
     }
   ],
@@ -39,13 +33,13 @@
       "sha256": "c7997d79c49d4406f0cb78fd6918784ab7d5abc8a530f2231a3f93c0462cc8d8"
     },
     {
-      "path": "frozen/image-gain-panel-v2.wasm",
-      "size": 101126,
-      "sha256": "290c541b3741763c781c9f881203e80effc12b0da2a8afedaa632025160432d6",
-      "blake3": "af04353608cb89fecbeaa9a5af71cbce254fed3a9495832dedbb7de1cc0fa8cf",
+      "path": "frozen/image-gain-panel.wasm",
+      "size": 101110,
+      "sha256": "5c3634aa9e501cbd7e8f177766917d1a59d77dde5affb5a2cfa2bb52e79e9ef5",
+      "blake3": "ad5fd06a944e8c1abeaf3fe83df83f05be23400357eb4aa46099a2554e73da31",
       "source": "examples/extensions/image-plugin-starter; current API source built independently on 2026-10-16"
     }
   ],
   "frozenAt": "2026-10-16",
-  "policy": "Current panel fixture uses discriminator 2; original filter ABI 1 and native transport 1 bytes remain fixed. Tests consume compiled fixtures and never rebuild them."
+  "policy": "Compiled neutral panel, filter and native worker fixtures verify the current contracts independently of source rebuilds."
 }

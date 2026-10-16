@@ -8,16 +8,16 @@ downloaded updates. Plugins do not share an updater process or require a marketp
 
 Open **Plugins → Manage Plugins…** and choose a plugin file. Choosing a file inspects its
 embedded identity, permissions, capabilities and native payload before installation. Files
-can also be dropped anywhere in the manager; a separate drop area is unnecessary.
+can also be dropped anywhere in the manager. For a typed path, select **Show permissions**.
 
-A new identity offers **Install**. A newer version of an installed identity offers **Update**;
+A new identity offers **Install plugin**. A newer version of an installed identity offers **Update plugin**;
 no replacement checkbox is needed. Review the proposed access before confirming. Updating
 replaces that identity's managed installation and preserves its enable state. The selected
 filename clears after success, and the manager reports the completed action.
 
-Installing the same version again is a maintenance action. **Reinstall / Repair** is kept
-with secondary actions so normal installation does not require understanding repair options.
-An older version requires a deliberate maintenance action rather than appearing as an update.
+Installing the same version again is a maintenance action. **Advanced → Reinstall or repair plugin**
+keeps it out of the normal installation flow. **Install older version** and **Replace installed
+plugin** are also explicit Advanced actions. A damaged installation offers **Repair plugin**.
 The preserved previous code/data pair can also be selected through `extension.rollback`.
 See [managed storage](plugin-managed-storage.md) for migration and rollback behavior.
 

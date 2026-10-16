@@ -65,7 +65,8 @@ impl Extension {
         let version = live.func::<(), i32>("pce_api_version")?.call(&mut live.store, ()).map_err(trap)?;
         if version != photocraft_plugin_api::PANEL_API_VERSION as i32 {
             return Err(Error::Abi(format!(
-                "unsupported panel API export version {version}; expected 2 for the current PhotoCraft Plugin API. Rebuild or update this plugin"
+                "unsupported marker {version} for the current PhotoCraft Plugin API; expected {}",
+                photocraft_plugin_api::PANEL_API_VERSION
             )));
         }
         let packed = live.func::<(), i64>("pce_manifest")?.call(&mut live.store, ()).map_err(trap)?;

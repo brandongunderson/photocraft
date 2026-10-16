@@ -28,7 +28,7 @@ allowed choices, button IDs, and handler validation consistent.
 
 The typed host envelope supplies `apiVersion`, `host`, optional `compatibility`, `event`,
 `values`, `state`, `document` and `responses`. Accept additive metadata; validate the
-current discriminator (2), host metadata, and declared command capability.
+wire discriminator (1), host metadata, and declared command capability.
 `documentRead` does not grant pixels, file paths, or an editable layer tree. Each
 event uses a fresh instance; preserve unchanged state explicitly, including in
 no-document/invalid-input replies. Do not rely on persistent guest globals.
@@ -37,8 +37,7 @@ Declare every requested engine command in `permissions.commands`. The host's
 `extension.commands` allowlist and normal command preconditions also apply.
 Declare `host.commands.invoke` as a required capability as well as each exact
 command grant. Command lists are sequential, not atomic; a later failure leaves
-earlier completed edits in history. The host accepts only the current panel
-contract; rebuild obsolete panel modules. Read `docs/plugin-api.md` in the matching
+earlier completed edits in history. Read `docs/plugin-api.md` in the matching
 source/kit before using additional broker capabilities.
 
 ## Build and verify

@@ -8,10 +8,10 @@ releases contain the panel/native package platform.
 
 | Contract | Implemented version | Important boundary |
 |---|---|---|
-| PhotoCraft Plugin API | Current internal panel discriminator `2`; old `1` rejected | Import-free core WASM, `pce_*` exports |
+| PhotoCraft Plugin API | Internal wire discriminator `1` | Import-free core WASM, `pce_*` exports |
 | Standalone pixel filter | ABI 1 | Import-free core WASM, `pc_*` exports |
 | Desktop package | 2 | ZIP, panel module, optional owned native/filter backends |
-| Native image/task worker | 1; explicit opt-in 2 | Legacy `--job`/`--task`; worker 2 uses bounded framed `--serve` |
+| Native image/task worker | 1; explicit opt-in 2 | Protocol 1 `--job`/`--task`; worker 2 uses bounded framed `--serve` |
 | Shared contract crate | Experimental `photocraft-plugin-api` 0.1.0 | Serialized data, no editor linkage required |
 | Guest SDK | Experimental `photocraft-plugin-sdk` 0.1.0 | Typed events/replies, bounded ABI buffers, optional authoring generator |
 
@@ -32,15 +32,13 @@ Add compatible capabilities and fields until a genuine breaking change requires 
 The current panel API and native transports use package format 2.
 Worker 2 requires the separately verified runtime/worker-v2.json member and cannot be
 probed or inferred from an executable. Typed descriptor/frames ship in the optional API crate.
-Retired package-1 fixed AI services are not an authoring route. Photoshop UXP, CEP,
-and `.8BF` files require porting. Renaming files does not convert their ABI.
+Photoshop UXP, CEP and `.8BF` files require porting. Renaming files does not convert their ABI.
 
 Current desktop hosts use lazy validated descriptors, bounded per-plugin scheduling,
 per-generation OS leases, aggregate native admission estimates and explicit preview retention
 budgets. Panel activation checks only bounded panel code; cancellable bulk verification and
 filter compilation run in scheduled jobs. Managed storage snapshots/migrations and rollback select the same generation as code.
-Packages whose panels already implement the current API need no shared runtime. Rebuild old
-panel-version-1 binaries in their independent projects. Restricted native containment remains
+Packages need no shared plugin runtime. Restricted native containment remains
 unavailable; trusted processes can exceed estimates or access the user's OS resources.
 See the matching source/kit lifecycle, worker-2 and managed-storage references for exact limits.
 
@@ -78,7 +76,7 @@ Use the starter's owned, bounded ABI storage. The manifest is embedded at build 
 
 Controls are `number`, `int`, `bool`, and `choice`, plus buttons. Native egui renders
 them; there is no HTML/JS UI or arbitrary guest drawing. The event envelope includes
-`apiVersion: 2`, host metadata, `event`, `values`, `state`, an optional `document` summary
+`apiVersion: 1`, host metadata, `event`, `values`, `state`, an optional `document` summary
 and correlated broker `responses`. `documentRead` grants
 summary metadata, not arbitrary pixels, paths, or the layer tree. Preserve state
 explicitly when an action should not change it. Globals do not survive fresh instances.

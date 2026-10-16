@@ -48,7 +48,7 @@ note = "file_cmds.rs and file_cmds/batch_naming.rs: folder/array input, per-file
 
 [[item]]
 id = "AUTO-219-6"
-target = "Plug-in ABI v2: panel kind, progress/cancel calls, read other layers, Last Filter repeats"
+target = "PhotoCraft Plugin API: panel kind, progress/cancel calls, read other layers, Last Filter repeats"
 status = "partial"
 issue = 219
 note = "The PhotoCraft Plugin API supports installable WASM panels, explicit command grants, contributed commands, bounded layer snapshots, atomic rename/visibility edits, document invalidations and read-only inspectors (docs/plugin-api.md). Package-owned native/WASM processing provides progress/cancellation, retained previews, safe Apply, private workers and managed migration/rollback. Only the current panel API is accepted; broader document/pixel APIs and Last Filter repeats remain open."

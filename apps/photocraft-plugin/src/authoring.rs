@@ -24,7 +24,7 @@ fn sdk_files(directory: &Path) -> Result<Value> {
         index.push(json!({"path":name,"bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(bytes))}));
     }
     write_new(directory, "Cargo.toml", b"[workspace]\nresolver = \"3\"\nmembers = [\"plugin-api\", \"plugin-sdk\"]\n")?;
-    let report = json!({"formatVersion":1,"sdkVersion":photocraft_plugin_sdk::SDK_VERSION,"panelApi":2,"packageVersion":2,"files":index});
+    let report = json!({"formatVersion":1,"sdkVersion":photocraft_plugin_sdk::SDK_VERSION,"panelApi":photocraft_plugin_sdk::api::PANEL_API_VERSION,"packageVersion":2,"files":index});
     write_new(directory, "SDK-RELEASE.json", &serde_json::to_vec_pretty(&report)?)?;
     Ok(report)
 }

@@ -210,6 +210,7 @@ jobs:
         if: matrix.part == 'all' || matrix.part == 'integration'
         run: |
           rustup target add wasm32-unknown-unknown
+          python scripts/plugins/test-platform-examples.py --self-test
           python scripts/plugins/test-platform-examples.py
 
   # The Windows tests used to be one job named `test (windows-latest)`; they're now legs named

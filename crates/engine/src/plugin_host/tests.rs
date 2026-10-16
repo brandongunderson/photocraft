@@ -10,7 +10,7 @@ use super::*;
 const OWNER: &str = "org.example.platform";
 
 fn descriptor(id: &str, capabilities: &[KnownCapability]) -> Value {
-    json!({"apiVersion":2,"id":id,"name":"Neutral platform fixture","version":"0.1.0",
+    json!({"apiVersion":1,"id":id,"name":"Neutral platform fixture","version":"0.1.0",
         "permissions":{"documentRead":true,"commands":[]},
         "panel":{"fields":[],"buttons":[{"id":"apply","label":"Apply"}]},
         "capabilities":{"required":capabilities.iter().map(|id|json!({"id":id.as_str(),"minVersion":1})).collect::<Vec<_>>()}})
@@ -165,7 +165,7 @@ fn discovery_and_validation_expose_only_the_current_plugin_api() {
     assert_eq!(capabilities["panelApis"], json!([photocraft_plugin_api::PANEL_API_VERSION]));
     assert_eq!(session.execute("extension.commands", json!({})).unwrap()["apiVersion"], photocraft_plugin_api::PANEL_API_VERSION);
     let mut manifest = Manifest::parse(&serde_json::to_vec(&editor_manifest(OWNER)).unwrap()).unwrap();
-    for unsupported in [0, 1, 3, u32::MAX] {
+    for unsupported in [0, 2, 3, u32::MAX] {
         manifest.api_version = unsupported;
         assert_code(compatibility(&manifest), ErrorCode::UnsupportedVersion);
     }

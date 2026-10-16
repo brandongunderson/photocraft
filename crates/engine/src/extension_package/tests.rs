@@ -371,7 +371,23 @@ fn rollback_restores_code_and_managed_data_and_failed_preparation_keeps_active_p
     let second = read_record(&root, id).unwrap().unwrap();
     let second_state = managed::paths(&root, id, &second.hash).unwrap();
     std::fs::write(&second_state.settings, br#"{"value":"after"}"#).unwrap();
+    let target_lease = generation_lease(&root, id, &first.hash, false).unwrap();
+    // A duplicate deterministically models another test's concurrent fork retaining this
+    // open file description until exec. It must not extend the owning guard's lifetime.
+    #[cfg(unix)]
+    let inherited_descriptor = target_lease._guard.duplicate_descriptor_for_test().unwrap();
+    let independent_target_lease = generation_lease(&root, id, &first.hash, false).unwrap();
+    assert!(rollback(&root, id).err().unwrap().to_string().contains("Plugin files are still in use"));
+    assert_eq!(read_record(&root, id).unwrap().unwrap(), second);
+    assert_eq!(load(&root, id).unwrap().module, second_bytes);
+    assert_eq!(std::fs::read(&first_state.settings).unwrap(), br#"{"value":"before"}"#);
+    assert_eq!(std::fs::read(&second_state.settings).unwrap(), br#"{"value":"after"}"#);
+    drop(target_lease);
+    assert!(rollback(&root, id).is_err(), "dropping one guard must not unlock an independently acquired lease");
+    drop(independent_target_lease);
     rollback(&root, id).unwrap();
+    #[cfg(unix)]
+    drop(inherited_descriptor);
     assert_eq!(load(&root, id).unwrap().module, first_bytes);
     assert_eq!(std::fs::read(&first_state.settings).unwrap(), br#"{"value":"before"}"#);
     rollback(&root, id).unwrap();
@@ -477,7 +493,7 @@ fn corrupt_activation_metadata_never_triggers_owned_payload_repair() {
 
 fn guest_for(id: &str, service: &str) -> Vec<u8> {
     let manifest = serde_json::to_string(&json!({
-        "apiVersion":2,"id":id,"name":"Package test","version":"1",
+        "apiVersion":1,"id":id,"name":"Package test","version":"1",
         "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},"permissions":{
             "commands":if service.is_empty() {vec![]} else {vec![service]}},
         "panel":{"buttons":[{"id":"run","label":"Run"}]}
@@ -489,7 +505,7 @@ fn guest_for(id: &str, service: &str) -> Vec<u8> {
         (memory (export "memory") 1)
         (data (i32.const 16) "{escaped}")
         (data (i32.const 2048) "{{}}")
-        (func (export "pce_api_version") (result i32) i32.const 2)
+        (func (export "pce_api_version") (result i32) i32.const 1)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 4096)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
@@ -992,7 +1008,7 @@ fn v2_panel_filter_native_and_combined_packages_survive_verified_reload() {
 fn v2_rejects_unknown_versions_services_platforms_and_unsafe_entries() {
     let valid = v2_info(false, &[]);
     assert!(check_info(&valid).is_ok());
-    for version in [0, 3, u32::MAX] {
+    for version in [0, 1, 3, u32::MAX] {
         let mut info = valid.clone();
         info.package_version = version;
         assert!(check_info(&info).is_err());
@@ -1004,7 +1020,7 @@ fn v2_rejects_unknown_versions_services_platforms_and_unsafe_entries() {
         return;
     }
     let native = v2_info(true, &[]);
-    for service in ["org.example.worker", "image.legacyProcessor", ""] {
+    for service in ["org.example.worker", "invalid.processor", ""] {
         let mut info = native.clone();
         info.native.as_mut().unwrap().service = service.into();
         assert!(check_info(&info).is_err(), "{service}");
@@ -1063,18 +1079,6 @@ fn packaged_filters_validate_abi_imports_and_distinct_nonreserved_ids() {
 }
 
 #[test]
-fn retired_package_versions_require_an_updated_package() {
-    let mut info = v2_info(true, &[]);
-    info.package_version = 1;
-    assert!(check_info(&info).unwrap_err().to_string().contains("updated version 2 package"));
-    info.filters.push(FilterInfo { module: "filter.wasm".into() });
-    assert!(check_info(&info).is_err());
-    info.package_version = 2;
-    info.native.as_mut().unwrap().service = "image.legacyProcessor".into();
-    assert!(check_info(&info).is_err());
-}
-
-#[test]
 fn filter_tampering_or_failed_extraction_never_replaces_the_active_package() {
     let tmp = tempfile::tempdir().unwrap();
     let root = root(tmp.path()).unwrap();
@@ -1126,24 +1130,23 @@ fn stored_filter_records_obey_module_limits_and_required_paths() {
 
 #[test]
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-fn retired_native_installation_can_be_replaced_without_loading_its_code() {
+fn invalid_native_installation_metadata_can_be_repaired_without_loading_code() {
     let tmp = tempfile::tempdir().unwrap();
     let root = root(tmp.path()).unwrap();
-    let id = "org.example.retired";
+    let id = "org.example.repair";
     let original = package(id, true, b"previous version", &[]);
     let inspected = inspect(&original).unwrap();
     install(&root, id, &original, Some(&inspected), false).unwrap();
-    let mut retired = read_record(&root, id).unwrap().unwrap();
-    let previous_dir = generation(&root, &retired).unwrap();
-    retired.package.as_mut().unwrap().package_version = 1;
-    retired.package.as_mut().unwrap().native.as_mut().unwrap().service = "image.legacyProcessor".into();
-    let retired_bytes = serde_json::to_vec(&retired).unwrap();
-    std::fs::write(record_path(&root, id).unwrap(), &retired_bytes).unwrap();
-    std::fs::write(previous_dir.join(OWNERSHIP), &retired_bytes).unwrap();
+    let mut invalid_record = read_record(&root, id).unwrap().unwrap();
+    let previous_dir = generation(&root, &invalid_record).unwrap();
+    invalid_record.package.as_mut().unwrap().package_version = u32::MAX;
+    let invalid_bytes = serde_json::to_vec(&invalid_record).unwrap();
+    std::fs::write(record_path(&root, id).unwrap(), &invalid_bytes).unwrap();
+    std::fs::write(previous_dir.join(OWNERSHIP), &invalid_bytes).unwrap();
     let mut session = Session::new();
     session.extensions.attach_folder(root.clone()).unwrap();
     assert!(!session.extensions.installed.contains_key(id));
-    assert!(session.extensions.load_errors[0].contains("updated version 2 package"));
+    assert!(session.extensions.load_errors[0].contains("unsupported package version"));
     let unrelated = "org.example.neighbor: missing payload".to_owned();
     let similar_id = format!("{id}.other: invalid record");
     session.extensions.load_errors.extend([unrelated.clone(), similar_id.clone()]);
@@ -1168,7 +1171,7 @@ fn retired_native_installation_can_be_replaced_without_loading_its_code() {
     assert!(restarted.extensions.installed.contains_key(id));
     assert!(restarted.extensions.load_errors.is_empty());
     assert_eq!(std::fs::read(previous_dir.join("bin/processor.exe")).unwrap(), b"previous version");
-    let metadata_digest = blake3::hash(&retired_bytes).to_hex();
+    let metadata_digest = blake3::hash(&invalid_bytes).to_hex();
     let backup = root.join(format!("{id}.corrupt-{}.json", &metadata_digest.as_str()[..16]));
-    assert_eq!(std::fs::read(backup).unwrap(), retired_bytes);
+    assert_eq!(std::fs::read(backup).unwrap(), invalid_bytes);
 }

@@ -4,10 +4,7 @@ PhotoCraft checks plugin structure and restricts its WebAssembly guests. Install
 does not prove a plugin's algorithm is correct, establish its publisher's identity, or sandbox
 native processing code. This page describes the protections and their limits in this source tree.
 See the [developer handbook](plugin-development.md) for authoring and [testing](plugin-testing.md)
-for release checks. An older editor may not contain these additions.
-New plugin development targets the current API. Temporary adapters preserve our existing
-compiled plugins during this internal transition; they are not a promised external ecosystem
-support window or a reason to introduce a new API major for each implementation phase.
+for release checks.
 
 ## What installation checks
 
@@ -21,7 +18,7 @@ support window or a reason to introduce a new API major for each implementation 
 | ZIP path traversal, absolute paths, unsafe names, duplicate paths, oversized content | Native package inspection rejects it within finite archive/member limits |
 | Link-like ZIP attributes or managed filesystem links | ZIP members become regular files; checked managed paths refuse filesystem links |
 | Corrupt ZIP content or installed payload | CRC/archive/per-file checks reject it; managed payload hashes are verified when loading |
-| Wrong package version/platform/service or missing required members | Rejected against the version-2 schema; declared native target must match; old fixed-service packages require replacement |
+| Wrong package version/platform/service or missing required members | Rejected against the package schema; declared native target must match |
 | Invalid or conflicting packaged filters | Each module's ABI/manifest is validated; duplicate ids and the reserved `native` filter id are rejected |
 | Failed replacement validation/extraction | A valid installation is published only after staging and validation |
 
@@ -89,7 +86,7 @@ must validate options and write the promised sRGB PNG. Host flattening, per-oper
 bounds, result validation and owner binding protect editing transactions; they do not remove
 the native process's OS privileges. See [the generic contract](plugin-image-processing.md).
 
-A legacy worker runs as a separate hidden process with a host-created job request and temporary paths.
+A protocol-1 worker runs as a separate hidden process with a host-created job request and temporary paths.
 It reports progress and receives cancellation; the host imposes a 45-minute native-worker execution deadline and
 requests direct-process termination after a 10-second cancellation grace period. Diagnostics
 use a temporary regular file with a 16 MiB checked limit and bounded reads/messages. The host
@@ -101,7 +98,7 @@ process, framed control messages, correlated jobs and bounded idle eviction. The
 and handshake must agree; a mismatch does not silently select another protocol. Scheduling
 charges declared resident resources while that worker is idle. Per-plugin queues, fair
 admission, activation failure quarantine and preview retention limits are described in
-[lifecycle and resource admission](plugin-lifecycle.md). Legacy workers retain their launch
+[lifecycle and resource admission](plugin-lifecycle.md). Protocol-1 workers retain their launch
 arguments and diagnostic contract.
 
 The output must match the expected bounded PNG dimensions/depth/byte limit before and after
@@ -146,7 +143,7 @@ not stop other valid installations from loading. To repair a corrupt installatio
 
 1. Start normally; the manager reports the failed installation.
 2. Choose a known-good plugin file and review its identity and requested access again.
-3. Use the secondary **Reinstall / Repair** maintenance action and confirm the reviewed file.
+3. Confirm **Repair plugin** for a damaged installation, or use **Advanced → Reinstall or repair plugin**.
 4. Enable the repaired installation explicitly if it was disabled before repair.
 
 Explicit replacement can back up bounded corrupt metadata and publish a validated replacement.
@@ -211,19 +208,6 @@ reload their plugin registry; there is no live cross-process registry refresh ye
 - WASM fuel bounds guest execution, not the cost of requested editor commands. Heavy built-in
   commands have their normal engine bounds and can still take time.
 - Damaged ownership metadata may require manual investigation rather than automatic removal.
-
-The audit added focused regressions for corrupt-record repair, disabled-state preservation,
-oversized panel state, diagnostic cleanup/log limits, modal/crop Apply gates, removed panel state,
-recovery command policy and startup folder suppression. It also fixed two existing filter/format
-issues found during review: finite HDR selection blending and forged stored-ZIP size allocation.
-These checks complement the existing hostile-module, permissions, package, jobs, stale-result,
-selection, alpha, Undo/Redo and automation tests. They do not prove the absence of every bug or
-establish compatibility with every image, plugin, machine or driver.
-
-Phase 2 adds metadata-only discovery, lazy activation, queue/resource admission, private
-persistent-worker supervision, per-generation leases, multiple preview retention, managed
-migration and rollback regressions. Coverage and platform-specific execution evidence remain
-part of the release gate; an implemented transport is not a claim of OS native containment.
 
 Full-payload integrity verification and packaged filter compilation run in scheduled jobs,
 not during panel preparation or drawing. Panel activation checks its bounded module and

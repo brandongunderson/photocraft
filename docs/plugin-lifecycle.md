@@ -7,11 +7,11 @@ runtime service.
 
 ## Discovery and activation
 
-New installations persist the validated embedded panel descriptor in the host's installation
+Installations persist the validated embedded panel descriptor in the host's installation
 record and immutable ownership record. Startup reads those records instead of loading every
-WASM module or hashing every model. Older installation records without a cached descriptor
-may eagerly load a panel implementing the current API. Obsolete panel versions are rejected;
-there is no older panel API adapter. Loose descriptor sidecars are not installation authority.
+WASM module or hashing every model. A record without a cached descriptor requires
+validation of its panel module before discovery. Loose descriptor sidecars are not
+installation authority.
 
 `extension.list` includes `lifecycle`: `disabled`, `idle`, `active`, or `failed`. Discovery and
 compatibility validation precede the idle state. The first panel action verifies only its
@@ -54,7 +54,7 @@ Persistent workers declare their working estimates in
 charged while the private process is idle. Job reservations cover CPU, temporary storage,
 host image buffers and the filter VM memory limit; releasing a reservation does not depend
 on admitting the result.
-Legacy workers retain their launch arguments and receive conservative admission estimates.
+Protocol-1 workers retain their launch arguments and receive conservative admission estimates.
 
 These reservations limit admitted work and host-owned buffers. Trusted native code still has
 the user's operating-system privileges and can exceed its declared estimates. Restricted
@@ -70,7 +70,7 @@ Compiled WASM/module caches remain bounded per guest/package; these native admis
 do not claim to measure every compiled-code allocation in the editor. Creating another
 plugin's preview cannot silently evict an unapplied result. When the budget is exhausted,
 the command reports an error so the caller
-can apply or discard a comparison explicitly. Legacy calls without a preview token continue
+can apply or discard a comparison explicitly. Calls without a preview token continue
 to address the current comparison for the requested plugin.
 
 Disable, removal, replacement and rollback revoke queued/running host work and future result

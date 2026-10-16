@@ -1,5 +1,5 @@
 {
-  "apiVersion": 2,
+  "apiVersion": 1,
   "id": "org.example.hello-photocraft",
   "name": "Hello PhotoCraft",
   "version": "1.0.0",

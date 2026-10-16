@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 fn manifest() -> Value {
-    json!({"apiVersion":2, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
+    json!({"apiVersion":1, "id":"org.example.panel", "name":"Example", "version":"1.0.0",
         "permissions":{"commands":["image.adjustments.invert"]},
         "panel":{"fields":[{"id":"amount", "label":"Amount", "type":"int", "min":1, "max":100, "default":50}],
             "buttons":[{"id":"apply", "label":"Apply"}]}})
@@ -55,21 +55,13 @@ fn manifest_validates_schema_defaults_and_grants() {
 }
 
 #[test]
-fn obsolete_panel_descriptors_are_rejected_with_migration_guidance() {
-    for version in [0, 1, 3, u32::MAX] {
+fn unsupported_descriptor_markers_are_rejected() {
+    for version in [0, 2, 3, u32::MAX] {
         let mut value = manifest();
         value["apiVersion"] = json!(version);
         assert!(
             matches!(Manifest::parse(&serde_json::to_vec(&value).unwrap()), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API")),
             "{version}"
-        );
-    }
-    for key in ["capabilities", "contributes"] {
-        let mut value = manifest();
-        value["apiVersion"] = json!(1);
-        value[key] = json!({});
-        assert!(
-            matches!(Manifest::parse(&serde_json::to_vec(&value).unwrap()), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API"))
         );
     }
 }
@@ -81,7 +73,7 @@ fn current_responses_accept_optional_broker_fields_through_one_parser() {
     }
     let current = Manifest::parse(&serde_json::to_vec(&manifest()).unwrap()).unwrap();
     let serialized = serde_json::to_value(&current).unwrap();
-    assert_eq!(serialized["apiVersion"], 2);
+    assert_eq!(serialized["apiVersion"], photocraft_plugin_api::PANEL_API_VERSION);
     assert!(serialized.get("capabilities").is_none());
     assert!(serialized.get("contributes").is_none());
 }
@@ -106,7 +98,7 @@ fn panel_runtime_round_trips_inspector_and_broker_requests() {
         None,
     );
     let extension = Extension::load(&bytes).unwrap();
-    assert_eq!(extension.manifest.api_version, 2);
+    assert_eq!(extension.manifest.api_version, photocraft_plugin_api::PANEL_API_VERSION);
     assert!(extension.manifest.panel.buttons.is_empty());
     let response = extension.handle(&json!({"event":"inspect"})).unwrap();
     assert_eq!(response.requests.len(), 1);
@@ -117,27 +109,27 @@ fn panel_runtime_round_trips_inspector_and_broker_requests() {
 fn exported_and_embedded_panel_versions_require_the_current_api() {
     let current = manifest();
     assert!(Extension::load(&wasm(&current, "{}", None)).is_ok());
-    for version in [-1, 0, 1, 3] {
+    for version in [-1, 0, 2, 3] {
         assert!(
             matches!(Extension::load(&wasm_for_version(&current, "{}", None, version)), Err(Error::Abi(message)) if message.contains("current PhotoCraft Plugin API")),
             "{version}"
         );
     }
-    let mut obsolete = current;
-    obsolete["apiVersion"] = json!(1);
-    assert!(matches!(Extension::load(&wasm(&obsolete, "{}", None)), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API")));
+    let mut invalid = current;
+    invalid["apiVersion"] = json!(0);
+    assert!(matches!(Extension::load(&wasm(&invalid, "{}", None)), Err(Error::Manifest(message)) if message.contains("current PhotoCraft Plugin API")));
 }
 
 #[test]
 fn unsupported_panel_version_is_rejected_before_running_its_manifest_export() {
-    let obsolete = wat::parse_str(
+    let invalid = wat::parse_str(
         r#"(module
         (memory (export "memory") 1)
-        (func (export "pce_api_version") (result i32) i32.const 1)
+        (func (export "pce_api_version") (result i32) i32.const 0)
         (func (export "pce_manifest") (result i64) unreachable))"#,
     )
     .unwrap();
-    assert!(matches!(Extension::load(&obsolete), Err(Error::Abi(message)) if message.contains("current PhotoCraft Plugin API")));
+    assert!(matches!(Extension::load(&invalid), Err(Error::Abi(message)) if message.contains("current PhotoCraft Plugin API")));
 }
 
 #[test]

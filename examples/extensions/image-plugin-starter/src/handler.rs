@@ -43,13 +43,13 @@ impl EventEnvelope {
     fn parse(request: &Value) -> Result<Self, &'static str> {
         let event: Self = serde_json::from_value(request.clone()).map_err(|_| "Invalid plugin event envelope.")?;
         let mut capabilities = std::collections::BTreeSet::new();
-        if event.api_version != 2
+        if event.api_version != 1
             || event.host.version != 1
             || event.host.capabilities.len() > 32
             || event.responses.len() > 8
             || event.host.capabilities.iter().any(|offer| !(1..=1024).contains(&offer.version) || !capabilities.insert(&offer.id))
             || !event.host.capabilities.iter().any(|offer| offer.id == "host.commands.invoke" && offer.version >= 1)
-            || event.compatibility.as_ref().is_some_and(|selected| selected.panel_api != 2 || selected.host_api != event.host.version)
+            || event.compatibility.as_ref().is_some_and(|selected| selected.panel_api != 1 || selected.host_api != event.host.version)
         {
             return Err("The host does not support this plugin's event or command contract.");
         }
@@ -112,21 +112,21 @@ mod tests {
     fn current_typed_envelope_accepts_additions_but_rejects_incompatible_versions() {
         let mut input = request();
         input["futureMetadata"] = json!({"optional":true});
-        input["compatibility"] = json!({"panelApi":2,"hostApi":1,"negotiated":{"available":[],"unavailableOptional":[]}});
+        input["compatibility"] = json!({"panelApi":1,"hostApi":1,"negotiated":{"available":[],"unavailableOptional":[]}});
         assert!(!handle(&input)["commands"].as_array().unwrap().is_empty());
-        for version in [0, 1, 3] {
+        for version in [0, 2, 3] {
             input["apiVersion"] = json!(version);
             let response = handle(&input);
             assert_eq!(response["commands"], json!([]));
             assert_eq!(response["state"], input["state"]);
         }
-        input["apiVersion"] = json!(2);
+        input["apiVersion"] = json!(1);
         input["host"]["capabilities"] = json!([]);
         assert_eq!(handle(&input)["commands"], json!([]), "capability discovery is explicit");
     }
 
     fn request() -> Value {
-        json!({"apiVersion":2,"host":{"version":1,"capabilities":[{"id":"host.commands.invoke","version":1}]},
+        json!({"apiVersion":1,"host":{"version":1,"capabilities":[{"id":"host.commands.invoke","version":1}]},
             "event": "process", "values": {}, "state": {"custom": 1},
             "document": {"id": 1, "width": 8, "height": 6, "revision": 0}})
     }

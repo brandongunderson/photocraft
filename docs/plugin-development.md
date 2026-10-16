@@ -7,7 +7,7 @@ packaged WASM filter through package version 2. This handbook takes you from a n
 neutral starters. It does not depend on any AI plugin project.
 
 **API status:** [the PhotoCraft Plugin API](plugin-api.md) is the only supported authoring contract.
-Its internal panel discriminator is `2`; obsolete version-1 panels must be rebuilt. Filter ABI
+Its internal wire discriminator is `1`. Filter ABI
 version 1 and general package format 2 serve their existing layers. Native worker 1
 is preserved; [worker protocol 2](plugin-worker-v2.md) is an explicit persistent-worker opt-in.
 Use a build
@@ -243,7 +243,7 @@ The complete panel starter manifest is:
 
 ```json
 {
-  "apiVersion": 2,
+  "apiVersion": 1,
   "id": "org.example.hello-photocraft",
   "name": "Hello PhotoCraft",
   "version": "1.0.0",
@@ -303,7 +303,7 @@ A Create layer click receives this request shape:
 
 ```json
 {
-  "apiVersion": 2,
+  "apiVersion": 1,
   "host": {"version": 1, "capabilities": [{"id": "host.commands.invoke", "version": 1}]},
   "event": "create",
   "values": {"layerName": "Notes"},
@@ -539,8 +539,8 @@ Use the response `message` and host action errors for user-facing diagnostics. N
 WASM `println!` is not a plugin logging channel. See [host logs](development.md#logs) for app
 installation/runtime diagnostics. Avoid logging image data, private paths or credentials.
 
-There is no watcher/hot reload. Edit, build and choose the new file. The manager offers **Update**
-for a newer version of the same identity; use the secondary **Reinstall / Repair** action when
+There is no watcher/hot reload. Edit, build and choose the new file. The manager offers **Update plugin**
+for a newer version of the same identity; use **Advanced → Reinstall or repair plugin** when
 rebuilding the same version. Reopen a panel when controls change. Keep the id for updates. Editing
 only `manifest.json` without rebuilding changes nothing.
 
@@ -591,8 +591,8 @@ metadata does not establish compatibility; Windows x64 is the verified target he
 
 Read [Native plugin package author reference](plugin-native-packages.md) before this route.
 It covers `package.json`, required paths, bounds, ZIP rules, hashes, native-code consent,
-integrity, cancellation, updates and the worker protocol. Earlier fixed-service packages
-must be rebuilt as version 2; algorithm adapters and model registries are not part of the core.
+integrity, cancellation, updates and the worker protocol. Algorithm adapters and model
+registries are not part of the core.
 
 Keep all algorithm code, model choices, option validation, inference libraries and redistributable
 runtime dependencies in your plugin project and package. The editor supplies only shared APIs.
@@ -670,7 +670,7 @@ repository and your plugin separate.
 | Unsupported permission at install | Compare with this host's extension.commands |
 | Ungranted command at run | Declare exact id, rebuild and replace |
 | Permitted action still fails | Check params, locks, targets, selection, modes and preconditions |
-| Old panel controls | Embedded manifest needs rebuild/replacement; reopen panel |
+| Panel controls did not update | Embedded manifest needs rebuild/replacement; reopen panel |
 | State disappeared | Return explicitly; replacement/reload/restart/remove reset it |
 | Counter differs from layer count | State is not tied to Undo or external edits |
 | Memory/fuel/JSON error | Reduce allocation/loops/state/response/commands; check per-ABI limits |
@@ -678,7 +678,7 @@ repository and your plugin separate.
 | Custom filter unavailable to panel | Bundle it in a version-2 package and select its manifest id through plugin.processImage; global plugin.run is not granted |
 | Preview layout but no result | A supported service must stage a result |
 | Native update/remove is busy | Wait for worker/cancel drain |
-| Native package fails on another OS | Match the version-2 declared target, executable and dependencies; rebuild old fixed-service packages as version 2 |
+| Native package fails on another OS | Match the declared package target, executable and dependencies |
 
 A useful bug report includes id/version, host build/platform, reproducible steps, exact error,
 and a minimal non-private source/artifact. Say whether failure happened during build, inspection,

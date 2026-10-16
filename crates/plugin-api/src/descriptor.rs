@@ -9,7 +9,7 @@ use crate::{ApiError, Capabilities, Contributions, ErrorCode, MAX_DESCRIPTOR_BYT
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Descriptor {
-    #[cfg_attr(feature = "schema", schemars(range(min = 2, max = 2)))]
+    #[cfg_attr(feature = "schema", schemars(range(min = 1, max = 1)))]
     pub api_version: u32,
     #[cfg_attr(feature = "schema", schemars(length(min = 1, max = 64), regex(pattern = "^[a-z0-9][a-z0-9._-]*$")))]
     pub id: String,

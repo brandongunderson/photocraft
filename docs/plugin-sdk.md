@@ -8,8 +8,7 @@ runtime. SDK/API 0.1 are a foundation preview; platform-wide stable certificatio
 Native plugins may independently opt into [persistent worker protocol 2](plugin-worker-v2.md)
 and [managed storage migrations](plugin-managed-storage.md). The public API crate contains
 the worker descriptor and typed frames. The SDK is optional: current panels, filter ABI 1 and
-native worker transports 1/2 can be implemented without it. Old panel version 1 is rejected
-and requires a rebuild for the current API. See [lifecycle and budgets](plugin-lifecycle.md).
+native worker transports 1/2 can be implemented without it. See [lifecycle and budgets](plugin-lifecycle.md).
 
 ## One source manifest
 
@@ -19,7 +18,7 @@ Keep identity, UI, grants and contributions in `authoring.json`:
 {
   "formatVersion": 1,
   "descriptor": {
-    "apiVersion": 2,
+    "apiVersion": 1,
     "id": "org.example.my-plugin",
     "name": "My Plugin",
     "version": "1.0.0",
@@ -87,7 +86,7 @@ photocraft-plugin check fresh-independent-export/dist/exported.pcplugin
 ```
 
 The exported build uses only copied source and `--locked --offline`. When `authoring.json` is
-present, packaging reads it directly rather than an obsolete loose `package.json`. The embedded
+present, packaging reads it directly rather than a separate `package.json`. The embedded
 descriptor and archive metadata therefore share one input. Dependency source/notice ownership
 is checked; arbitrary third-party Cargo build scripts are still trusted author tooling.
 
@@ -101,17 +100,16 @@ plugin binaries, catalogs and tests belong in their own repositories.
 - Plugin release versions, SDK crate versions, panel ABI, package version, host metadata and
   capability versions are separate. An SDK upgrade never silently upgrades a plugin's wire ABI.
 - Target the PhotoCraft Plugin API, the only supported authoring API. Its internal panel
-  discriminator is currently `2`; version `1` is rejected. Rebuild older owned panels for the
-  current contract. Package format 2, filter ABI 1 and native worker protocols 1/2 remain
+  discriminator is `1`. Package format 2, filter ABI 1 and native worker protocols 1/2 remain
   independent. Implementation phases do not create parallel APIs or new majors.
-- The implemented capability-v1 methods and message/error semantics retain their meaning.
+- The implemented capability methods and message/error semantics retain their meaning.
   Extend this one current API during development. A new major requires an actual unavoidable
   breaking wire/behavior change, rather than a completed implementation phase.
 - Unknown required capabilities fail clearly; optional ones negotiate unavailable and need a
   deliberate fallback. Negotiation/discovery does not grant permission.
 - Descriptors, effect messages and package metadata remain strict. The event envelope and
-  read-only snapshots may carry additional optional metadata that old SDK readers ignore.
-  Existing strict host-metadata fields and capability-v1 error codes do not change in place.
+  read-only snapshots may carry additional optional metadata that readers can ignore.
+  Existing strict host-metadata fields and capability error codes do not change in place.
 - Generate JSON Schema snapshots from the shared Rust types and run consistency tests. Schema
   shape never replaces byte-budget, cross-field, authority or runtime validation.
 - Deprecation/removal needs an explicit migration, compatibility evidence and release notes.

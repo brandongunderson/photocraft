@@ -10,10 +10,8 @@ manifest, permissions and event messages.
 
 PhotoCraft's core supplies the shared host contract only. Algorithms, model names, option
 validation, inference engines and non-system runtime dependencies belong to each package.
-New development targets the current API and SDK. Compatibility adapters keep our existing
-compiled plugins working during this internal transition; PhotoCraft does not yet have an
-external plugin ecosystem or a calendar-based public API support guarantee. Implementation
-phases do not create new API majors by themselves.
+Development targets the PhotoCraft Plugin API and optional standalone SDK. Implementation
+phases extend this API; a new major requires a genuine breaking change.
 
 ## General package version 2
 
@@ -91,18 +89,12 @@ an external JSON file cannot replace its `pce_manifest` export.
 
 The package schema version, panel API version, filter ABI version, native job protocol version
 and author's release version are independent. General packages use `packageVersion: 2` while
-panels use the PhotoCraft Plugin API (internal discriminator `2`), filters retain ABI 1,
+panels use the PhotoCraft Plugin API (internal wire discriminator `1`), filters retain ABI 1,
 and native workers retain job protocol 1
 unless they explicitly declare [worker protocol 2](plugin-worker-v2.md) in the recorded
 `runtime/worker-v2.json` member. Existing workers need no descriptor or rebuild. An optional
 `runtime/managed-v1.json` member declares a bounded host-managed state migration; see
 [managed storage](plugin-managed-storage.md).
-
-The earlier version-1 **package format** and its two fixed AI services have been removed.
-Rebuild and reinstall those plugins as version-2 packages under the same panel id. Old managed
-packages are skipped and reported at startup; their files are retained for replacement through
-the manager. There is no silent conversion or fallback. Raw `.pcext` panels and standalone
-`.wasm` filters retain their existing ABI version 1 support.
 
 The worker and its dependencies are package-owned. The host does not know model filenames,
 model ids, inference libraries, algorithm settings or per-algorithm limits. It validates the
@@ -204,8 +196,8 @@ zero model bytes. Model files downloaded separately outside the managed payload 
 When model bytes are zero, the manager hides the Models text and still shows Installed size.
 The manager shows the plugin identity, requested commands and the native-code disclosure. When
 the user installs it, the manager passes that hash as `expectedHash`, `allowNative: true`, and
-the reviewed installation intent to `extension.install`. The manager offers **Update** for
-a newer release of the same identity and keeps reinstall/repair under maintenance actions.
+the reviewed installation intent to `extension.install`. The manager offers **Update plugin**
+for a newer release of the same identity and keeps reinstall/repair under **Advanced**.
 
 Trusted engine callers can use the same two-step flow:
 
@@ -306,7 +298,7 @@ resets the guest's JSON state, and invalidates retained previews. Changing the i
 different plugin. Raw guests and native packages can replace one another under the same id,
 with native consent required when the replacement contains native code.
 
-Removal deletes any legacy standalone guest before removing the active record, then deletes
+Removal deletes any loose standalone guest before removing the active record, then deletes
 only files listed in the matching ownership record and their empty directories. It also removes
 the disabled marker. Managed settings, durable data, cache and opaque secret references for
 the current and retained previous generation are preserved by default; `purgeData:true`

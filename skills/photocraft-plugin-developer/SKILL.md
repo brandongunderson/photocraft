@@ -26,9 +26,8 @@ build the project. Read its generated README and `AGENTS.md`. Edit `authoring.js
 the handler; Cargo generates manifests/bindings in `OUT_DIR`. SDK adoption is optional, and
 plugin projects own their privately pinned SDK releases and independent builds.
 
-The PhotoCraft Plugin API is the only supported authoring contract. Its current internal
-panel discriminator is `2`; old version `1` is rejected and must be rebuilt. Evolve this API
-until a genuine breaking change needs a new major; milestones do not create parallel APIs.
+The PhotoCraft Plugin API uses internal wire discriminator `1`. Extend this API until a
+genuine breaking change needs a new major.
 Package format 2, filter ABI 1 and native worker protocols 1/2 serve independent layers.
 Select worker 2 only through a verified runtime/worker-v2.json declaration. The application
 release number alone does not establish API support.
@@ -57,8 +56,7 @@ Those documents are authoring references, not runtime source dependencies.
 | Namespaced command and atomic layer rename/visibility edits | `examples/extensions/layer-organizer` | PhotoCraft Plugin API `.pcplugin` |
 | Native read-only inspector refreshed by document changes | `examples/extensions/document-inspector` | PhotoCraft Plugin API `.pcplugin` |
 
-Use the PhotoCraft Plugin API for all panels and migrate obsolete owned panels in their
-independent projects. The package container does not change for that migration. Native maintenance tasks extend a
+Use the PhotoCraft Plugin API for panels. Native maintenance tasks extend a
 package with an owned worker; they are not a sixth starter or a separate runtime.
 Identify unsupported requirements early: dynamic/free-text controls, custom docking,
 canvas tools, general callbacks, and high-precision native layer/region transport
@@ -97,7 +95,7 @@ exports or installed behavior. Keep source instructions and README usage in sync
 Current desktop hosts discover cached descriptors lazily, use per-generation OS leases and
 activation epochs, and bound native queues, resident workers and resource reservations.
 Panel preparation verifies bounded panel code; bulk closure checks and packaged filter
-compilation run in scheduled processing jobs. A private persistent worker may opt into protocol 2; old workers retain their exact launch
+compilation run in scheduled processing jobs. A private persistent worker may opt into protocol 2; protocol-1 workers retain their exact launch
 contract. Never share a process, runtime, writable cache or data migration with another plugin.
 Managed settings/data/cache/secrets references are generation-scoped; updates stage and validate
 a quiescent snapshot, and rollback selects a preserved code/data pair. Keep host lock files and

@@ -39,7 +39,7 @@ The embedded guest identity/contract digest must agree with the generated instal
 descriptor. Identity conflicts, unsupported required features and target mismatches fail before
 publishing an installation. The proposal changes a future package container, not the supported
 Plugin API. Filter ABI 1 and native transport versions remain independent; a version number
-alone never selects a weaker trust mode. There is no old-panel compatibility adapter.
+alone never selects a weaker trust mode.
 
 The SDK should generate the installation descriptor, embedded manifest, schema bindings and
 digest from one source. PhotoCraft persists its own validated descriptor as installed metadata;

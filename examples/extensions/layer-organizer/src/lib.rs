@@ -1,4 +1,4 @@
-//! Independent PhotoCraft API-2 guest. Serialized public messages are its entire host link.
+//! Independent PhotoCraft guest. Serialized public messages are its entire host link.
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 

@@ -83,7 +83,7 @@ Perform expensive model or service initialization during the first `run`, with p
 Hello/run frames may include optional `managedStorage`, an object of at most 32 KiB containing
 host-selected generation-scoped settings/data/cache paths, schema and quota metadata, and secret
 references when configured. It contains no new grant or plaintext secret requirement. The host
-prepares managed storage before activating the generation. Legacy workers receive no added keys
+prepares managed storage before activating the generation. Protocol-1 workers receive no added keys
 and keep their existing storage behavior.
 The host revalidates managed paths and quotas before each job and after a successful worker
 reply, before decoding its output. A failed validation rejects the result and revokes that

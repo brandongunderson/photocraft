@@ -5,7 +5,7 @@ It depends on serialization libraries, never on the editor, document model, UI o
 
 `Descriptor::parse`, `Capabilities::validate`, `Contributions::validate`, `negotiate` and
 `PanelResponse::parse` validate the current descriptor, permissions, capabilities and messages.
-Authors set the internal panel discriminator to `2`; old panel version `1` is unsupported.
+Authors set the internal wire discriminator to `1`.
 Optional `repository` and `updates` metadata describe a plugin-owned public GitHub release
 source. `github_repository_parts`, `UpdateSource::validate` and `asset_for_platform` validate
 the canonical repository and exact portable/platform asset name without performing I/O.
@@ -28,5 +28,5 @@ API RFC. Versions of this crate, the host metadata, panels and packages are inde
 
 The crate release is experimental (`0.1.0`). PhotoCraft supports one public Plugin API and
 evolves it through compatible extensions; a new major is reserved for a genuine breaking change.
-Older owned panels must be rebuilt for the current API, without acquiring editor or sibling
-runtime dependencies. Filter ABI 1, package format 2 and native transports remain independent.
+Plugins have no editor or sibling runtime dependencies. Filter ABI 1, package format 2 and
+native transports remain independent.

@@ -54,7 +54,7 @@ pub(super) fn module(manifest: &str) -> Vec<u8> {
     wat::parse_str(format!(
         r#"(module (memory (export "memory") 4)
         (data (i32.const 32) "{quote}") (data (i32.const 65536) "{{}}")
-        (func (export "pce_api_version") (result i32) i32.const 2)
+        (func (export "pce_api_version") (result i32) i32.const 1)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,

@@ -30,8 +30,7 @@ plugin keeps its release history in its own repository.
 
 ### Changed
 
-- Maintain one current PhotoCraft Plugin API. Removed the earlier panel adapter; rebuild
-  older panels in their own repositories. The current internal panel discriminator is `2`.
+- Maintain one PhotoCraft Plugin API with internal wire discriminator `1`.
   Package format 2, filter ABI 1 and native worker protocols 1/2 remain separate contracts.
 - Browse now opens permission review. Install or Update confirms the action without a
   replacement checkbox. Same-version reinstall/repair and deliberate downgrade/replacement
@@ -44,6 +43,9 @@ plugin keeps its release history in its own repository.
 
 ### Fixed
 
+- Release store and generation locks when their owning guard ends, including when a Unix
+  subprocess temporarily inherits a duplicate file descriptor.
+- Preserve the Cargo launcher name when building independent SDK examples through rustup.
 - Reject stale installation reviews and update candidates after the selected package,
   installation, store or activation changes.
 - Protect files used by active and idle workers with per-generation leases. Recheck authority

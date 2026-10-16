@@ -11,17 +11,17 @@ This page is the API reference.
 
 This page documents panels using the [PhotoCraft Plugin API](plugin-api.md), the single
 supported public authoring API. It includes namespaced commands, bounded layer queries,
-atomic edits and native read-only inspectors. Old panels with internal version 1 are rejected;
-rebuild them for the current API. See the independent [Layer Organizer](../examples/extensions/layer-organizer/)
+atomic edits and native read-only inspectors. See the independent [Layer Organizer](../examples/extensions/layer-organizer/)
 and [Document Inspector](../examples/extensions/document-inspector/) examples.
 
 ## Install and use an extension
 
 1. Open **Plugins › Manage Plugins…** or **Plugins › Install Plug-in…**. Both open the same installer.
 2. Click **Browse…** beside the path field, drop one plugin file into the window, or enter a
-   path and inspect the file. Choose a `.pcplugin` package or a `.pcext`/`.wasm` panel, review its author and requested
-   access, and click **Install**. A newer version of the same plugin offers **Update**.
-   Same-version reinstall/repair and older-version installation are secondary maintenance actions.
+   path and select **Show permissions**. Choose a `.pcplugin` package or a `.pcext`/`.wasm` panel,
+   review its author and requested access, and click **Install plugin**. A newer version of the
+   same plugin offers **Update plugin**. Same-version reinstall/repair and older-version
+   installation are under **Advanced**; a damaged installation offers **Repair plugin**.
    A desktop `.pcplugin` package includes its processing engine and assets; installation manages
    them automatically. No separate companion application or worker connection is needed.
 3. Open the installed panel from **Plugins**, or click **Open** in the manager.
@@ -83,7 +83,7 @@ image worker and/or bundled WASM filters. A panel-only package is also valid. De
 `plugin.processImage` to process pixels using only that installation's backends. No host
 service registration or editor rebuild is needed for algorithms fitting its generic image
 contract. See [independent image processing](plugin-image-processing.md) for the complete
-tutorial and neutral Image Gain starter. Earlier version-1 fixed-service packages must be rebuilt as version 2.
+tutorial and neutral Image Gain starter.
 
 Native packages can also grant [`plugin.runTask`](plugin-native-tasks.md) to run their own
 maintenance operations without an image open. Tasks show progress/cancellation and return
@@ -103,7 +103,7 @@ outside generic image processing require explicit host implementation and API re
 
 ```json
 {
-  "apiVersion": 2,
+  "apiVersion": 1,
   "id": "org.example.tools",
   "name": "My Tools",
   "version": "1.0.0",
@@ -133,7 +133,7 @@ Exact manifest metadata bounds:
 
 | Field | Validation |
 |---|---|
-| `apiVersion` | Required internal wire discriminator, currently exactly `2`; old version `1` is unsupported |
+| `apiVersion` | Required internal wire discriminator, exactly `1` |
 | `id` | Required; rules above; 1–64 ASCII bytes |
 | `name` | Required; trimmed form is nonempty and at most 64 Unicode characters; rejects controls/most invisible formatting characters |
 | `version` | Required string; at most 32 UTF-8 bytes. Updates use semantic ordering; incomparable local labels require deliberate replacement. |
@@ -183,7 +183,7 @@ All pointers are 32-bit offsets into the exported `memory`. No WASI or host impo
 | Export | Signature | Contract |
 |---|---|---|
 | `memory` | memory | Guest linear memory |
-| `pce_api_version` | `() -> i32` | Returns the current internal panel discriminator, `2` |
+| `pce_api_version` | `() -> i32` | Returns the internal wire discriminator, `1` |
 | `pce_manifest` | `() -> i64` | UTF-8 manifest JSON packed as `(length << 32) \| pointer` |
 | `pce_alloc` | `(length: i32) -> i32` | Returns writable request storage; `0` means allocation failure |
 | `pce_handle` | `(pointer: i32, length: i32) -> i64` | Returns response JSON in the same packed form |
@@ -192,7 +192,7 @@ For each button click the host creates a fresh instance and calls `pce_handle` w
 
 ```json
 {
-  "apiVersion": 2,
+  "apiVersion": 1,
   "host": {"version": 1, "capabilities": []},
   "event": "apply",
   "values": {"amount": 50},

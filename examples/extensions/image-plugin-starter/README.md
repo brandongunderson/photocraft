@@ -6,9 +6,9 @@ dependencies**. Copy the entire directory into a new repository; no editor sourc
 existing AI plugin, model, companion app or service registration is required.
 
 It uses the **PhotoCraft Plugin API**, **package format 2** and **`plugin.processImage`**.
-The manifest/export discriminator is 2; the filter ABI and native worker transport remain 1.
+The manifest/export wire discriminator, filter ABI and native worker transport are 1.
 The panel declares `host.commands.invoke` and parses the typed host event envelope before
-returning its scoped command. Old panel API 1 modules are unsupported and must be rebuilt.
+returning its scoped command.
 Native packages require a desktop persistent plugin store; browser installation is unsupported.
 
 ## Build

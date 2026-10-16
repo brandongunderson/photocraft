@@ -26,6 +26,6 @@ their own settings and algorithms. Host memory/fuel limits remain authoritative.
 The macro's narrowly allowed Rust 2024 export-name attributes name symbols only. Generated
 guest crates use `deny(unsafe_code)`; no unsafe functions, blocks or pointer reads are added.
 The PhotoCraft Plugin API is the only supported authoring API. Its current internal panel
-discriminator is `2`; version `1` is rejected. Evolve this API until a genuine breaking change
+discriminator is `1`. Evolve this API until a genuine breaking change
 requires another major. Filter ABI 1, package format 2 and native worker protocols 1/2 are
 independent contracts.

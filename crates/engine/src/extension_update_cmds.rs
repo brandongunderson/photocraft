@@ -6,9 +6,6 @@ use crate::{EngineError, Result, Session, commands::CommandSpec};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use desktop::UpdateState;
-#[cfg(target_arch = "wasm32")]
-#[derive(Default)]
-pub(crate) struct UpdateState;
 
 fn error(message: impl std::fmt::Display) -> EngineError {
     EngineError::Other(message.to_string())
@@ -726,7 +723,7 @@ mod desktop {
         use super::*;
 
         fn target() -> Target {
-            let manifest = photocraft_plugins::extension::Manifest::parse(br#"{"apiVersion":2,"id":"org.example.updater","name":"Updater fixture","version":"1.9.0","permissions":{},"panel":{"buttons":[{"id":"open","label":"Open"}]},"repository":"https://github.com/example/updater","updates":{"provider":"github","asset":"plugin.pcplugin"}}"#).unwrap();
+            let manifest = photocraft_plugins::extension::Manifest::parse(br#"{"apiVersion":1,"id":"org.example.updater","name":"Updater fixture","version":"1.9.0","permissions":{},"panel":{"buttons":[{"id":"open","label":"Open"}]},"repository":"https://github.com/example/updater","updates":{"provider":"github","asset":"plugin.pcplugin"}}"#).unwrap();
             Target {
                 id: manifest.id.clone(),
                 installed_version: manifest.version.clone(),
@@ -822,7 +819,7 @@ mod desktop {
                 ("id", json!("org.other.plugin")),
                 ("version", json!("1.11.0")),
                 ("repository", json!("https://github.com/other/source")),
-                ("apiVersion", json!(1)),
+                ("apiVersion", json!(0)),
                 ("updates", json!({"provider":"github","asset":"other.pcplugin"})),
             ] {
                 let mut changed = inspected.clone();

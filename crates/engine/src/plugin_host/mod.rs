@@ -61,7 +61,7 @@ pub(crate) fn compatibility(manifest: &Manifest) -> Result<Value> {
     if manifest.contributes.subscriptions.iter().any(|subscription| !manifest.contributes.inspectors.iter().any(|view| view.event == subscription.handler)) {
         return Err(failure(ErrorCode::UnsupportedOperation, "Document subscriptions must target the inspector handler in this host"));
     }
-    Ok(json!({"panelApi":2,"hostApi":host_api().version,"negotiated":selected}))
+    Ok(json!({"panelApi":photocraft_plugin_api::PANEL_API_VERSION,"hostApi":host_api().version,"negotiated":selected}))
 }
 
 pub(crate) fn validate_install(s: &Session, manifest: &Manifest) -> Result<()> {
@@ -154,7 +154,7 @@ pub(crate) fn event_request(s: &Session, extension: &Extension, event: &str, val
     } else {
         Value::Null
     };
-    json!({"apiVersion":2,"host":host_api(),"compatibility":compatibility(&extension.manifest).ok(),
+    json!({"apiVersion":photocraft_plugin_api::PANEL_API_VERSION,"host":host_api(),"compatibility":compatibility(&extension.manifest).ok(),
         "event":event,"values":values,"state":state,"document":document,"responses":responses})
 }
 

@@ -40,7 +40,7 @@ fn panel_module(manifest: &Value, response: &Value) -> Vec<u8> {
     wat::parse_str(format!(
         r#"(module (memory (export "memory") 4)
         (data (i32.const 32) "{}") (data (i32.const 65536) "{}")
-        (func (export "pce_api_version") (result i32) i32.const 2)
+        (func (export "pce_api_version") (result i32) i32.const 1)
         (func (export "pce_manifest") (result i64) i64.const {})
         (func (export "pce_alloc") (param i32) (result i32) i32.const 196608)
         (func (export "pce_handle") (param i32 i32) (result i64) i64.const {}))"#,
@@ -54,7 +54,7 @@ fn panel_module(manifest: &Value, response: &Value) -> Vec<u8> {
 
 fn filter_package(dir: &Path) -> PathBuf {
     let manifest = json!({
-        "apiVersion":2,"id":ID,"name":"General Image Processor","version":"1.0.0",
+        "apiVersion":1,"id":ID,"name":"General Image Processor","version":"1.0.0",
         "author":"Example author","description":"An independently packaged sandboxed image processor.",
         "permissions":{"documentRead":true,"commands":["plugin.processImage"]},
         "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
@@ -86,7 +86,7 @@ fn package_app(dir: &Path) -> PhotocraftApp {
 fn native_tasks_need_no_image_and_failed_tasks_preserve_an_existing_comparison() {
     for with_image in [false, true] {
         let dir = Scratch::new();
-        let manifest = json!({"apiVersion":2,"id":ID,"name":"General task test","version":"1",
+        let manifest = json!({"apiVersion":1,"id":ID,"name":"General task test","version":"1",
             "permissions":{"commands":["plugin.processImage","plugin.runTask"]},
             "capabilities":{"required":[{"id":"host.commands.invoke","minVersion":1}]},
             "panel":{"preview":true,"buttons":[{"id":"refresh","label":"Check assets"}]}});

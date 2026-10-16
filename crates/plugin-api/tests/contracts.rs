@@ -2,7 +2,7 @@ use photocraft_plugin_api::*;
 use serde_json::{Value, json};
 
 fn descriptor() -> Value {
-    json!({"apiVersion":2,"id":"org.example.layers","name":"Layer Organizer","version":"0.1.0",
+    json!({"apiVersion":1,"id":"org.example.layers","name":"Layer Organizer","version":"0.1.0",
         "permissions":{"documentRead":true,"commands":[]},
         "panel":{"fields":[{"id":"visible","label":"Visible","type":"bool","default":true}],"buttons":[{"id":"apply","label":"Apply"}]},
         "capabilities":{"required":[{"id":"host.document.edit","minVersion":1,"maxVersion":1}],"optional":[{"id":"future.optional","minVersion":1}]},
@@ -111,7 +111,7 @@ fn missing_required_and_wrong_version_have_structured_errors_optional_falls_back
 #[test]
 fn malformed_duplicate_and_unbounded_descriptors_fail_without_panicking() {
     for (pointer, invalid) in [
-        ("/apiVersion", json!(1)),
+        ("/apiVersion", json!(0)),
         ("/id", json!("../escape")),
         ("/name", json!("\u{202e}Layers")),
         ("/capabilities/required/0/minVersion", json!(0)),
@@ -133,7 +133,7 @@ fn malformed_duplicate_and_unbounded_descriptors_fail_without_panicking() {
     assert!(Descriptor::parse(&serde_json::to_vec(&value).unwrap()).is_err());
     assert!(Descriptor::parse(&vec![b' '; MAX_DESCRIPTOR_BYTES + 1]).is_err());
     assert!(Descriptor::parse(&[0xff]).is_err());
-    assert!(Descriptor::parse(br#"{"apiVersion":2,"apiVersion":2}"#).is_err());
+    assert!(Descriptor::parse(br#"{"apiVersion":1,"apiVersion":1}"#).is_err());
     let nested = format!("{}0{}", "[".repeat(1024), "]".repeat(1024));
     assert!(Descriptor::parse(nested.as_bytes()).is_err());
 }
@@ -199,8 +199,8 @@ fn checked_in_json_schemas_match_rust_contract_generation() {
 
 #[test]
 fn actual_host_envelope_and_nullable_replies_decode_with_future_event_fields() {
-    let mut request = json!({"apiVersion":2,"host":{"version":1,"capabilities":[]},
-        "compatibility":{"panelApi":2,"hostApi":1,"negotiated":{"available":[],"unavailableOptional":[]}},
+    let mut request = json!({"apiVersion":1,"host":{"version":1,"capabilities":[]},
+        "compatibility":{"panelApi":1,"hostApi":1,"negotiated":{"available":[],"unavailableOptional":[]}},
         "event":"host_response","values":{},"state":{"saved":7},"document":null,
         "responses":[{"id":"read","result":null}],"futureOptionalField":{"version":1}});
     let event = EventRequest::parse(&serde_json::to_vec(&request).unwrap()).unwrap();
@@ -214,9 +214,9 @@ fn actual_host_envelope_and_nullable_replies_decode_with_future_event_fields() {
 
 #[test]
 fn invalid_versions_duplicate_replies_and_oversized_state_fail_before_a_handler() {
-    let event = json!({"apiVersion":2,"host":{"version":1,"capabilities":[]},"event":"info","state":null});
+    let event = json!({"apiVersion":1,"host":{"version":1,"capabilities":[]},"event":"info","state":null});
     for change in [
-        json!({"apiVersion":1}),
+        json!({"apiVersion":0}),
         json!({"event":"_reserved"}),
         json!({"responses":[{"id":"r","result":{}},{"id":"r","result":{}}]}),
         json!({"state":"x".repeat(129*1024)}),
