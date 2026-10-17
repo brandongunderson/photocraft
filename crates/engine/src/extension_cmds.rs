@@ -181,20 +181,17 @@ impl ExtensionHost {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn remember_unavailable(&mut self, folder: &std::path::Path, id: &str, cause: &EngineError) {
-        match crate::extension_package::recovery_metadata(folder, id) {
-            Ok((guard, manifest)) => {
-                self.unavailable.insert(
-                    id.into(),
-                    Unavailable {
-                        id: id.into(),
-                        name: manifest.as_ref().map_or_else(|| id.into(), |manifest| manifest.name.chars().take(128).collect()),
-                        version: manifest.map(|manifest| manifest.version).filter(|version| version.len() <= 128),
-                        error: cause.to_string().chars().take(2048).collect(),
-                        guard,
-                    },
-                );
-            }
-            Err(cause) => self.load_errors.push(format!("{id}: Recovery metadata is unavailable: {cause}")),
+        if let Ok((guard, manifest)) = crate::extension_package::recovery_metadata(folder, id) {
+            self.unavailable.insert(
+                id.into(),
+                Unavailable {
+                    id: id.into(),
+                    name: manifest.as_ref().map_or_else(|| id.into(), |manifest| manifest.name.chars().take(128).collect()),
+                    version: manifest.map(|manifest| manifest.version).filter(|version| version.len() <= 128),
+                    error: cause.to_string().chars().take(2048).collect(),
+                    guard,
+                },
+            );
         }
     }
 
