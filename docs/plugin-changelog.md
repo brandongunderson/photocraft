@@ -51,6 +51,8 @@ plugin keeps its release history in its own repository.
   retain unverified corrupt payloads rather than deleting files without ownership evidence.
 - Complete the automatic-update preference translations and hide the internal cooldown
   timestamp from the Preferences dialog.
+- Preserve saved export presets when loading preferences alongside the upstream recovery
+  of individual damaged preset sets.
 - Release store and generation locks when their owning guard ends, including when a Unix
   subprocess temporarily inherits a duplicate file descriptor.
 - Preserve the Cargo launcher name when building independent SDK examples through rustup.
