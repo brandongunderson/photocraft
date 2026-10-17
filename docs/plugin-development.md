@@ -576,7 +576,10 @@ manager enable records. Version-2 packaged filters belong to their managed insta
 are invoked through its panel, without global registration. A document's plugin Smart Filter needs its standalone filter installed for fresh
 evaluation. Cached pixels do not distribute the required plugin. See [filter installation](plugins.md#using-plug-ins).
 
-Use the manager's Remove for panels. For filter folder discovery, remove the file to prevent
+Use the manager's Remove for panels, including unavailable installations shown with a load
+error. Choose update file… reviews a compatible replacement without running the rejected
+plugin or resetting the store. Removal keeps managed data; see [recovery](plugin-updates.md#recover-a-plugin-that-cannot-load).
+For filter folder discovery, remove the file to prevent
 future loading, then call `plugin.remove` for its id in the current process or restart the editor.
 `plugin.reload` loads/replaces files it finds; it does not unregister missing files. Do not edit
 PhotoCraft's internal installation records manually.

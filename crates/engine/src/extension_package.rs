@@ -680,11 +680,10 @@ fn validate_record(record: &Record, id: &str) -> Result<()> {
     {
         return Err(error("invalid installation record"));
     }
-    if let Some(descriptor) = &record.descriptor {
-        let descriptor = photocraft_plugins::extension::Manifest::parse(&serde_json::to_vec(descriptor).map_err(error)?).map_err(error)?;
-        if descriptor.id != id {
-            return Err(error("installed descriptor identity mismatch"));
-        }
+    if let Some(descriptor) = &record.descriptor
+        && descriptor.id != id
+    {
+        return Err(error("installed descriptor identity mismatch"));
     }
     if let Some(package) = &record.package {
         check_info(package)?;
@@ -994,6 +993,9 @@ pub(crate) fn discover(root: &Path, id: &str) -> Result<Discovered> {
             storage: loaded.storage,
         });
     };
+    // Ownership remains readable across host API changes; executable discovery still
+    // validates the cached descriptor against the current contract before registering it.
+    let manifest = photocraft_plugins::extension::Manifest::parse(&serde_json::to_vec(&manifest).map_err(error)?).map_err(error)?;
     let dir = generation(root, &record)?;
     let stored: Record = serde_json::from_slice(&read_bounded(&dir.join(OWNERSHIP), MAX_RECORD)?).map_err(error)?;
     if stored != record {
@@ -1108,10 +1110,17 @@ fn review_guard_inner(root: &Path, id: &str) -> Result<ReviewGuard> {
     })
 }
 
-#[cfg(test)]
 pub(crate) fn review_guard(root: &Path, id: &str) -> Result<ReviewGuard> {
     let _store = StoreGuard::read(root)?;
     review_guard_inner(root, id)
+}
+
+/// Recovery metadata is display-only; it never grants execution or contributions.
+pub(crate) fn recovery_metadata(root: &Path, id: &str) -> Result<(ReviewGuard, Option<photocraft_plugins::extension::Manifest>)> {
+    let _store = StoreGuard::read(root)?;
+    let guard = review_guard_inner(root, id)?;
+    let manifest = read_record(root, id).ok().flatten().and_then(|record| record.descriptor);
+    Ok((guard, manifest))
 }
 
 pub(crate) fn review_guard_for(root: &Path, id: &str, expected: Option<&photocraft_plugins::extension::Manifest>) -> Result<ReviewGuard> {
@@ -1192,6 +1201,7 @@ fn install_guarded_with_publication(
         previous.as_ref().filter(|previous| previous.hash != record.hash).map(|previous| generation_lease(root, id, &previous.hash, true)).transpose()?;
     let destination_lease = generation_lease(root, id, &record.hash, true)?;
     let destination = generation(root, &record)?;
+    let mut repair_descriptor = false;
     // Repairing identical payload bytes preserves their recorded ownership metadata.
     if destination.exists() {
         let marker = destination.join(OWNERSHIP);
@@ -1203,7 +1213,12 @@ fn install_guarded_with_publication(
             && stored.package == record.package
             && stored.files == record.files
         {
-            record.descriptor = stored.descriptor;
+            validate_record(&stored, id)?;
+            if stored.descriptor.is_none() {
+                record.descriptor = None;
+            } else {
+                repair_descriptor = stored.descriptor != record.descriptor;
+            }
         }
     }
     let parent = destination.parent().ok_or_else(|| error("invalid generation directory"))?;
@@ -1213,6 +1228,11 @@ fn install_guarded_with_publication(
         return Err(error("installation record is too large"));
     }
     let repaired = corrupt.as_deref().map(|bytes| preserve_corrupt_record(root, id, bytes)).transpose()?;
+    if repair_descriptor {
+        // The exclusive generation lease and identical owned file list bind this cache
+        // repair to the newly reviewed package. Full payload verification still follows.
+        photocraft_format::atomic_write(&destination.join(OWNERSHIP), &record_bytes).map_err(error)?;
+    }
     // Antivirus or disk damage can remove a worker after a successful installation. Reinstalling
     // the identical archive repairs its owned generation instead of trapping it in an invalid
     // cache forever. Never follow links or remove files absent from the ownership record.
@@ -1365,10 +1385,31 @@ pub(crate) fn remove(root: &Path, id: &str) -> Result<Option<String>> {
     remove_with_data(root, id, false)
 }
 
+#[cfg(test)]
 pub(crate) fn remove_with_data(root: &Path, id: &str, purge_data: bool) -> Result<Option<String>> {
+    remove_checked(root, id, purge_data, None)
+}
+
+pub(crate) fn remove_checked(root: &Path, id: &str, purge_data: bool, expected: Option<&ReviewGuard>) -> Result<Option<String>> {
     let _store = StoreGuard::write(root)?;
-    let record = read_record(root, id)?;
-    let previous = rollback_record(root, id, record.as_ref().map(|record| record.hash.as_str()))?;
+    if let Some(expected) = expected
+        && review_guard_inner(root, id)? != *expected
+    {
+        return Err(error("The installed plugin changed since it was loaded. Restart PhotoCraft before removing it."));
+    }
+    let (record, corrupt) = previous_record(root, id, true)?;
+    if let Some(bytes) = &corrupt {
+        preserve_corrupt_record(root, id, bytes)?;
+    }
+    let previous = rollback_record(root, id, record.as_ref().map(|record| record.hash.as_str()));
+    let mut warnings = Vec::new();
+    let previous = match previous {
+        Ok(previous) => previous,
+        Err(cause) => {
+            warnings.push(format!("The previous installation could not be verified; its files were retained: {cause}"));
+            None
+        }
+    };
     revoke_activation(root, id)?;
     // Remove a loose module before its authoritative record so it cannot reappear at restart.
     let loose_module = checked_path(root, &format!("{id}.pcext"))?;
@@ -1378,7 +1419,7 @@ pub(crate) fn remove_with_data(root: &Path, id: &str, purge_data: bool) -> Resul
     if let Some(record) = record {
         std::fs::remove_file(record_path(root, id)?).map_err(error)?;
         let cleanup = cleanup(root, &record).and_then(|()| if purge_data { managed::remove(root, id, &record.hash) } else { Ok(()) });
-        let mut warnings = cleanup.err().map(|e| e.to_string()).into_iter().collect::<Vec<_>>();
+        warnings.extend(cleanup.err().map(|e| e.to_string()));
         if let Some(previous) = previous.filter(|previous| previous.hash != record.hash)
             && let Err(cause) = self::cleanup(root, &previous).and_then(|()| if purge_data { managed::remove(root, id, &previous.hash) } else { Ok(()) })
         {
@@ -1395,8 +1436,17 @@ pub(crate) fn remove_with_data(root: &Path, id: &str, purge_data: bool) -> Resul
         }
         return Ok((!warnings.is_empty()).then(|| warnings.join("; ")));
     }
+    if corrupt.is_some() {
+        std::fs::remove_file(record_path(root, id)?).map_err(error)?;
+        warnings.push("Removed the damaged installation record. Its backup, unverified payload and managed data were retained.".into());
+    }
+    for path in [checked_path(root, &format!("{id}.rollback.json"))?, rollback_journal_path(root, id)?] {
+        if let Err(cause) = crate::extension_cmds::remove_if_exists(&path) {
+            warnings.push(cause.to_string());
+        }
+    }
     crate::extension_cmds::remove_if_exists(&checked_path(root, &format!("{id}.disabled"))?)?;
-    Ok(None)
+    Ok((!warnings.is_empty()).then(|| warnings.join("; ")))
 }
 
 #[cfg(test)]

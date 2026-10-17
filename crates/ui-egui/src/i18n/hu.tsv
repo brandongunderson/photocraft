@@ -15,6 +15,8 @@
 # Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
 # letters; the trailing "…" of dialog commands is kept. Plural rule: a count is followed by the
 # singular noun in Hungarian, so every @plural entry has a single form.
+	Automatic update checks	Frissítések automatikus keresése
+	Last update check unix secs	Utolsó frissítésellenőrzés Unix-másodpercben
 
 # Plural messages and command id overrides
 # Custom paper dimensions in Print Settings.

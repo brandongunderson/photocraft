@@ -14,6 +14,8 @@
 # proprietary localisation resource, string table or product UI was consulted or copied; add
 # entries the same way. Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...)
 # stay as they are; the trailing "…" of dialog commands is kept.
+	Automatic update checks	Verificar atualizações automaticamente
+	Last update check unix secs	Última verificação de atualizações em segundos Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Cor do canal

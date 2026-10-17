@@ -16,6 +16,8 @@
 # Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
 # letters; the trailing "…" of dialog commands is kept; the colon of a label ("Width:") becomes
 # the Russian typographic equivalent, with the space the source carries.
+	Automatic update checks	Автоматическая проверка обновлений
+	Last update check unix secs	Время последней проверки обновлений в секундах Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Цвет канала

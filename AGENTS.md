@@ -166,6 +166,10 @@ code; scheduled jobs stream-verify the full closure before native execution or f
 Never hash model payloads or compile package filters during UI preparation. Compare the embedded
 panel descriptor with its cached authority. Store records without a cached descriptor may use
 eager discovery for a panel implementing the API.
+Keep rejected installations in the separate non-executable recovery registry. Bind their
+review/removal to the record fingerprint and activation captured at discovery; do not weaken
+concurrent-host guards to repair an incompatible plugin. Managed data stays intact by default,
+and corrupt metadata never authorizes deleting unverified payloads or another plugin's files.
 Worker protocol 2 is an explicit verified runtime/worker-v2.json opt-in; never probe or silently
 change a worker's declared launch contract. Each installation/generation owns its persistent process and data.
 

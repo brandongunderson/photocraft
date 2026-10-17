@@ -32,6 +32,13 @@ module hash. Loading the debug/native unit-test build is not a substitute for te
 
 ## Native checks
 
+For installation changes, include an incompatible cached descriptor, malformed record and
+unloadable loose module in a disposable store alongside a healthy plugin. Verify that the
+manager can remove or review a compatible replacement, that rejected code never runs,
+and that the healthy installation, enable state and managed settings remain unchanged.
+Exercise same-version repair, newer-version update, restart, and a competing host changing
+the failed installation after discovery or review. Never use a user's store as a fixture.
+
 Run inside each independent starter or your own plugin project:
 
 ```sh

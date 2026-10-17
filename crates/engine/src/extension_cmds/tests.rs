@@ -295,6 +295,139 @@ fn new_install_keeps_an_existing_disabled_marker_until_explicit_enable() {
     assert_eq!(invoke(&mut session).unwrap()["message"], "new installation");
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn damage_installation(folder: &std::path::Path, mode: &str) {
+    let path = folder.join("org.example.panel.installation.json");
+    let mut record: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    if mode == "metadata" {
+        std::fs::write(path, b"{ malformed installation").unwrap();
+        return;
+    }
+    if mode == "api" {
+        record["descriptor"]["apiVersion"] = json!(999);
+    } else {
+        record["descriptor"]["capabilities"] = json!({});
+    }
+    let ownership = folder.join("bundles/org.example.panel").join(record["hash"].as_str().unwrap()).join(".photocraft-install.json");
+    let bytes = serde_json::to_vec(&record).unwrap();
+    std::fs::write(path, &bytes).unwrap();
+    std::fs::write(ownership, &bytes).unwrap();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn unavailable_installations_can_be_reviewed_updated_and_removed_without_touching_other_plugins() {
+    for mode in ["api", "capability", "metadata"] {
+        for remove_first in [false, true] {
+            let folder = tempfile::tempdir().unwrap();
+            let mut session = Session::new();
+            session.extensions.attach_folder(folder.path().into()).unwrap();
+            install(&mut session, json!({}));
+            let record: Value = serde_json::from_slice(&std::fs::read(folder.path().join("org.example.panel.installation.json")).unwrap()).unwrap();
+            let data = folder.path().join("managed/org.example.panel").join(record["hash"].as_str().unwrap()).join("data");
+            std::fs::create_dir_all(&data).unwrap();
+            std::fs::write(data.join("settings.txt"), b"keep my settings").unwrap();
+            let mut other = manifest();
+            other["id"] = json!("org.example.healthy");
+            other["name"] = json!("Healthy plugin");
+            session.execute("extension.install", json!({"data":b64(&wasm(&other, &json!({})))})).unwrap();
+            session.execute("extension.enable", json!({"id":"org.example.healthy","enabled":false})).unwrap();
+            let healthy_path = folder.path().join("org.example.healthy.installation.json");
+            let healthy_record = std::fs::read(&healthy_path).unwrap();
+            drop(session);
+            damage_installation(folder.path(), mode);
+            let mut session = Session::new();
+            session.extensions.attach_folder(folder.path().into()).unwrap();
+            let list = session.execute("extension.list", json!({})).unwrap();
+            assert_eq!(list["unavailable"][0]["id"], "org.example.panel", "{mode}");
+            assert!(list["unavailable"][0].get("guard").is_none());
+            assert!(!session.extensions.installed.contains_key("org.example.panel"));
+            assert!(invoke(&mut session).is_err(), "recovery metadata must not enable code");
+            if remove_first {
+                session.execute("extension.remove", json!({"id":"org.example.panel"})).unwrap();
+                assert!(session.extensions.unavailable.is_empty());
+                assert!(!folder.path().join("org.example.panel.installation.json").exists());
+                assert_eq!(std::fs::read(data.join("settings.txt")).unwrap(), b"keep my settings");
+            }
+            let mut replacement = manifest();
+            replacement["version"] = json!("1.1.0");
+            let mut input = json!({"data":b64(&wasm(&replacement, &json!({"message":"recovered"})))});
+            let review = session.execute("extension.inspect", input.clone()).unwrap();
+            assert_eq!(
+                review["installation"]["action"],
+                if remove_first {
+                    "install"
+                } else if mode == "metadata" {
+                    "repair"
+                } else {
+                    "update"
+                }
+            );
+            input.as_object_mut().unwrap().extend(review["installation"].as_object().unwrap().clone());
+            input["expectedHash"] = review["hash"].clone();
+            input["intent"] = review["installation"]["action"].clone();
+            session.execute("extension.install", input).unwrap();
+            assert!(session.extensions.unavailable.is_empty());
+            assert_eq!(invoke(&mut session).unwrap()["message"], "recovered");
+            assert_eq!(std::fs::read(&healthy_path).unwrap(), healthy_record);
+            assert!(!session.extensions.installed["org.example.healthy"].enabled);
+            assert_eq!(std::fs::read(data.join("settings.txt")).unwrap(), b"keep my settings");
+            if !remove_first && mode != "metadata" {
+                let active: Value = serde_json::from_slice(&std::fs::read(folder.path().join("org.example.panel.installation.json")).unwrap()).unwrap();
+                let migrated = folder.path().join("managed/org.example.panel").join(active["hash"].as_str().unwrap()).join("data/settings.txt");
+                assert_eq!(std::fs::read(migrated).unwrap(), b"keep my settings");
+            }
+            drop(session);
+            let mut restarted = Session::new();
+            restarted.extensions.attach_folder(folder.path().into()).unwrap();
+            assert!(restarted.extensions.load_errors.is_empty(), "{mode}: {:?}", restarted.extensions.load_errors);
+            assert_eq!(restarted.extensions.installed.len(), 2);
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn unavailable_recovery_rejects_another_hosts_replacement_and_stale_reviews() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut first = Session::new();
+    first.extensions.attach_folder(folder.path().into()).unwrap();
+    install(&mut first, json!({}));
+    drop(first);
+    damage_installation(folder.path(), "api");
+    let mut first = Session::new();
+    first.extensions.attach_folder(folder.path().into()).unwrap();
+    let mut input = json!({"data":b64(&wasm(&manifest(), &json!({"message":"fixed"})))});
+    let review = first.execute("extension.inspect", input.clone()).unwrap();
+    assert_eq!(review["installation"]["action"], "repair");
+    input.as_object_mut().unwrap().extend(review["installation"].as_object().unwrap().clone());
+    input["expectedHash"] = review["hash"].clone();
+    input["intent"] = json!("repair");
+    let mut other = Session::new();
+    other.extensions.attach_folder(folder.path().into()).unwrap();
+    other.execute("extension.install", json!({"data":input["data"],"replace":true})).unwrap();
+    let active = std::fs::read(folder.path().join("org.example.panel.installation.json")).unwrap();
+    assert!(first.execute("extension.inspect", input.clone()).unwrap_err().to_string().contains("another PhotoCraft"));
+    assert!(first.execute("extension.install", input).is_err());
+    assert!(first.execute("extension.remove", json!({"id":"org.example.panel"})).is_err());
+    assert_eq!(std::fs::read(folder.path().join("org.example.panel.installation.json")).unwrap(), active);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn malformed_loose_plugins_can_be_removed_and_their_errors_clear() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("org.example.broken.pcext");
+    std::fs::write(&path, b"broken wasm").unwrap();
+    let mut session = Session::new();
+    session.extensions.attach_folder(folder.path().into()).unwrap();
+    assert_eq!(session.extensions.unavailable.len(), 1);
+    session.execute("extension.remove", json!({"id":"org.example.broken"})).unwrap();
+    assert!(!path.exists());
+    assert!(session.extensions.load_errors.is_empty());
+    assert!(session.extensions.unavailable.is_empty());
+}
+
 #[test]
 fn reviewed_content_cannot_be_swapped_at_installation() {
     let data = b64(&wasm(&manifest(), &json!({})));

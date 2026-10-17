@@ -6,6 +6,8 @@
 # No proprietary translation resources were consulted or extracted.
 # Licensed MIT OR Apache-2.0. See LICENSE-translations.txt and ATTRIBUTION.md.
 # Product names and technology names retain their spelling.
+	Automatic update checks	자동 업데이트 확인
+	Last update check unix secs	마지막 업데이트 확인 Unix 시간(초)
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	채널 색상

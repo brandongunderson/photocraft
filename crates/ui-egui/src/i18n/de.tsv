@@ -14,6 +14,8 @@
 # localisation resource, string table or product UI was consulted or copied; add entries the same
 # way. Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
 # letters; the trailing "…" of dialog commands is kept. Plural rule: one|other (n != 1 -> other).
+	Automatic update checks	Automatisch nach Updates suchen
+	Last update check unix secs	Letzte Updateprüfung in Unix-Sekunden
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Kanalfarbe

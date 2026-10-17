@@ -101,6 +101,10 @@ Managed settings/data/cache/secrets references are generation-scoped; updates st
 a quiescent snapshot, and rollback selects a preserved code/data pair. Keep host lock files and
 activation tombstones intact. Reservations and managed validation quotas do not sandbox trusted
 native processes or enforce kernel memory/GPU/disk limits. Restricted native is unavailable.
+For a broken or incompatible installation, use Manage Plugins' unavailable entry to review a
+compatible replacement or Remove it. Recovery keeps managed data and never runs rejected
+code. Do not reset the store, hand-edit records or bypass stale-installation guards. Include
+recovery alongside a healthy plugin in installation acceptance checks.
 Read docs/plugin-lifecycle.md, docs/plugin-worker-v2.md and docs/plugin-managed-storage.md in the
 matching source/kit before adopting these optional facilities. Preserve existing external caches.
 For release updates, optionally declare the plugin's own public GitHub repository and exact

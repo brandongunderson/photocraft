@@ -640,6 +640,12 @@ fn manager(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let mut reveal = None;
     let mut done = false;
     let busy = app.ui.extensions.manager_job.is_some();
+    #[cfg(not(target_arch = "wasm32"))]
+    let unavailable = app.session.extensions.unavailable.values().cloned().collect::<Vec<_>>();
+    #[cfg(not(target_arch = "wasm32"))]
+    let has_unavailable = !unavailable.is_empty();
+    #[cfg(target_arch = "wasm32")]
+    let has_unavailable = false;
     let extensions = app
         .session
         .extensions
@@ -776,7 +782,7 @@ fn manager(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 if ui.add_enabled(!busy && !extensions.is_empty(), egui::Button::new("Check for updates")).clicked() {
                     check_updates = Some(json!({}));
                 }
-                if extensions.is_empty() {
+                if extensions.is_empty() && !has_unavailable {
                     ui.weak("No plugins installed. Choose a plugin file to get started.");
                 }
                 for (id, manifest, enabled, native, storage) in &extensions {
@@ -829,7 +835,34 @@ fn manager(app: &mut PhotocraftApp, ctx: &egui::Context) {
                         ui.add_space(6.0);
                     });
                 }
+                #[cfg(not(target_arch = "wasm32"))]
+                for plugin in &unavailable {
+                    ui.push_id((&plugin.id, "unavailable"), |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.strong(&plugin.name);
+                            if let Some(version) = &plugin.version {
+                                ui.weak(version);
+                            }
+                        });
+                        ui.label("Could not load this plugin.");
+                        ui.weak(&plugin.error);
+                        ui.weak("Choose a compatible update or remove this installation. Your plugin data is kept.");
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.add_enabled(!busy, egui::Button::new("Choose update file…")).clicked() {
+                                browse = true;
+                            }
+                            if ui.add_enabled(!busy, egui::Button::new("Remove")).clicked() {
+                                change = Some(("extension.remove", json!({"id":plugin.id})));
+                            }
+                        });
+                        ui.add_space(6.0);
+                    });
+                }
                 for error in &app.session.extensions.load_errors {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if unavailable.iter().any(|plugin| error.starts_with(&format!("{}: ", plugin.id))) {
+                        continue;
+                    }
                     ui.label(error);
                 }
             });

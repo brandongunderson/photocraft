@@ -21,6 +21,8 @@
 # (PhotoCraft, ArtCraft, Camera Raw, OpenType, Lab ...) stay as they are; RGB/CMYK stay as they
 # are; the trailing "…" of dialog commands is kept. A count that is not an @plural entry is kept
 # out of noun agreement ("Broj: {n}", "slojeva: {n}") so every number reads correctly.
+	Automatic update checks	Automatska provera ažuriranja
+	Last update check unix secs	Poslednja provera ažuriranja u Unix sekundama
 
 # Guide layout dialog
 	Rows	Redovi

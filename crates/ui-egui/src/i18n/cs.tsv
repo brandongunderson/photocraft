@@ -18,6 +18,8 @@
 # Uložit jako…), sentence case as in the English source. Product and technology names
 # (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin letters; the trailing "…" of
 # dialog commands is kept.
+	Automatic update checks	Automatická kontrola aktualizací
+	Last update check unix secs	Poslední kontrola aktualizací v sekundách Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Barva kanálu

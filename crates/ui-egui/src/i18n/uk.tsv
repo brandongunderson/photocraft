@@ -7,6 +7,8 @@
 # Original translations from the meaning of PhotoCraft's English source keys.
 # No proprietary translation resources were used.
 # Licensed MIT OR Apache-2.0. See LICENSE-translations.txt and ATTRIBUTION.md.
+	Automatic update checks	Автоматична перевірка оновлень
+	Last update check unix secs	Час останньої перевірки оновлень у секундах Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Колір каналу

@@ -18,6 +18,8 @@
 # « : ; ? ! » and "%", and inside guillemets « … ». Product and technology names (PhotoCraft,
 # ArtCraft, OpenType, Lab ...) stay as they are; RGB/CMYK read RVB/CMJN; the trailing "…" of
 # dialog commands is kept.
+	Automatic update checks	Vérifier automatiquement les mises à jour
+	Last update check unix secs	Dernière recherche de mises à jour en secondes Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Couleur de la couche

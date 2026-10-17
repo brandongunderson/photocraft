@@ -10,6 +10,8 @@
 # No proprietary translation resources were consulted or extracted.
 # Licensed MIT OR Apache-2.0, as the code.
 # Product and technology names retain their spelling. See docs/localization-zh-hans.md.
+	Automatic update checks	自动检查更新
+	Last update check unix secs	上次检查更新的 Unix 时间（秒）
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	通道颜色

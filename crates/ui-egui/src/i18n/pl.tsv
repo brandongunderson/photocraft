@@ -17,6 +17,8 @@
 # stay in Latin letters; the trailing "…" of dialog commands is kept.
 # Conventions: menus are nouns (Plik, Edycja, Obraz ...), commands are infinitives (Otwórz…,
 # Zapisz jako…), sentence case as in the English source. Quotes: „…”.
+	Automatic update checks	Automatyczne sprawdzanie aktualizacji
+	Last update check unix secs	Ostatnie sprawdzenie aktualizacji w sekundach Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Kolor kanału

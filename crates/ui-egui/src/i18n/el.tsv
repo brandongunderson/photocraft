@@ -2,6 +2,8 @@
 # Columns separated by TAB: context, English source, Greek translation.
 # Original translations based on general Greek graphics/computing terminology.
 # Covers every source label the i18n coverage check lists.
+	Automatic update checks	Αυτόματος έλεγχος ενημερώσεων
+	Last update check unix secs	Τελευταίος έλεγχος ενημερώσεων σε δευτερόλεπτα Unix
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Χρώμα καναλιού

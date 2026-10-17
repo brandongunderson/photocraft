@@ -10,6 +10,8 @@
 # Custom paper dimensions in Print Settings.
 	Paper Width	Kağıt Genişliği
 	Paper Height	Kağıt Yüksekliği
+	Automatic update checks	Güncellemeleri otomatik kontrol et
+	Last update check unix secs	Son güncelleme kontrolünün Unix saniye değeri
 
 	Rows	Satırlar
 	Number	Sayı

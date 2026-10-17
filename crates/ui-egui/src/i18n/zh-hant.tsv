@@ -18,6 +18,8 @@
 # and paper sizes (Legal, Tabloid) stay in Latin letters; the trailing "…" of dialog commands is
 # kept. Full-width punctuation (，。：) inside sentences; half-width parentheses and the " · "
 # separators as in the English.
+	Automatic update checks	自動檢查更新
+	Last update check unix secs	上次檢查更新的 Unix 時間（秒）
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	色版顏色

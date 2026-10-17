@@ -18,6 +18,8 @@
 # names (PhotoCraft, ArtCraft, OpenType, RGB, CMYK, Lab, PSD, PNG, JPEG, WebP, OpenEXR, AVIF …)
 # stay as they are; the trailing "…" of dialog commands is kept. Plural rule: one form
 # (`plural_none` in i18n/mod.rs).
+	Automatic update checks	Tự động kiểm tra bản cập nhật
+	Last update check unix secs	Lần kiểm tra cập nhật gần nhất tính bằng giây Unix
 
 
 # Channel Options and New Spot Channel (#3761)

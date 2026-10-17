@@ -158,6 +158,61 @@ fn harness(app: PhotocraftApp) -> Harness<'static, PhotocraftApp> {
 }
 
 #[test]
+fn manager_removes_an_unloadable_plugin_without_an_executable_guest() {
+    let dir = Scratch::new();
+    let store = dir.0.join("Extensions");
+    std::fs::create_dir(&store).unwrap();
+    let path = store.join("org.example.broken.pcext");
+    std::fs::write(&path, b"broken module").unwrap();
+    let mut app = package_app(&dir.0);
+    app.ui.extensions.manager_open = true;
+    let mut h = harness(app);
+    h.run_steps(5);
+    assert!(h.query_by_label("Could not load this plugin.").is_some());
+    assert!(h.query_by_label("Choose update file…").is_some());
+    assert!(h.query_by_label("No plugins installed. Choose a plugin file to get started.").is_none());
+    h.get_by_label("Remove").click();
+    h.run_steps(3);
+    assert!(!path.exists());
+    assert!(h.state().session.extensions.unavailable.is_empty());
+    assert!(h.state().session.extensions.load_errors.is_empty());
+    assert!(h.query_by_label("No plugins installed. Choose a plugin file to get started.").is_some());
+}
+
+#[test]
+fn manager_reviews_and_repairs_an_incompatible_installation() {
+    let dir = Scratch::new();
+    let path = filter_package(&dir.0);
+    let mut app = package_app(&dir.0);
+    app.run("extension.install", json!({"path":path})).unwrap();
+    let record_path = dir.0.join("Extensions").join(format!("{ID}.installation.json"));
+    let mut record: Value = serde_json::from_slice(&std::fs::read(&record_path).unwrap()).unwrap();
+    record["descriptor"]["apiVersion"] = json!(999);
+    let ownership = dir.0.join("Extensions/bundles").join(ID).join(record["hash"].as_str().unwrap()).join(".photocraft-install.json");
+    let bytes = serde_json::to_vec(&record).unwrap();
+    std::fs::write(&record_path, &bytes).unwrap();
+    std::fs::write(ownership, &bytes).unwrap();
+    app.session.extensions.attach_folder(dir.0.join("Extensions")).unwrap();
+    app.ui.extensions.manager_open = true;
+    let mut h = harness(app);
+    h.run_steps(5);
+    assert!(h.query_by_label("General Image Processor").is_some());
+    assert!(h.query_by_label("Could not load this plugin.").is_some());
+    assert!(h.query_by_label("Open").is_none());
+    inspect(h.state_mut(), json!({"path":path})).unwrap();
+    h.run_steps(3);
+    assert_eq!(h.state().ui.extensions.pending.as_ref().unwrap().action, InstallAction::Repair);
+    h.get_by_label("Repair plugin").click();
+    h.run_steps(4);
+    assert!(h.state().session.extensions.unavailable.is_empty());
+    assert!(h.state().session.extensions.load_errors.is_empty());
+    assert!(h.state().session.extensions.installed.contains_key(ID));
+    assert!(h.state().ui.extensions.status.starts_with("Repaired General Image Processor"));
+    assert!(h.state().ui.extensions.path.is_empty());
+    assert!(h.query_by_label("Open").is_some());
+}
+
+#[test]
 fn filter_only_package_review_install_menu_and_done_need_no_native_consent() {
     let dir = Scratch::new();
     let path = filter_package(&dir.0);

@@ -7,6 +7,8 @@
 # entries the same way. Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...)
 # stay as they are; the trailing "…" of dialog commands is kept. UI text addresses the user
 # informally ("je") and uses sentence case.
+	Automatic update checks	Automatisch op updates controleren
+	Last update check unix secs	Laatste updatecontrole in Unix-seconden
 
 # Channel Options and New Spot Channel (#3761)
 	Channel Color	Kanaalkleur

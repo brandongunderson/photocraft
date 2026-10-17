@@ -38,12 +38,26 @@ pub struct Installed {
     pub(crate) deferred: Option<Arc<crate::extension_package::DeferredPayload>>,
 }
 
+/// An installation rejected at discovery remains manageable without becoming executable.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct Unavailable {
+    pub id: String,
+    pub name: String,
+    pub version: Option<String>,
+    pub error: String,
+    #[serde(skip)]
+    pub(crate) guard: crate::extension_package::ReviewGuard,
+}
+
 #[derive(Default)]
 pub struct ExtensionHost {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) updates: crate::extension_update_cmds::UpdateState,
     pub(crate) platform: crate::plugin_host::Platform,
     pub installed: BTreeMap<String, Installed>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub unavailable: BTreeMap<String, Unavailable>,
     /// Bounded image comparisons are dropped when their installation changes.
     pub(crate) previews: crate::plugin_preview::PreviewStore,
     #[cfg(not(target_arch = "wasm32"))]
@@ -149,6 +163,10 @@ pub fn validate_permissions(manifest: &Manifest) -> Result<()> {
 
 impl ExtensionHost {
     pub fn list(&self) -> Value {
+        #[cfg(not(target_arch = "wasm32"))]
+        let unavailable = self.unavailable.values().collect::<Vec<_>>();
+        #[cfg(target_arch = "wasm32")]
+        let unavailable: Vec<Value> = Vec::new();
         json!({"extensions": self.installed.values().map(|p| {
             let mut item = json!({"manifest": p.extension.manifest, "enabled": p.enabled, "storage": p.storage,
                 "lifecycle":if p.enabled { p.extension.lifecycle() } else { "disabled" }});
@@ -158,7 +176,26 @@ impl ExtensionHost {
             { item["package"] = Value::Null; }
             item
         }).collect::<Vec<_>>(),
-            "errors": self.load_errors})
+            "unavailable": unavailable, "errors": self.load_errors})
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn remember_unavailable(&mut self, folder: &std::path::Path, id: &str, cause: &EngineError) {
+        match crate::extension_package::recovery_metadata(folder, id) {
+            Ok((guard, manifest)) => {
+                self.unavailable.insert(
+                    id.into(),
+                    Unavailable {
+                        id: id.into(),
+                        name: manifest.as_ref().map_or_else(|| id.into(), |manifest| manifest.name.chars().take(128).collect()),
+                        version: manifest.map(|manifest| manifest.version).filter(|version| version.len() <= 128),
+                        error: cause.to_string().chars().take(2048).collect(),
+                        guard,
+                    },
+                );
+            }
+            Err(cause) => self.load_errors.push(format!("{id}: Recovery metadata is unavailable: {cause}")),
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -175,6 +212,7 @@ impl ExtensionHost {
         self.previews.clear();
         self.task_epochs.clear();
         self.installed.clear();
+        self.unavailable.clear();
         self.platform = Default::default();
         self.updates = Default::default();
         let records = crate::extension_package::record_ids(&folder)?;
@@ -213,6 +251,7 @@ impl ExtensionHost {
                 Ok(())
             })();
             if let Err(e) = loaded {
+                self.remember_unavailable(&folder, &id, &e);
                 self.load_errors.push(format!("{id}: {e}"));
             }
         }
@@ -222,7 +261,7 @@ impl ExtensionHost {
             .filter(|p| p.extension().is_some_and(|e| e == "pcext") && !p.file_stem().and_then(|n| n.to_str()).is_some_and(|id| record_ids.contains(id)))
             .collect::<Vec<_>>();
         paths.sort();
-        let available = 4096usize.saturating_sub(self.installed.len());
+        let available = 4096usize.saturating_sub(self.installed.len() + self.unavailable.len());
         if paths.len() > available {
             self.load_errors.push("Only the first 4096 extensions were loaded".into());
             paths.truncate(available);
@@ -256,6 +295,13 @@ impl ExtensionHost {
                 Ok(())
             })();
             if let Err(e) = loaded {
+                if let Some(id) = path.file_stem().and_then(|name| name.to_str()) {
+                    self.remember_unavailable(&folder, id, &e);
+                    if self.unavailable.contains_key(id) {
+                        self.load_errors.push(format!("{id}: {e}"));
+                        continue;
+                    }
+                }
                 self.load_errors.push(format!("{}: {e}", path.display()));
             }
         }
@@ -377,7 +423,16 @@ pub(crate) fn installation_guard(s: &Session, id: &str) -> Result<Value> {
         // unrelated plugin's installation must not invalidate this reviewed update.
         guard["expectedSessionRevision"] = json!(0);
         let expected = s.extensions.installed.get(id).map(|installed| &installed.extension.manifest);
-        let disk = serde_json::to_value(crate::extension_package::review_guard_for(folder, id, expected)?).map_err(error)?;
+        let disk = if let Some(unavailable) = s.extensions.unavailable.get(id) {
+            let current = crate::extension_package::review_guard(folder, id)?;
+            if current != unavailable.guard {
+                return Err(error("The installed plugin changed in another PhotoCraft instance. Restart to reload plugins before updating."));
+            }
+            current
+        } else {
+            crate::extension_package::review_guard_for(folder, id, expected)?
+        };
+        let disk = serde_json::to_value(disk).map_err(error)?;
         guard["expectedStoreHash"] = disk["expectedStoreHash"].clone();
         guard["expectedInstalledHash"] = disk["expectedInstalledHash"].clone();
         guard["expectedActivation"] = disk["expectedActivation"].clone();
@@ -405,16 +460,31 @@ fn disposition(installed: Option<&str>, target: &str) -> (&'static str, Option<&
     }
 }
 
+fn installation_disposition<'a>(host: &'a ExtensionHost, id: &str, target: &str) -> (&'static str, Option<&'static str>, Option<&'a str>) {
+    let version = host.installed.get(id).map(|installed| installed.extension.manifest.version.as_str());
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(unavailable) = host.unavailable.get(id) {
+        let version = unavailable.version.as_deref();
+        let action = disposition(version, target).0;
+        return (
+            if matches!(action, "install" | "reinstall") { "repair" } else { action },
+            Some("The installed plugin could not be loaded. Review this compatible package to restore it; managed data is preserved."),
+            version,
+        );
+    }
+    let (action, reason) = disposition(version, target);
+    (action, reason, version)
+}
+
 pub(crate) fn finish_inspection(s: &Session, mut result: Value) -> Result<Value> {
     let manifest: Manifest = serde_json::from_value(result["manifest"].clone()).map_err(error)?;
-    let installed = s.extensions.installed.get(&manifest.id);
     let mut installation = installation_guard(s, &manifest.id)?;
-    let (mut action, reason) = disposition(installed.map(|installed| installed.extension.manifest.version.as_str()), &manifest.version);
-    if installed.is_none() && installation["expectedInstalledHash"].as_str().is_some_and(|hash| !hash.is_empty()) {
+    let (mut action, reason, version) = installation_disposition(&s.extensions, &manifest.id, &manifest.version);
+    if action == "install" && installation["expectedInstalledHash"].as_str().is_some_and(|hash| !hash.is_empty()) {
         action = "repair";
     }
     installation["action"] = json!(action);
-    installation["installedVersion"] = json!(installed.map(|installed| &installed.extension.manifest.version));
+    installation["installedVersion"] = json!(version);
     installation["targetVersion"] = json!(manifest.version);
     installation["reason"] = json!(reason);
     result["installation"] = installation;
@@ -439,7 +509,7 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(error("extension changed since review; inspect it again"));
     }
     let id = extension.manifest.id.clone();
-    let action = disposition(s.extensions.installed.get(&id).map(|installed| installed.extension.manifest.version.as_str()), &extension.manifest.version).0;
+    let action = installation_disposition(&s.extensions, &id, &extension.manifest.version).0;
     let intent = p.get("intent").and_then(Value::as_str);
     if let Some(intent) = intent {
         if p.get("expectedHash").and_then(Value::as_str).is_none_or(|hash| hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit())) {
@@ -462,6 +532,8 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     let replacing = s.extensions.installed.contains_key(&id);
+    #[cfg(not(target_arch = "wasm32"))]
+    let replacing = replacing || s.extensions.unavailable.contains_key(&id);
     let replace = p.get("replace").and_then(Value::as_bool) == Some(true) || intent.is_some_and(|intent| intent != "install");
     if replacing && !replace {
         #[cfg(not(target_arch = "wasm32"))]
@@ -515,6 +587,8 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
     };
     #[cfg(not(target_arch = "wasm32"))]
     s.extensions.updates.invalidate(&id);
+    #[cfg(not(target_arch = "wasm32"))]
+    s.extensions.unavailable.remove(&id);
     s.extensions.installed.insert(
         id,
         Installed {
@@ -614,14 +688,22 @@ pub(crate) fn remove_if_exists(path: &std::path::Path) -> Result<()> {
 
 fn remove(s: &mut Session, p: &Value) -> Result<Value> {
     let id = id(p)?;
-    if !s.extensions.installed.contains_key(id) {
+    let known = s.extensions.installed.contains_key(id);
+    #[cfg(not(target_arch = "wasm32"))]
+    let known = known || s.extensions.unavailable.contains_key(id);
+    if !known {
         return Err(error("extension is not installed"));
     }
     #[cfg(not(target_arch = "wasm32"))]
-    if let Some(folder) = &s.extensions.folder
-        && let Some(warning) = crate::extension_package::remove_with_data(folder, id, p.get("purgeData").and_then(Value::as_bool).unwrap_or(false))?
-    {
-        s.extensions.load_errors.push(warning);
+    if let Some(folder) = &s.extensions.folder {
+        let guard: crate::extension_package::ReviewGuard = serde_json::from_value(installation_guard(s, id)?).map_err(error)?;
+        let warning = crate::extension_package::remove_checked(folder, id, p.get("purgeData").and_then(Value::as_bool).unwrap_or(false), Some(&guard))?;
+        let prefix = format!("{id}: ");
+        s.extensions.load_errors.retain(|message| !message.starts_with(&prefix));
+        s.extensions.unavailable.remove(id);
+        if let Some(warning) = warning {
+            s.extensions.load_errors.push(warning);
+        }
     }
     crate::plugin_host::revoke(s, id);
     s.extensions.installed.remove(id);
@@ -655,6 +737,9 @@ fn rollback(s: &mut Session, p: &Value) -> Result<Value> {
         s.forget_plugin_preview(id);
         let enabled = !crate::extension_package::checked_path(&folder, &format!("{id}.disabled"))?.exists();
         s.extensions.updates.invalidate(id);
+        s.extensions.unavailable.remove(id);
+        let prefix = format!("{id}: ");
+        s.extensions.load_errors.retain(|message| !message.starts_with(&prefix));
         s.extensions.installed.insert(
             id.into(),
             Installed {

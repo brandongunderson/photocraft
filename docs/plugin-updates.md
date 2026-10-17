@@ -21,6 +21,22 @@ plugin** are also explicit Advanced actions. A damaged installation offers **Rep
 The preserved previous code/data pair can also be selected through `extension.rollback`.
 See [managed storage](plugin-managed-storage.md) for migration and rollback behavior.
 
+### Recover a plugin that cannot load
+
+Broken and incompatible desktop installations remain visible in Manage Plugins with their
+load error, **Choose update file…** and **Remove**. Choose a compatible package and review
+its permissions; a newer version offers **Update plugin**, and the same version offers
+**Repair plugin**. Recovery never executes the rejected plugin. Other installations and
+their settings are unchanged; removal keeps the selected plugin's managed data by default.
+
+`extension.list` reports these entries in a separate `unavailable` array with `id`, `name`,
+optional `version` and `error`. They do not contribute executable commands or panels.
+`extension.remove` accepts their IDs. Recovery reviews and removal remain bound to the
+installation fingerprint and activation observed at discovery. A real change by another
+host still requires a restart and fresh review. Do not reset the store or edit internal records.
+If metadata is malformed, removal preserves a bounded backup and retains payload/data whose
+ownership cannot be verified; it never deletes another plugin's files to complete cleanup.
+
 ## Opt into GitHub Releases
 
 Add an optional `repository` and `updates` object to the plugin's embedded descriptor, or to
@@ -59,6 +75,7 @@ without this metadata remain installable; they show no automatic release source.
 The desktop checks opted-in installed plugins automatically after a 30-second startup delay,
 then at most once every 24 hours while PhotoCraft is running. The last attempt, including a
 network failure, is saved with preferences so restarting does not repeatedly contact GitHub.
+The saved cooldown timestamp is internal state and has no editable Preferences control.
 Checks wait while user jobs, file dialogs or an installation review are active. They are skipped
 in browser, inline-job, plugin-recovery and restricted automation sessions. A changed system
 clock cannot cause repeated checks or a permanently deferred future timestamp.

@@ -3476,6 +3476,8 @@ mod tests {
 
     #[test]
     fn unimplemented_preferences_are_hidden_from_the_dialog() {
+        assert!(prefs::is_hidden("plugIns.lastUpdateCheckUnixSecs"), "the update cooldown timestamp is internal state");
+        assert!(!prefs::is_hidden("plugIns.automaticUpdateChecks"));
         let values = prefs::Preferences::default().to_json();
         assert!(has_visible_fields(&values, "general"));
         assert!(has_visible_fields(&values, "fileHandling"));
