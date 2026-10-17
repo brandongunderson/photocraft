@@ -559,9 +559,10 @@ pub(crate) fn export_flat_with(doc: &Document, format: Format, opts: &ExportOpti
         } else if let Some(linear) = convert_gray(&img, photocraft_cms::builtin::linear_gray(), CSample::F32)? {
             img = linear;
         }
-    } else if !format.caps().icc {
-        // Untagged files read back as sRGB/sGray: convert to it (as Quick Export does) rather than
-        // write values that only mean something under the dropped profile.
+    } else if !format.caps().icc || (img.layout().is_gray() && !format.caps().layouts.iter().any(|l| l.is_gray())) {
+        // Untagged files read back as sRGB/sGray. Even an ICC-capable format like WebP loses a
+        // gray profile when the codec expands gray to RGB. Convert first (as Quick Export does)
+        // rather than write values that only mean something under the dropped profile.
         if let Some(srgb) = convert_rgb(&img, Builtin::Srgb.profile(), Intent::Perceptual, true, img.sample_type())? {
             img = srgb;
             warnings.push(format!("colours converted to sRGB; {format:?} can't embed the document's colour profile"));

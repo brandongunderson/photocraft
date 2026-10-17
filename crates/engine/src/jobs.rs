@@ -543,7 +543,7 @@ impl Session {
                 job.ctx.cancel();
                 Err(e)
             }
-            (Err(e), None) => Err(e),
+            (Err(e), None) => Err(self.explain_missing_layer(e)),
             (Ok(_), Some(mut job)) => {
                 job.command = command.to_string();
                 job.params = params;
@@ -792,7 +792,7 @@ impl Session {
                 job.ctx.cancel();
                 Err(e)
             }
-            (Err(e), None) => Err(e),
+            (Err(e), None) => Err(self.explain_missing_layer(e)),
             (Ok(_), Some(mut job)) => {
                 job.command = id.to_string();
                 job.params = params;
@@ -805,6 +805,18 @@ impl Session {
                 self.after_command(id, params, spec.journal, Some(nested_from));
                 Ok(Started::Done(v))
             }
+        }
+    }
+
+    /// A command that failed on a layer id the document doesn't have says which ids it does have
+    /// (#5058): ids are not positions (an opened PNG's Background is not layer 1), and an agent
+    /// should not need `document.inspect` to recover.
+    fn explain_missing_layer(&self, e: EngineError) -> EngineError {
+        match (e, self.active()) {
+            (EngineError::NoLayer(id), Some(st)) if st.doc.layer(id).is_none() => {
+                EngineError::UnknownLayer { id, known: crate::commands::layer_listing(&st.doc) }
+            }
+            (e, _) => e,
         }
     }
 

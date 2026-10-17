@@ -1,4 +1,4 @@
-//! Headless Photocraft command line. `run` is the whole program, so it can be
+//! Headless PhotoCraft command line. `run` is the whole program, so it can be
 //! tested in-process as well as through the binary.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -12,7 +12,7 @@ use photocraft_io::ExportOptions;
 use serde_json::{Value, json};
 
 pub const USAGE: &str = "\
-photocraft-cli: headless Photocraft
+photocraft-cli: headless PhotoCraft
 
 USAGE:
   photocraft-cli convert <in> <out> [--format <ext>] [--quality <1-100>] [--tiff-layers] [--tga-bits <24|32>] [--dpx-bits <8|10|12|16>]

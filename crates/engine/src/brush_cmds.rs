@@ -863,9 +863,13 @@ fn define_from_selection(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // Paint amount = darkness × alpha × selection (black = full paint, like Photoshop).
     let (w, h) = (area.width() as usize, area.height() as usize);
-    let mut v = vec![0.0f32; w * h];
+    // The sampled tip is one f32 buffer over the whole selection; a large selection must fail
+    // gracefully instead of aborting the process on allocation, so reserve it fallibly.
+    let mut v = crate::allocation::filled(w * h, 0.0, "defining a brush from the selection")?;
     let sc = sel.channels();
-    let sv = sel.read_region(area);
+    // The selection mask is a second buffer of the same size; it must fail gracefully too
+    // (review of #5469), so read it through the fallible allocator.
+    let sv = crate::allocation::read_region(sel, area, "defining a brush from the selection")?;
     for y in 0..h {
         for x in 0..w {
             let c = surf.rgba(area.x0 + x as i32, area.y0 + y as i32);

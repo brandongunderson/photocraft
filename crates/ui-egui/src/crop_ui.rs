@@ -645,7 +645,7 @@ pub fn swapped(r: [f64; 4]) -> [f64; 4] {
 /// no ratio is set; "original" becomes the document's size turned on its side.
 pub fn swapped_ratio(key: &str, doc_w: f64, doc_h: f64) -> Option<String> {
     let (w, h) = crate::chrome_ui::crop_ratio(key, doc_w, doc_h).filter(|(w, h)| w.is_finite() && h.is_finite() && *w > 0.0 && *h > 0.0)?;
-    Some(format!("{}:{}", crate::widgets::fmt_num(h), crate::widgets::fmt_num(w)))
+    Some(format!("{}:{}", crate::crop_size::fmt_ratio(h), crate::crop_size::fmt_ratio(w)))
 }
 
 /// X: swaps the pending frame between portrait and landscape about its centre, keeping its angle,
@@ -1949,6 +1949,7 @@ mod tests {
         app.ui.tool_options.crop_ratio = String::new();
         assert!(swap_orientation(&mut app));
         assert_eq!(app.ui.tool_options.crop_ratio, "", "no ratio stays none");
+        assert_eq!(swapped_ratio("1.414:1", 1.0, 1.0).as_deref(), Some("1:1.414"), "decimals survive the swap (#6487)");
         assert_eq!(swapped_ratio("0:5", 1.0, 1.0), None);
         assert_eq!(swapped_ratio("nonsense", 1.0, 1.0), None);
         // No frame, or another tool: X is Switch Foreground and Background Colors.

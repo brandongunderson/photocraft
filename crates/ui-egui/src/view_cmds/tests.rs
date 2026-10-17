@@ -14,6 +14,32 @@ fn checked(app: &PhotocraftApp, id: &str) -> Option<bool> {
     menu_items(app).into_iter().find(|i| i.id == id).and_then(|i| i.checked)
 }
 
+/// #1209: the browser picker supplies bytes even when the engine cannot read native paths.
+#[test]
+fn place_embedded_enablement_does_not_require_native_doc() {
+    for has_doc in [true, false] {
+        for has_picker in [true, false] {
+            let (mut app, _) = app_with(usize::from(has_doc));
+            if has_picker {
+                app.services.file_dialog = Some(Box::new(|_, _, _| {}));
+            }
+            for native_filesystem in [false, true] {
+                let native_doc = native_filesystem && has_doc;
+                assert_eq!(
+                    is_enabled_with_engine(&app, "file.placeEmbedded", || native_doc),
+                    Some(has_doc && has_picker),
+                    "Place Embedded: doc={has_doc}, picker={has_picker}, native_doc={native_doc}"
+                );
+                assert_eq!(
+                    is_enabled_with_engine(&app, "file.placeLinked", || native_doc),
+                    Some(native_doc),
+                    "Place Linked must retain the engine's native_doc guard"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn show_snap_extras_and_screen_modes_are_state() {
     let (mut app, ctx) = app_with(1);

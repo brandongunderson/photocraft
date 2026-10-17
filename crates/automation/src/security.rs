@@ -135,7 +135,27 @@ pub fn repeat_auth_reply(line: &str) -> Option<Value> {
 }
 
 fn read_token_file(path: &Path) -> Result<String, AutomationError> {
-    let token = std::fs::read_to_string(path).map_err(|e| AutomationError::Io(format!("{}: {e}", path.display())))?;
+    // Validate what we actually opened, not just the name: an existing control-token file must be
+    // a regular file that no other local principal can read. A freshly created one is 0600
+    // (`create_token_file`); an operator-supplied one is checked here so a group- or world-readable
+    // token is refused rather than trusted as the control credential (#4966).
+    let mut file = std::fs::File::open(path).map_err(|e| AutomationError::Io(format!("{}: {e}", path.display())))?;
+    let meta = file.metadata().map_err(|e| AutomationError::Io(format!("{}: {e}", path.display())))?;
+    if !meta.is_file() {
+        return Err(AutomationError::Io(format!("{}: control token file is not a regular file", path.display())));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if meta.mode() & 0o077 != 0 {
+            return Err(AutomationError::Io(format!(
+                "{}: control token file is readable by group or others (mode {:o}); restrict it to its owner (e.g. chmod 600)",
+                path.display(),
+                meta.mode() & 0o777
+            )));
+        }
+    }
+    let token = std::io::read_to_string(&mut file).map_err(|e| AutomationError::Io(format!("{}: {e}", path.display())))?;
     let token = token.trim().to_owned();
     validate_token(&token)?;
     Ok(token)
@@ -431,6 +451,27 @@ mod tests {
         assert_eq!(read_bounded_line(&mut reader, &mut line).unwrap(), LineRead::Line);
         assert_eq!(line, "two\n");
         sender.join().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_existing_token_file_must_be_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("photocraft-token-perm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("token.txt");
+        let token = "0123456789abcdef".repeat(4); // 64 hex chars, passes validate_token
+        std::fs::write(&path, &token).unwrap();
+
+        // A group- or world-readable token is refused: the control credential must not be shared (#4966).
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(read_token_file(&path).is_err(), "a 0644 token file must be refused");
+
+        // Owner-only is opened, read and validated.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(read_token_file(&path).unwrap(), token, "a 0600 token file must be read");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

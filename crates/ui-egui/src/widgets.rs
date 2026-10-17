@@ -1,4 +1,4 @@
-//! Custom widgets for the Photocraft look: cards with pill tabs, thin sliders with round knobs,
+//! Custom widgets for the PhotoCraft look: cards with pill tabs, thin sliders with round knobs,
 //! monospace value fields with dimmed units, toggle switches, primary/secondary buttons.
 
 use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, pos2, vec2};
@@ -793,6 +793,8 @@ pub fn focus_first_field(ctx: &egui::Context, on: bool) {
     });
 }
 
+const NUMERIC_INPUT_LIMIT: usize = 128;
+
 /// The number in a [`value_field`]. A typed number applies as it's typed; arithmetic waits for
 /// Enter, Tab or click-away, because per keystroke `5/2` would land first and a caller that
 /// rounds it would cut `5/2*2` short. `changed()` means a new value, not just a keystroke.
@@ -813,6 +815,25 @@ fn number_edit(
     // Tab in a dialog goes from one of these to the next (field_tab.rs).
     if ui.is_enabled() {
         crate::field_tab::register(&ctx, id);
+    }
+    // Use DragValue's focus check before it builds its TextEdit: oversized events must never
+    // reach text layout. Registering interest also handles focus arriving by Tab this frame.
+    let editing = ui.is_enabled()
+        && ui.memory_mut(|m| {
+            m.interested_in_focus(id, ui.layer_id());
+            m.has_focus(id)
+        });
+    if editing {
+        ui.input_mut(|input| {
+            input.events.retain(|event| {
+                let text = match event {
+                    egui::Event::Text(text) | egui::Event::Paste(text) | egui::Event::Ime(egui::ImeEvent::Commit(text)) => text,
+                    egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => text,
+                    _ => return true,
+                };
+                text.chars().nth(NUMERIC_INPUT_LIMIT).is_none()
+            });
+        });
     }
     let held = id.with("arithmetic");
     let math = ui.memory(|m| m.has_focus(id)) && ui.data(|d| d.get_temp(held)).unwrap_or(false);
@@ -837,6 +858,10 @@ fn number_edit(
             .update_while_editing(!math)
             // Focus is read when parsing, not above: Tab hands it on inside `ui.add`.
             .custom_parser(move |s| {
+                // Short events can accumulate: reject before either parser normalizes the text.
+                if s.chars().nth(NUMERIC_INPUT_LIMIT).is_some() {
+                    return None;
+                }
                 let v = parse_num_in(s, units);
                 if ctx.memory(|m| m.has_focus(id)) && plain(s).is_none() {
                     // Still typing arithmetic: hold it, and stop applying keystrokes once it parses.
@@ -1193,15 +1218,23 @@ pub struct DialogButton<'a> {
     pub label: &'a str,
     pub min_width: f32,
     pub enabled: bool,
+    /// Take keyboard focus this frame (see [`DialogButton::focus`]).
+    pub focus: bool,
 }
 
 impl<'a> DialogButton<'a> {
     pub fn new(role: ButtonRole, label: &'a str, min_width: f32) -> Self {
-        Self { role, label, min_width, enabled: true }
+        Self { role, label, min_width, enabled: true, focus: false }
     }
 
     pub fn enabled(self, enabled: bool) -> Self {
         Self { enabled, ..self }
+    }
+
+    /// Asks for keyboard focus for this button: from there the arrow keys move between the row's
+    /// buttons and Enter or Space presses the focused one.
+    pub fn focus(self, focus: bool) -> Self {
+        Self { focus, ..self }
     }
 }
 
@@ -1225,6 +1258,9 @@ pub fn dialog_buttons(ui: &mut Ui, buttons: &[DialogButton]) -> Option<ButtonRol
                         if b.role == ButtonRole::Default { primary_button(ui, b.label, b.min_width) } else { secondary_button(ui, b.label, b.min_width) }
                     })
                     .inner;
+                if b.focus && b.enabled {
+                    r.request_focus();
+                }
                 if r.clicked() {
                     hit = Some(b.role);
                 }
@@ -2643,3 +2679,7 @@ mod screen_color_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "widgets/numeric_input_tests.rs"]
+mod numeric_input_tests;

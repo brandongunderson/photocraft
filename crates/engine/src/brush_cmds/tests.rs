@@ -443,6 +443,26 @@ fn define_brush_from_selection() {
 }
 
 #[test]
+fn define_brush_from_selection_survives_allocation_failure() {
+    // The sampled tip is one f32 buffer over the whole selection, and the selection mask is a
+    // second of the same size. Both are reserved through the fallible allocator, so an allocation
+    // failure must be a graceful error (brush, presets, history and document untouched), never a
+    // panic or an OOM abort.
+    let mut s = session(40, 40);
+    s.execute("select.rect", json!({"x": 5, "y": 5, "width": 20, "height": 20})).unwrap();
+    let brush_before = s.tools.brush.clone();
+    let presets_before = s.tools.presets.clone();
+    let history_before = s.active().unwrap().history.past_len();
+    crate::allocation::fail_next_for_test();
+    let result = s.execute("brush.defineFromSelection", json!({"name": "Blob"}));
+    let _ = crate::allocation::capacity::<u8>(0, "reset failpoint");
+    assert!(result.is_err(), "an allocation failure must be reported, not panic");
+    assert_eq!(s.tools.brush, brush_before, "the current brush is unchanged");
+    assert_eq!(s.tools.presets, presets_before, "the preset list is unchanged");
+    assert_eq!(s.active().unwrap().history.past_len(), history_before, "no history step was recorded");
+}
+
+#[test]
 fn works_on_cmyk_and_16_bit() {
     for (mode, depth) in [("cmyk", 8), ("rgb", 16), ("grayscale", 32)] {
         let mut s = Session::new();

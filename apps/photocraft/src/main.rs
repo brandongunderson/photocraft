@@ -1,4 +1,4 @@
-//! Photocraft desktop app.
+//! PhotoCraft desktop app.
 //!
 //! Usage: `photocraft [--control <port>] [--control-token <64-hex> |
 //! --control-token-file <path>] [--automation-read-root <dir>]

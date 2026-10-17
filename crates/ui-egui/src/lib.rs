@@ -1,4 +1,4 @@
-//! Photocraft's first UI shell, built on egui/eframe.
+//! PhotoCraft's first UI shell, built on egui/eframe.
 //!
 //! This crate is deliberately thin. Every action goes through
 //! [`photocraft_engine::Session::execute`], and all UI state lives in [`state::UiState`] (plain
@@ -25,6 +25,7 @@ pub mod anchor_tools;
 pub mod artboard_tool;
 pub mod artboard_ui;
 pub(crate) mod background_redraw;
+pub mod bidi_text;
 mod blend_keys;
 pub(crate) mod blend_preview;
 pub mod blur_pins;
@@ -74,6 +75,7 @@ pub mod dialogs;
 pub mod direct_select;
 pub mod direction;
 pub mod discard_ui;
+pub mod disk_change_prompt;
 pub mod distort_ui;
 pub mod doc_props_ui;
 pub mod dock;
@@ -350,6 +352,15 @@ pub(crate) fn plain_raster(doc: &Document) -> Option<&photocraft_doc::Layer> {
 /// Encode a document: (file bytes, warnings about anything approximated or dropped).
 pub type ExportFn = Box<dyn Fn(&Document, &str, &ExportSettings) -> Result<(Vec<u8>, Vec<String>), String>>;
 pub type WriteFn = Box<dyn FnMut(&str, &[u8]) -> Result<(), String>>;
+/// What a file on disk looked like when a document last read or wrote it: File › Save asks
+/// before replacing a file another app changed since (#6596).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileStamp {
+    pub len: u64,
+    pub modified: Option<std::time::SystemTime>,
+}
+/// The [`FileStamp`] of the file at a path, `None` when it can't be read.
+pub type FileStampFn = Box<dyn Fn(&str) -> Option<FileStamp>>;
 /// Encode a document and write it to a path, reporting the stage to the job; returns the export
 /// warnings. Runs on a worker thread (see [`Services::save_file`]). It must call
 /// [`jobs_ui::SaveCtl::commit`] right before replacing the file, and write nothing if that fails.
@@ -447,6 +458,9 @@ pub struct Services {
     pub file_dialog: Option<FileDialogFn>,
     /// Write bytes to a path (native) or trigger a download (web).
     pub write: Option<WriteFn>,
+    /// Size and modification time of a file (native); `None` on the web, where Save never
+    /// writes back to a file.
+    pub file_stamp: Option<FileStampFn>,
     /// Encode and write in one step on a worker thread, so a large save doesn't freeze the
     /// window (#2017). With background jobs on, saves use it instead of `export` and `write`.
     pub save_file: Option<SaveFileFn>,
@@ -658,7 +672,7 @@ pub struct PhotocraftApp {
     /// The document each of `ui.views` belongs to, as of the last [`Self::sync_views`].
     view_docs: Vec<DocId>,
     pub fps: f32,
-    last_frame_time: f64,
+    pub(crate) last_frame_time: f64,
     thumbs: HashMap<(photocraft_doc::LayerId, u8), (u64, egui::TextureHandle)>,
     /// The document area each layer thumbnail in `thumbs` frames (the canvas, or the layer's
     /// bounds with Clip Thumbnails to Layer Bounds; #4281).
@@ -788,6 +802,9 @@ pub struct PhotocraftApp {
     /// Where each document was last saved or exported to through a dialog (#1826): its next Save
     /// As or export dialog starts there rather than beside the document. Session-only.
     pub(crate) save_dirs: HashMap<photocraft_doc::DocId, std::path::PathBuf>,
+    /// Each document's own file as it was when the document was opened from it or saved to it
+    /// (see [`FileStamp`]).
+    pub(crate) disk_stamps: HashMap<photocraft_doc::DocId, (String, FileStamp)>,
     /// A save to an RGB Targa parked behind the Targa Options prompt (see `targa_options_ui`).
     pub(crate) targa_options: Option<targa_options_ui::Prompt>,
     /// Files read but not opened yet: the first waits on its profile prompt, the rest behind it
@@ -937,6 +954,7 @@ impl PhotocraftApp {
             file_dialog: None,
             tiff_options: None,
             save_dirs: HashMap::new(),
+            disk_stamps: HashMap::new(),
             targa_options: None,
             held_opens: Default::default(),
             allow_close: false,
@@ -1439,6 +1457,13 @@ impl PhotocraftApp {
         self.pick_save(&suggested, move |app, path| {
             app.with_document(doc, |app| {
                 let own = app.session.active().and_then(|st| st.path.clone());
+                // Confirming the document's own file: ask first if another app changed it (#6596).
+                if plain_save
+                    && own.as_deref() == Some(path.as_str())
+                    && let Some(r) = crate::disk_change_prompt::intercept(app, doc, &path, true)
+                {
+                    return r;
+                }
                 let r = app.save_to(path.clone(), tga_bits)?;
                 if plain_save && own.as_deref() == Some(path.as_str()) {
                     app.journal_as_plain_save(&path);
@@ -1449,7 +1474,7 @@ impl PhotocraftApp {
     }
 
     /// [`Self::save_as_with`] once the path is known.
-    fn save_to(&mut self, path: String, tga_bits: Option<photocraft_io::TgaBits>) -> Result<Value, String> {
+    pub(crate) fn save_to(&mut self, path: String, tga_bits: Option<photocraft_io::TgaBits>) -> Result<Value, String> {
         // An RGB Targa asks for its bits per pixel, unless the caller chose them; the save
         // continues from the prompt (still a copy when it would be one without the prompt),
         // which records the step once answered.
@@ -1493,7 +1518,7 @@ impl PhotocraftApp {
     }
 
     /// Re-label the Save As just journaled for `path` as File › Save (see [`Self::save_dialog_flow`]).
-    fn journal_as_plain_save(&mut self, path: &str) {
+    pub(crate) fn journal_as_plain_save(&mut self, path: &str) {
         if let Some(last) = self.session.journal.last_mut()
             && last.0 == "file.saveAs"
             && last.1.get("path").and_then(Value::as_str) == Some(path)
@@ -1634,6 +1659,7 @@ impl PhotocraftApp {
                     st.saved_to(path.to_string());
                     // The job locked the document, but record the revision that was written.
                     st.saved_revision = revision;
+                    app.remember_stamp(doc, path);
                 }
                 // "Save Document" script events and File › Generate › Image Assets.
                 if hooks
@@ -1653,11 +1679,29 @@ impl PhotocraftApp {
             if hooks {
                 self.push_recent(path);
             }
+        } else if self.disk_stamps.get(&doc).is_some_and(|(own, _)| own == path) {
+            // A copy written over the document's own file is this app's change too.
+            self.remember_stamp(doc, path);
         }
         self.ui.status_error = false;
         let what = crate::i18n::fmt(tl!("Saved {name}"), &[("name", file_open::display_name(path).as_str())]);
         notices::io_warnings(self, &what, warnings);
         self.sync_views();
+    }
+
+    /// Note how `doc`'s own file at `path` looks now that the document read or wrote it.
+    pub(crate) fn remember_stamp(&mut self, doc: photocraft_doc::DocId, path: &str) {
+        match self.services.file_stamp.as_ref().and_then(|stamp| stamp(path)) {
+            Some(now) => self.disk_stamps.insert(doc, (path.to_string(), now)),
+            None => self.disk_stamps.remove(&doc),
+        };
+    }
+
+    /// Another app changed `doc`'s own file at `path` since the document was opened from it or
+    /// last saved to it. A file that is gone, or one never stamped, counts as unchanged.
+    pub(crate) fn changed_on_disk(&self, doc: photocraft_doc::DocId, path: &str) -> bool {
+        let Some((own, then)) = self.disk_stamps.get(&doc) else { return false };
+        own == path && self.services.file_stamp.as_ref().and_then(|stamp| stamp(path)).is_some_and(|now| now != *then)
     }
 
     /// TIFF Options or Targa Options is waiting on an answer before a save is written.

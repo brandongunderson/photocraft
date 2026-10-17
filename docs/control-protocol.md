@@ -246,7 +246,9 @@ log text file. GPU on/off and the GPU tile size apply at the next launch.
 The desktop app stores them in `preferences.json` in the platform config directory (macOS
 `~/Library/Application Support/Photocraft`, Windows `%APPDATA%\Photocraft`, Linux
 `$XDG_CONFIG_HOME/photocraft`; override with `PHOTOCRAFT_CONFIG_DIR`); autosaves go to its
-`Recovery` folder, and the window size and position, the dock width and floating-panel geometry
+`Recovery` folder (on Windows to `%LOCALAPPDATA%\Photocraft\Recovery`, out of the roaming
+profile; autosaves left by earlier versions move there at startup), and the window size and
+position, the dock width and floating-panel geometry
 to `ui.ron` beside it (a file holding values that would crash startup is discarded). In portable mode (a `portable.txt` or `PhotoCraft.portable` file beside the
 executable, as in the Windows portable zip) that directory is `PhotoCraftData` next to the
 executable instead. The web build keeps them in `localStorage`. A save writes only the values

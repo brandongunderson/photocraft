@@ -103,6 +103,8 @@ impl PhotocraftApp {
             && !st.source_read_only
         {
             st.path = Some(path.to_string());
+            let doc = st.doc.id;
+            self.remember_stamp(doc, path);
         }
         self.push_recent(path);
     }

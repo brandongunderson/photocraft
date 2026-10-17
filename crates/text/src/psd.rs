@@ -351,11 +351,14 @@ pub fn text_layer_from_tysh(data: &[u8], dpi: f32) -> Option<TextLayer> {
     if let Some(w) = &t.warp {
         let style = enum_value(w, "warpStyle").unwrap_or_else(|| "warpNone".into());
         if style != "warpNone" {
+            // Bend and distortion are percentages in -100..100 (as `type.warpText` clamps them);
+            // clamping before the cast keeps a value beyond f32 from becoming inf.
+            let pct = |k: &str| dnum(w.get(k)).unwrap_or(0.0).clamp(-100.0, 100.0) as f32;
             layer.warp = Some(TextWarp {
                 style,
-                value: dnum(w.get("warpValue")).unwrap_or(0.0) as f32,
-                horizontal_distortion: dnum(w.get("warpPerspective")).unwrap_or(0.0) as f32,
-                vertical_distortion: dnum(w.get("warpPerspectiveOther")).unwrap_or(0.0) as f32,
+                value: pct("warpValue"),
+                horizontal_distortion: pct("warpPerspective"),
+                vertical_distortion: pct("warpPerspectiveOther"),
                 horizontal: enum_value(w, "warpRotate").as_deref() != Some("Vrtc"),
             });
         }
@@ -1360,6 +1363,19 @@ mod nonfinite_tests {
         assert_eq!(para_style(None, &d, 1.0).start_indent_pt, 0.0);
         let d = parse(b"<< /FontSize 24.0 >>").unwrap();
         assert_eq!(char_style(None, &d, &[], 1.0).size_pt, 24.0);
+    }
+
+    #[test]
+    fn warp_values_beyond_f32_clamp_to_the_warp_range() {
+        let warp = Descriptor::new("warp")
+            .with("warpStyle", enumv("warpStyle", "warpArc"))
+            .with("warpValue", D::Double(1e39))
+            .with("warpPerspective", D::Double(-1e39))
+            .with("warpPerspectiveOther", D::Double(250.0))
+            .with("warpRotate", enumv("Ornt", "Hrzn"));
+        let tysh = write_tysh(&TySh { transform: Affine::IDENTITY, text: Descriptor::new("TxLr"), warp: Some(warp), bounds: [0.0; 4] });
+        let w = text_layer_from_tysh(&tysh, 72.0).and_then(|l| l.warp).unwrap();
+        assert_eq!((w.value, w.horizontal_distortion, w.vertical_distortion), (100.0, -100.0, 100.0));
     }
 
     #[test]

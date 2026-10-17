@@ -1720,6 +1720,27 @@ fn budget_allowance(app: &PhotocraftApp) -> (u64, u64) {
     (u64::from(performance.memory_usage_mb).saturating_mul(1 << 20), u64::from(performance.gpu_memory_mb).saturating_mul(1 << 20))
 }
 
+/// The proxy factor of a live preview of filter `cmd` with `params` on `doc`, the active document:
+/// reduced on a large document (Preferences › Performance › Low Resolution Previews), except for
+/// filters whose features don't scale with a proxy (#2063), and never coarser than the active view,
+/// so at 100 % the preview shows every pixel instead of k-pixel blocks (#6326, as adjustment
+/// previews have since #5764). Zoomed out, the proxy keeps previews of large documents fast.
+///
+/// The in-dialog preview window ([`crate::filter_preview_ui`]) sizes its own textures from this
+/// too, so the canvas and the window never disagree about the factor.
+///
+/// Full resolution costs a whole filter per parameter change, which only the background worker
+/// absorbs. The web build has no worker and computes the preview inline on the UI thread (#1676),
+/// where that would freeze the page: there the document's proxy stands. The test and
+/// `PHOTOCRAFT_INLINE_JOBS` inline paths keep the cap deliberately, because `background_jobs` is
+/// flipped mid-session (a shell save during `actions.play`): a factor that followed it would change
+/// [`crate::filter_dialog::FilterPreviewKey`] under a finished preview and recompute it inline,
+/// the very stall this avoids.
+pub(crate) fn filter_preview_factor(app: &PhotocraftApp, doc: &Document, cmd: &str, params: &serde_json::Value) -> u32 {
+    let k = crate::filter_dialog::preview_factor(cmd, params, crate::proxy::preview_factor(doc, crate::proxy::reduced_previews(app)));
+    if cfg!(target_arch = "wasm32") { k } else { crate::proxy::view_factor(k, app.current_zoom()) }
+}
+
 /// Live preview for an open filter dialog: run the filter on the proxy and upload it. With
 /// background jobs (the desktop app) it computes on one background worker
 /// (`filter_preview_worker`); otherwise (web, tests, `PHOTOCRAFT_INLINE_JOBS`) it keeps the
@@ -1751,8 +1772,7 @@ pub(crate) fn ensure_filter_preview(app: &mut PhotocraftApp, idx: usize, ctx: &e
         params = crate::select_mask_view::request_params(&d.fields, params);
     }
     let st = app.session.documents().get(idx)?;
-    // Filters whose features don't scale with a proxy preview at full resolution (#2063).
-    let k = crate::filter_dialog::preview_factor(&cmd, &params, crate::proxy::preview_factor(&st.doc, crate::proxy::reduced_previews(app)));
+    let k = filter_preview_factor(app, &st.doc, &cmd, &params);
     let request = crate::filter_dialog::FilterPreviewKey {
         doc: st.doc.id,
         revision: st.revision,
@@ -4091,6 +4111,8 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
     if primary && hand_pan && response.dragged() {
         crate::transform_tool::draw_content(app, &painter, &xf);
         crate::transform_tool::draw_overlay(app, &painter, &xf);
+        // The Pen's path in progress survives a Space pan, and stays on screen through it (#6592).
+        crate::vector_ui::draw_overlay(app, &painter, &xf, &doc);
     }
     app.tool_override = None;
     if let Some(b) = layer_edges_rect(app, idx) {
@@ -5496,6 +5518,7 @@ pub fn tool_event(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers)
             {
                 e.dragging = false;
                 e.resize = None;
+                app.ui.caret_blink_time = app.last_frame_time;
             }
             if tool == Tool::Pen {
                 crate::vector_ui::pen_up(app);
@@ -5843,14 +5866,12 @@ pub(crate) fn finish_gesture(app: &mut PhotocraftApp, d: Drag) {
                 let _ = app.run("select.deselect", json!({}));
             }
         }
-        Tool::Gradient => {
-            if (end[0] - d.start[0]).abs() + (end[1] - d.start[1]).abs() >= 2.0 {
-                let o = app.ui.tool_options.clone();
-                let _ = app.run(
-                    "paint.gradient",
-                    json!({"from": [d.start[0], d.start[1]], "to": [end[0], end[1]], "style": o.gradient_style, "reverse": o.gradient_reverse, "dither": o.gradient_dither, "opacity": o.fill_opacity, "mode": o.gradient_blend_mode.label(), "target": paint_target(app)}),
-                );
-            }
+        Tool::Gradient if (end[0] - d.start[0]).abs() + (end[1] - d.start[1]).abs() >= 2.0 => {
+            let o = app.ui.tool_options.clone();
+            let _ = app.run(
+                "paint.gradient",
+                json!({"from": [d.start[0], d.start[1]], "to": [end[0], end[1]], "style": o.gradient_style, "reverse": o.gradient_reverse, "dither": o.gradient_dither, "opacity": o.fill_opacity, "mode": o.gradient_blend_mode.label(), "target": paint_target(app)}),
+            );
         }
         Tool::Move => {
             let (dx, dy) = ((end[0] - d.start[0]).round(), (end[1] - d.start[1]).round());
@@ -6105,6 +6126,59 @@ mod tests {
         let d = color.canvas_display(&doc).unwrap();
         assert!(!d.is_identity());
         assert_eq!(super::display_image(Some(&d), &buf).pixels, reference(d.to_rgba8(&buf)).pixels);
+    }
+
+    /// #6326: a filter's live preview is never coarser than the screen. On a document big enough
+    /// for a reduced proxy, the view at 100 % previews at full resolution, and only a view zoomed
+    /// out far enough uses the proxy. Through `ensure_filter_preview`, so the factor the canvas
+    /// actually requests is the one under test.
+    #[test]
+    fn filter_preview_at_100_percent_is_full_resolution() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.background_jobs = false;
+        app.run("file.new", json!({"width": 2400, "height": 2200})).unwrap();
+        assert_eq!(crate::proxy::preview_factor(&app.session.active().unwrap().doc, true), 2, "big enough for a proxy");
+        crate::filter_dialog::open(&mut app, "filter.stylize.solarize").unwrap();
+        let ctx = egui::Context::default();
+        let preview_at = |app: &mut PhotocraftApp, zoom: f32| {
+            app.ui.views.get_mut(0).expect("the new document's view").zoom = zoom;
+            assert_eq!(app.current_zoom(), zoom);
+            let (k, _, size) = ensure_filter_preview(app, 0, &ctx).expect("a preview");
+            (k, size)
+        };
+        assert_eq!(preview_at(&mut app, 1.0), (1, [2400, 2200]), "100 %: every pixel");
+        assert_eq!(preview_at(&mut app, 0.25), (2, [1200, 1100]), "zoomed out: the document's proxy");
+        // Low Resolution Previews off: full resolution at any zoom, exactly as before #6326.
+        app.run("prefs.set", json!({"path": "performance.lowResolutionPreviews", "value": false})).unwrap();
+        assert_eq!(preview_at(&mut app, 0.25), (1, [2400, 2200]), "the preference still decides");
+    }
+
+    /// The factor itself over the zoom range, and that Preferences › Performance › Low
+    /// Resolution Previews still decides whether there is a proxy at all (#6326).
+    #[test]
+    fn filter_preview_factor_caps_at_the_view_without_overriding_the_preference() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        // 9 MP: reduced previews halve it (empty tiles, so nothing is allocated).
+        app.run("file.new", json!({"width": 3000, "height": 3000, "background": "transparent"})).unwrap();
+        let doc = app.session.active().unwrap().doc.clone();
+        let params = json!({"amount": 100, "radius": 4.0, "threshold": 0});
+        let k = |app: &mut PhotocraftApp, zoom: f32| {
+            app.ui.views.get_mut(0).expect("the new document's view").zoom = zoom;
+            super::filter_preview_factor(app, &doc, "filter.sharpen.unsharpMask", &params)
+        };
+        assert_eq!(k(&mut app, 0.25), 2, "zoomed out the preview stays reduced");
+        assert_eq!(k(&mut app, 0.5), 2);
+        assert_eq!(k(&mut app, 0.75), 1, "past the proxy's resolution it shows every pixel");
+        assert_eq!(k(&mut app, 1.0), 1);
+        assert_eq!(k(&mut app, 4.0), 1);
+        // A corrupt or unset zoom must not pick a coarser proxy than the document's own.
+        assert_eq!(k(&mut app, f32::NAN), 1);
+        assert_eq!(k(&mut app, 0.0), 1);
+        // Low Resolution Previews off: full resolution at any zoom, the cap a no-op.
+        app.run("prefs.set", json!({"path": "performance.lowResolutionPreviews", "value": false})).unwrap();
+        for zoom in [0.1, 0.25, 1.0, 4.0] {
+            assert_eq!(k(&mut app, zoom), 1, "zoom {zoom}");
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]

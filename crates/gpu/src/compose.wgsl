@@ -1,4 +1,4 @@
-// Photocraft GPU compositor kernels.
+// PhotoCraft GPU compositor kernels.
 //
 // Every pass renders one chunk of the canvas into a straight-alpha RGBA32F accumulator, reading
 // its inputs with `textureLoad` at the same pixel. Effect-map kernels (`fs_m*`) render

@@ -678,7 +678,7 @@ impl BrushSettings {
 pub struct BrushPreset {
     pub name: String,
     pub brush: BrushSettings,
-    /// Shipped with Photocraft (built-ins can be deleted from a session but are regenerated on reset).
+    /// Shipped with PhotoCraft (built-ins can be deleted from a session but are regenerated on reset).
     #[serde(default)]
     pub builtin: bool,
     /// Preset group (folder) in the Brushes panel, e.g. "General" or an imported file's name.

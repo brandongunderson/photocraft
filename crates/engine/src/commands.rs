@@ -295,7 +295,8 @@ fn set_clipped(s: &mut Session, p: &Value, clip: bool) -> Result<Value> {
 
 /// The layer a command's `"layer"` param names: an id, or a name (the topmost layer of that
 /// name, as Photoshop's "select layer by name" action step finds it, so a loaded action replays
-/// in another document). `None` when the param is absent.
+/// in another document; a name that matches no layer exactly matches regardless of case, so
+/// `"background"` finds the Background). `None` when the param is absent.
 pub(crate) fn explicit_layer(s: &Session, p: &Value) -> Result<Option<LayerId>> {
     match p.get("layer") {
         Some(Value::Number(n)) => {
@@ -303,17 +304,39 @@ pub(crate) fn explicit_layer(s: &Session, p: &Value) -> Result<Option<LayerId>> 
         }
         Some(Value::String(name)) => {
             let d = s.active().ok_or(EngineError::NoDocument)?;
-            d.doc
-                .walk()
-                .into_iter()
-                .rev()
+            let layers = d.doc.walk();
+            let mut top_down = layers.iter().rev();
+            top_down
+                .clone()
                 .find(|(_, _, l)| l.name == *name)
+                .or_else(|| top_down.find(|(_, _, l)| l.name.to_lowercase() == name.to_lowercase()))
                 .map(|(_, _, l)| Some(l.id))
-                .ok_or_else(|| EngineError::Other(format!("no layer named \"{name}\"")))
+                .ok_or_else(|| EngineError::Other(format!("no layer named \"{name}\"; {}", layer_listing(&d.doc))))
         }
         Some(Value::Null) | None => Ok(None),
         Some(other) => Err(EngineError::Other(format!("`layer` must be an id or a name, not {other}"))),
     }
+}
+
+/// The layers of `doc` as a caller can name them, for an error about a layer that isn't there:
+/// `the document's layers are 2 "Background", 3 "Layer 1"` (top-down, at most 20).
+pub(crate) fn layer_listing(doc: &Document) -> String {
+    const MAX: usize = 20;
+    let layers = doc.walk();
+    if layers.is_empty() {
+        return "the document has no layers".into();
+    }
+    // Names are unbounded input: each one is cut at NAME characters so the error stays short.
+    const NAME: usize = 64;
+    let name = |n: &str| match n.char_indices().nth(NAME) {
+        Some((cut, _)) => format!("{}…", &n[..cut]),
+        None => n.to_string(),
+    };
+    let mut list: Vec<String> = layers.iter().rev().take(MAX).map(|(_, _, l)| format!("{} {:?}", l.id.0, name(&l.name))).collect();
+    if layers.len() > MAX {
+        list.push(format!("… {} more (see `document.inspect`)", layers.len() - MAX));
+    }
+    format!("the document's layers are {} (a `layer` param takes an id or a name)", list.join(", "))
 }
 
 /// The layer a command targets: [`explicit_layer`], else the active layer.
@@ -1422,6 +1445,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::edit_menu_cmds::specs());
     v.extend(crate::fill_key_cmds::specs());
     v.extend(crate::sample_cmds::specs());
+    v.extend(crate::face_cmds::specs());
     v.extend(crate::sampler_cmds::specs());
     v.extend(crate::brush_key_cmds::specs());
     v.extend(crate::stamp_cmds::specs());

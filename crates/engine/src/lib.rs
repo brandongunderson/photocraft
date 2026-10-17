@@ -45,6 +45,7 @@ pub mod extension_cmds;
 pub mod extension_package;
 pub mod extension_update_cmds;
 pub mod extra_cmds;
+pub mod face_cmds;
 pub mod file_cmds;
 pub mod fill_cmds;
 pub mod fill_key_cmds;
@@ -168,6 +169,10 @@ pub enum EngineError {
     NoDocument,
     #[error("no such layer {0:?}")]
     NoLayer(LayerId),
+    /// [`Self::NoLayer`] as a command reports it: with the layers the document does have, as
+    /// ids are not positions (#5058).
+    #[error("no such layer {}; {known}", id.0)]
+    UnknownLayer { id: LayerId, known: String },
     #[error("{0}")]
     Other(String),
     /// A background job was cancelled (see [`jobs`]); nothing changed.

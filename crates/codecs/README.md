@@ -38,7 +38,7 @@ let out = encode(&img, Format::Tiff, &EncodeOptions::default())?;
 | WebP | yes | yes | U8 | RGB, RGBA | yes | yes | yes | yes | no | no | yes (VP8, when `webp_lossless` is off) | `image-webp` / built-in VP8 |
 | GIF | yes | yes | U8 | RGBA | 1-bit | no | no | no | no | no | yes (256-colour palette) | `image` |
 | BMP | yes | yes | U8 | RGB, RGBA | yes | no | no | no | no | no | no | `image` |
-| TGA | yes | yes | U8 | Gray, GrayA, RGB, RGBA | yes | no | no | no | no | no | no | `image` |
+| TGA | yes | yes | U8 | Gray, GrayA, RGB, RGBA | yes | no | no | no | no | no | no | `image` (read) / built in (RLE write, one scanline per packet) |
 | ICO | yes | yes | U8 | RGBA (at most 256×256) | yes | no | no | no | no | no | no | `image` |
 | DDS | yes | **no** | U8 | Gray, GrayA, RGB, RGBA | yes | no | no | no | no | no | n/a | built in |
 | Netpbm (PBM/PGM/PPM/PAM/PFM) | yes | yes | U8, U16, F32 (float: PFM gray/RGB only) | all six (PAM `CMYK`/`CMYK_ALPHA`) | yes (PAM) | no | no | no | no | no | no | built in |

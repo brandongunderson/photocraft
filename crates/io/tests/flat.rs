@@ -610,6 +610,73 @@ fn linear_gray_export_preserves_alpha_and_embeddable_profiles() {
     }
 }
 
+/// WebP can embed RGB profiles, but expanding gray to RGB drops a gray profile. Its untagged
+/// RGB samples must use the sRGB transfer function, not the source gray encoding.
+#[test]
+fn linear_gray_webp_exports_use_display_encoding() {
+    use photocraft_codecs::{ChannelLayout, EncodeOptions};
+    for depth in [SampleType::U8, SampleType::U16, SampleType::F32] {
+        for alpha in [1.0, 0.5] {
+            let mut d = columns(ColorMode::Grayscale, depth, &[&[0.25, alpha], &[0.5, alpha]]);
+            d.icc_profile = Some(photocraft_cms::builtin::linear_gray().to_bytes());
+            let stored = column_pixels(&d, 2);
+            for lossless in [true, false] {
+                let opts = ExportOptions { encode: EncodeOptions { webp_lossless: lossless, webp_quality: 100, ..Default::default() }, ..Default::default() };
+                let r = export(&d, "webp", &opts).unwrap();
+                let img = photocraft_codecs::decode(&r.bytes).unwrap();
+                let what = format!("{depth:?}, alpha {alpha}, lossless {lossless}");
+                assert_eq!(img.layout(), if alpha == 1.0 { ChannelLayout::Rgb } else { ChannelLayout::Rgba }, "{what}");
+                assert_eq!(img.icc, None, "{what}: a gray ICC cannot describe RGB samples");
+                let values = img.to_normalized();
+                let stride = img.layout().channels();
+                let tolerance = if lossless { 1.5 / 255.0 } else { 3.0 / 255.0 };
+                for (i, src) in stored.iter().enumerate() {
+                    let offset = (8 * img.width() as usize + 16 * i + 8) * stride;
+                    let expected = photocraft_color::convert::linear_to_srgb(src[0]);
+                    for &value in &values[offset..offset + 3] {
+                        assert!((value - expected).abs() <= tolerance, "{what}, pixel {i}: got {value}, expected {expected}");
+                    }
+                    if img.layout().has_alpha() {
+                        assert!((values[offset + 3] - src[1]).abs() <= 1.0 / 255.0, "{what}: alpha changed");
+                    }
+                }
+                assert!(r.warnings.iter().any(|w| w.contains("converted to sGray")), "{what}: {:?}", r.warnings);
+            }
+        }
+    }
+}
+
+#[test]
+fn default_gray_webp_exports_keep_samples() {
+    for depth in [SampleType::U8, SampleType::U16, SampleType::F32] {
+        for icc in [None, Some(photocraft_cms::Builtin::SGray.profile().to_bytes())] {
+            let mut d = columns(ColorMode::Grayscale, depth, &[&[0.25, 0.5], &[0.5, 1.0]]);
+            d.icc_profile = icc;
+            let stored = column_pixels(&d, 2);
+            let r = export(&d, "webp", &ExportOptions::default()).unwrap();
+            let img = photocraft_codecs::decode(&r.bytes).unwrap();
+            assert_eq!(img.icc, None, "{depth:?}: a gray ICC cannot describe RGB samples");
+            let back = import("gray.webp", &r.bytes).unwrap().document;
+            let want: Vec<Vec<f32>> = stored.iter().map(|p| vec![p[0], p[0], p[0], p[1]]).collect();
+            assert_colors(&column_pixels(&back, 2), &want, 1.0 / 255.0, &format!("{depth:?}: sGray samples"));
+            assert!(!r.warnings.iter().any(|w| w.contains("converted to sGray")), "{depth:?}: {:?}", r.warnings);
+        }
+    }
+}
+
+#[test]
+fn rgb_webp_exports_keep_embeddable_profiles() {
+    for depth in [SampleType::U8, SampleType::U16, SampleType::F32] {
+        let mut d = columns(ColorMode::Rgb, depth, &[&[0.25, 0.5, 0.75, 0.5]]);
+        d.icc_profile = Some(photocraft_cms::Builtin::LinearSrgb.profile().to_bytes());
+        let r = export(&d, "webp", &ExportOptions::default()).unwrap();
+        let back = import("rgb.webp", &r.bytes).unwrap().document;
+        assert_eq!(back.icc_profile, d.icc_profile, "{depth:?}: WebP keeps RGB ICC");
+        assert_colors(&column_pixels(&back, 1), &column_pixels(&d, 1), 1.0 / 255.0, &format!("{depth:?}: RGB samples"));
+        assert!(!r.warnings.iter().any(|w| w.contains("converted to sRGB")), "{depth:?}: {:?}", r.warnings);
+    }
+}
+
 /// #518: a JPEG cut off inside its image data opens with a warning, never silently.
 #[test]
 fn truncated_jpeg_imports_with_a_warning() {

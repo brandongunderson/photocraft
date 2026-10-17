@@ -16,6 +16,9 @@
 //! keeps waiting for Update Modified Content, as in Photoshop); one that can't be read (another app
 //! is still writing it) is tried again once it changes again, not on every look. Only smart objects
 //! of the document itself follow their files, not ones nested in another smart object's contents.
+//! While a background job runs on the document, its files aren't looked at: an update would replace
+//! the snapshot the job works on and its result would be thrown away. The first look after the job
+//! ends catches up.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -103,6 +106,12 @@ impl Session {
         if self.active().map(|d| d.doc.id.0) != Some(doc) {
             return Ok(json!({"updated": []}));
         }
+        // A background job holds the document: refreshing now would replace the snapshot it works
+        // on and its result would be discarded. The stamps stay as they were, so the change is
+        // seen again by the first look after the job ends.
+        if self.active_job().is_some() {
+            return Ok(json!({"updated": []}));
+        }
         // This document's last stamps; those of closed documents are dropped.
         let open: HashSet<u64> = self.documents().iter().map(|d| d.doc.id.0).collect();
         let mut before: HashMap<String, Stamp> = HashMap::new();
@@ -155,7 +164,7 @@ mod tests {
     use photocraft_geom::Rect;
     use serde_json::json;
 
-    use crate::Session;
+    use crate::{EngineError, Session};
 
     fn dir(name: &str) -> std::path::PathBuf {
         let d = std::env::temp_dir().join(format!("photocraft-link-watch-{name}-{}", std::process::id()));
@@ -279,5 +288,54 @@ mod tests {
         assert_eq!(look(&mut s), json!({"updated": [id]}));
         assert!(is(centre(&s), BLUE));
         assert!(s.link_scan.is_none());
+    }
+
+    #[test]
+    fn a_refresh_waits_for_a_running_job_on_the_document() {
+        let d = dir("job");
+        let path = d.join("art.png");
+        std::fs::write(&path, png(10, 10, "#ff0000")).unwrap();
+        let (mut s, id) = placed(&path);
+        s.execute("layer.smartObjects.updateChanged", json!({})).unwrap();
+        let (release, job) = gated_job(&mut s);
+        save(&path, &png(10, 10, "#0000ff"));
+        let snapshot = s.active().unwrap().doc.clone();
+        // The path the desktop app's timer takes: it doesn't go through the command conflict check.
+        assert_eq!(super::update_changed(&mut s, &json!({})).unwrap(), json!({"updated": []}));
+        assert!(std::sync::Arc::ptr_eq(&s.active().unwrap().doc, &snapshot), "the job's snapshot must stay in place");
+        release.send(()).unwrap();
+        s.wait_job(job).unwrap();
+        // The job finished; the change that came meanwhile is picked up exactly once.
+        assert_eq!(s.execute("layer.smartObjects.updateChanged", json!({})).unwrap(), json!({"updated": [id]}));
+        assert!(is(centre(&s), BLUE));
+        assert_eq!(s.execute("layer.smartObjects.updateChanged", json!({})).unwrap(), json!({"updated": []}));
+    }
+
+    #[test]
+    fn a_job_on_another_document_does_not_hold_up_a_refresh() {
+        let d = dir("job-other");
+        let path = d.join("art.png");
+        std::fs::write(&path, png(10, 10, "#ff0000")).unwrap();
+        let (mut s, id) = placed(&path);
+        s.execute("layer.smartObjects.updateChanged", json!({})).unwrap();
+        s.execute("file.new", json!({"width": 10, "height": 10})).unwrap();
+        let (release, job) = gated_job(&mut s);
+        s.set_active(0);
+        save(&path, &png(10, 10, "#0000ff"));
+        assert_eq!(super::update_changed(&mut s, &json!({})).unwrap(), json!({"updated": [id]}));
+        assert!(is(centre(&s), BLUE));
+        release.send(()).unwrap();
+        s.wait_job(job).unwrap();
+    }
+
+    /// A background job that locks the active document until something is sent on the returned
+    /// sender.
+    fn gated_job(s: &mut Session) -> (std::sync::mpsc::Sender<()>, crate::jobs::JobId) {
+        let (release, gate) = std::sync::mpsc::channel::<()>();
+        let r = s.start_job("test.gated", json!({}), "Gated job", true, move |_| gate.recv().map_err(|_| EngineError::Cancelled), |_, ()| Ok(json!(null)));
+        match r.unwrap() {
+            crate::jobs::Started::Job(j) => (release, j),
+            other => panic!("expected a background job, got {other:?}"),
+        }
     }
 }
